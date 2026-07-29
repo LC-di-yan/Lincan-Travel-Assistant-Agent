@@ -9,8 +9,8 @@ load_dotenv()
 # LLM Configuration (优先从环境变量读取)
 LLM_CONFIG = {
     "api_key": os.environ.get("ALIGO_API_KEY", ""),
-    "model_name": os.environ.get("ALIGO_MODEL_NAME", "deepseek-v4-flash"),
-    "base_url": os.environ.get("ALIGO_BASE_URL", "https://api.deepseek.com/anthropic"),
+    "model_name": os.environ.get("ALIGO_MODEL_NAME", "mimo-v2-pro"),
+    "base_url": os.environ.get("ALIGO_BASE_URL", "https://token-plan-cn.xiaomimimo.com/v1"),
     "temperature": 0.7,
     "max_tokens": 2048,  # 默认值，各场景通过 SCENARIO_TOKENS 覆盖
 }

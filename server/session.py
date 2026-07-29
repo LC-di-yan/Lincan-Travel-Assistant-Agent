@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
-from agentscope.model import AnthropicChatModel
+from agentscope.model import OpenAIChatModel
 from config import LLM_CONFIG, SYSTEM_CONFIG, RESILIENCE_CONFIG
 from config_agentscope import init_agentscope
 from context.memory_manager import MemoryManager
@@ -27,7 +27,7 @@ class UserSession:
     intention_agent: IntentionAgent
     orchestrator: OrchestrationAgent
     circuit_breaker: CircuitBreaker
-    model: AnthropicChatModel
+    model: OpenAIChatModel
     last_active: float = field(default_factory=time.monotonic)
     long_term_summary: str = ""
     messages_since_summary: int = 0
@@ -74,18 +74,17 @@ class SessionManager:
         self._evict_if_needed()
 
         timeout_sec = SYSTEM_CONFIG.get("timeout", 60)
-        model = AnthropicChatModel(
+        model = OpenAIChatModel(
             model_name=LLM_CONFIG["model_name"],
             api_key=LLM_CONFIG["api_key"],
             stream=False,
-            max_tokens=LLM_CONFIG.get("max_tokens", 2048),
-            thinking={"type": "disabled"},
             client_kwargs={
                 "base_url": LLM_CONFIG["base_url"],
                 "timeout": float(timeout_sec),
             },
             generate_kwargs={
                 "temperature": LLM_CONFIG.get("temperature", 0.7),
+                "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
             },
         )
 

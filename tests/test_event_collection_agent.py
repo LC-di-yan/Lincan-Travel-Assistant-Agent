@@ -11,7 +11,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 from agentscope.message import Msg
-from agentscope.model import AnthropicChatModel
+from agentscope.model import OpenAIChatModel
 from config_agentscope import init_agentscope
 from config import LLM_CONFIG
 
@@ -31,16 +31,15 @@ async def test_event_collection_agent():
     print("初始化 AgentScope...")
     init_agentscope()
 
-    model = AnthropicChatModel(
+    model = OpenAIChatModel(
         model_name=LLM_CONFIG["model_name"],
         api_key=LLM_CONFIG["api_key"],
             stream=False,
         client_kwargs={"base_url": LLM_CONFIG["base_url"]},
         generate_kwargs={
             "temperature": LLM_CONFIG.get("temperature", 0.7),
+            "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
         },
-        max_tokens=LLM_CONFIG.get("max_tokens", 2000),
-        thinking={"type": "disabled"},
     )
 
     agent = EventCollectionAgent(
