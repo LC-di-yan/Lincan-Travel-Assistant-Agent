@@ -58,7 +58,7 @@ async def main():
 
     from config import LLM_CONFIG
     from config_agentscope import init_agentscope
-    from agentscope.model import AnthropicChatModel
+    from agentscope.model import OpenAIChatModel
     from context.memory_manager import MemoryManager
     from agents.intention_agent import IntentionAgent
     from agents.orchestration_agent import OrchestrationAgent
@@ -70,16 +70,15 @@ async def main():
     init_agentscope()
 
     # 初始化模型
-    model = AnthropicChatModel(
+    model = OpenAIChatModel(
         model_name=LLM_CONFIG["model_name"],
         api_key=LLM_CONFIG["api_key"],
             stream=False,
         client_kwargs={"base_url": LLM_CONFIG["base_url"]},
         generate_kwargs={
             "temperature": LLM_CONFIG.get("temperature", 0.7),
+            "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
         },
-        max_tokens=LLM_CONFIG.get("max_tokens", 2000),
-        thinking={"type": "disabled"},
     )
 
     # 初始化记忆管理器
