@@ -17,8 +17,8 @@ LLM_CONFIG = {
 
 # 按场景 token 预算 — 减少 LLM 输出 token 数以提速
 SCENARIO_TOKENS = {
-    "intention": 1024,           # 意图识别：只需输出 ~200 字 JSON
-    "event_collection": 1024,    # 事项提取：只需输出 ~300 字 JSON
+    "intention": 2048,           # 意图识别（MiMo 思考需 600-900，留余量给输出）
+    "event_collection": 2048,    # 事项提取（同上）
     "itinerary": 2048,           # 简单行程（≤1 天）
     "itinerary_complex": 4096,   # 复杂行程（多日 / 多城市）
     "rag": 2048,                 # 知识库问答
