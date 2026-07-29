@@ -89,19 +89,20 @@ async def run_health_check(
         (success, message)
     """
     try:
-        from agentscope.model import OpenAIChatModel
+        from agentscope.model import AnthropicChatModel
     except ImportError:
         return False, "AgentScope not installed"
 
     try:
-        model = OpenAIChatModel(
+        model = AnthropicChatModel(
             model_name=model_name,
             api_key=api_key,
             stream=False,
+            max_tokens=5,
+            thinking={"type": "disabled"},
             client_kwargs={"base_url": base_url, "timeout": timeout_sec},
             generate_kwargs={
                 "temperature": 0,
-                "max_tokens": 5,
             },
         )
         messages = [{"role": "user", "content": "1"}]
