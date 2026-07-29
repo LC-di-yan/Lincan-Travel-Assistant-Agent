@@ -15,7 +15,7 @@ sys.path.insert(0, str(project_root))
 import asyncio
 from context.memory_manager import MemoryManager
 from agentscope import init as init_agentscope
-from agentscope.model import OpenAIChatModel
+from agentscope.model import AnthropicChatModel
 import logging
 
 # 配置日志（只显示WARNING及以上）
@@ -45,15 +45,16 @@ async def test_memory_system():
     import warnings
     warnings.filterwarnings("ignore")
 
-    model = OpenAIChatModel(
+    model = AnthropicChatModel(
         model_name=LLM_CONFIG["model_name"],
         api_key=LLM_CONFIG["api_key"],
             stream=False,
         client_kwargs={"base_url": LLM_CONFIG["base_url"]},
         generate_kwargs={
             "temperature": LLM_CONFIG.get("temperature", 0.7),
-            "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
         },
+        max_tokens=LLM_CONFIG.get("max_tokens", 2000),
+        thinking={"type": "disabled"},
     )
     print("✓ LLM模型初始化完成")
 

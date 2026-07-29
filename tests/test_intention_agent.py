@@ -36,7 +36,7 @@ except ImportError as e:
     sys.exit(1)
 
 from agentscope.message import Msg
-from agentscope.model import OpenAIChatModel
+from agentscope.model import AnthropicChatModel
 from config_agentscope import init_agentscope
 from agents.intention_agent import IntentionAgent
 from config import LLM_CONFIG
@@ -58,7 +58,7 @@ async def test_intention_agent():
     # 创建模型配置
     print("创建模型...")
     try:
-        model = OpenAIChatModel(
+        model = AnthropicChatModel(
             model_name=LLM_CONFIG["model_name"],
             api_key=LLM_CONFIG["api_key"],
             stream=False,
@@ -67,8 +67,9 @@ async def test_intention_agent():
             },
             generate_kwargs={
                 "temperature": LLM_CONFIG.get("temperature", 0.7),
-                "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
             },
+            max_tokens=LLM_CONFIG.get("max_tokens", 2000),
+            thinking={"type": "disabled"},
         )
         print(f"✓ 模型创建成功")
     except Exception as e:
