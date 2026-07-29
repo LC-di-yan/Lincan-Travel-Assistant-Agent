@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" fill="none">
+  <defs>
+    <linearGradient id="think-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4f8ef7" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+  </defs>
+  <!-- Flight path arc -->
+  <path d="M15 28 Q35 8 60 20 Q85 32 105 12" stroke="url(#think-grad)" stroke-width="1.5" stroke-dasharray="4 3" fill="none" opacity="0.3">
+    <animate attributeName="stroke-dashoffset" values="0;-14" dur="1.5s" repeatCount="indefinite" />
+  </path>
+  <!-- Airplane -->
+  <g opacity="0.85">
+    <animateTransform attributeName="transform" type="translate" values="15,28;40,14;60,20;80,26;105,12" dur="3s" repeatCount="indefinite" />
+    <path d="M0 0 L12 -4 L12 -2 L4 -0.8 L4 0.8 L12 2 L12 4 Z" fill="url(#think-grad)" />
+    <path d="M4 -0.8 L2 -5 L3 -4 L4 -2 Z" fill="url(#think-grad)" opacity="0.6" />
+    <path d="M4 0.8 L2 5 L3 4 L4 2 Z" fill="url(#think-grad)" opacity="0.6" />
+  </g>
+  <!-- Trailing dots -->
+  <circle r="1.5" fill="#4f8ef7" opacity="0.4">
+    <animate attributeName="cx" values="15;40;60;80;105" dur="3s" repeatCount="indefinite" />
+    <animate attributeName="cy" values="28;14;20;26;12" dur="3s" repeatCount="indefinite" />
+    <animate attributeName="opacity" values="0.4;0.2;0.4;0.2;0.4" dur="3s" repeatCount="indefinite" />
+  </circle>
+  <circle r="1" fill="#8b5cf6" opacity="0.3">
+    <animate attributeName="cx" values="15;40;60;80;105" dur="3s" repeatCount="indefinite" begin="0.3s" />
+    <animate attributeName="cy" values="28;14;20;26;12" dur="3s" repeatCount="indefinite" begin="0.3s" />
+    <animate attributeName="opacity" values="0.3;0.1;0.3;0.1;0.3" dur="3s" repeatCount="indefinite" begin="0.3s" />
+  </circle>
+</svg>

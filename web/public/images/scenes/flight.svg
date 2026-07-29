@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="fl-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f8ef7" />
+      <stop offset="100%" stop-color="#60a5fa" />
+    </linearGradient>
+  </defs>
+  <!-- Flight path -->
+  <path d="M8 48 Q32 16 56 40" stroke="url(#fl-accent)" stroke-width="1.5" stroke-dasharray="3 2" fill="none" opacity="0.3" />
+  <!-- Airplane -->
+  <g transform="translate(40, 28) rotate(25)">
+    <path d="M0 0 L16 -5 L16 -2.5 L6 -1 L6 1 L16 2.5 L16 5 Z" fill="url(#fl-accent)" opacity="0.85" />
+    <path d="M6 -1 L2 -7 L4 -6 L6 -3 Z" fill="url(#fl-accent)" opacity="0.6" />
+    <path d="M6 1 L2 7 L4 6 L6 3 Z" fill="url(#fl-accent)" opacity="0.6" />
+  </g>
+  <!-- Clouds -->
+  <g opacity="0.25">
+    <ellipse cx="18" cy="22" rx="10" ry="5" fill="#94a3b8" />
+    <ellipse cx="14" cy="20" rx="6" ry="4" fill="#94a3b8" />
+  </g>
+  <g opacity="0.15">
+    <ellipse cx="48" cy="16" rx="8" ry="4" fill="#94a3b8" />
+  </g>
+</svg>

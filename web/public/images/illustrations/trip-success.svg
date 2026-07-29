@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" fill="none">
+  <defs>
+    <linearGradient id="ts-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#34d399" />
+    </linearGradient>
+    <linearGradient id="ts-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d1fae5" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0.05" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="160" fill="url(#ts-sky)" rx="12" />
+  <!-- Checkmark circle -->
+  <circle cx="100" cy="65" r="30" stroke="url(#ts-accent)" stroke-width="2.5" fill="none" opacity="0.3" />
+  <circle cx="100" cy="65" r="22" fill="url(#ts-accent)" opacity="0.15" />
+  <path d="M88 65 L96 73 L112 57" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <!-- Confetti -->
+  <g opacity="0.5">
+    <rect x="60" y="30" width="4" height="4" rx="1" fill="#4f8ef7" transform="rotate(25 62 32)">
+      <animate attributeName="opacity" values="0.5;0.2;0.5" dur="2s" repeatCount="indefinite" />
+    </rect>
+    <rect x="135" y="35" width="3" height="3" rx="1" fill="#f59e0b" transform="rotate(-15 136 36)">
+      <animate attributeName="opacity" values="0.3;0.6;0.3" dur="1.8s" repeatCount="indefinite" />
+    </rect>
+    <circle cx="75" cy="45" r="2" fill="#ec4899" opacity="0.4" />
+    <circle cx="128" cy="42" r="1.5" fill="#8b5cf6" opacity="0.5" />
+    <rect x="50" y="55" width="3" height="3" rx="1" fill="#10b981" transform="rotate(40 51 56)" opacity="0.3" />
+    <rect x="145" y="58" width="4" height="4" rx="1" fill="#4f8ef7" transform="rotate(-30 147 60)" opacity="0.35" />
+  </g>
+  <!-- Route line -->
+  <path d="M40 130 Q100 110 160 130" stroke="#10b981" stroke-width="1.5" stroke-dasharray="4 3" fill="none" opacity="0.3" />
+  <g transform="translate(40, 126)" opacity="0.5">
+    <circle r="4" fill="#4f8ef7" />
+    <circle r="1.5" fill="white" />
+  </g>
+  <g transform="translate(160, 126)" opacity="0.5">
+    <circle r="4" fill="#10b981" />
+    <circle r="1.5" fill="white" />
+  </g>
+</svg>

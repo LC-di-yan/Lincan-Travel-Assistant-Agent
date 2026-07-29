@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" fill="none">
+  <!-- Shenzhen: KK100 + Ping An Finance Centre -->
+  <g opacity="0.12" fill="#4f8ef7">
+    <!-- Ping An Finance Centre (tallest) -->
+    <rect x="70" y="20" width="16" height="75" rx="2" />
+    <path d="M70 20 L78 8 L86 20" fill="#4f8ef7" opacity="0.9" />
+
+    <!-- KK100 -->
+    <rect x="100" y="28" width="14" height="67" rx="2" />
+    <path d="M100 28 L107 18 L114 28" fill="#4f8ef7" opacity="0.8" />
+
+    <!-- SEG Plaza -->
+    <rect x="125" y="38" width="12" height="57" rx="2" />
+    <path d="M125 38 L131 28 L137 38" fill="#4f8ef7" opacity="0.7" />
+
+    <!-- Window patterns -->
+    <g fill="white" opacity="0.2">
+      <rect x="73" y="25" width="3" height="2" rx="0.5" />
+      <rect x="78" y="25" width="3" height="2" rx="0.5" />
+      <rect x="73" y="32" width="3" height="2" rx="0.5" />
+      <rect x="78" y="32" width="3" height="2" rx="0.5" />
+      <rect x="73" y="39" width="3" height="2" rx="0.5" />
+      <rect x="78" y="39" width="3" height="2" rx="0.5" />
+    </g>
+
+    <!-- Background buildings -->
+    <rect x="48" y="55" width="10" height="40" rx="1" opacity="0.5" />
+    <rect x="150" y="50" width="14" height="45" rx="1" opacity="0.5" />
+    <rect x="172" y="58" width="10" height="37" rx="1" opacity="0.4" />
+  </g>
+  <line x1="35" y1="95" x2="185" y2="95" stroke="#4f8ef7" stroke-width="1" opacity="0.08" />
+</svg>

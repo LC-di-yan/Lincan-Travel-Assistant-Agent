@@ -1,0 +1,44 @@
+{
+  "user_id": "example_user",
+  "created_at": "2026-01-01T00:00:00.000000",
+  "updated_at": "2026-01-01T00:00:00.000000",
+  "preferences": [
+    {
+      "type": "hotel_brands",
+      "value": "汉庭"
+    },
+    {
+      "type": "airlines",
+      "value": "国航"
+    },
+    {
+      "type": "seat_preference",
+      "value": "靠窗"
+    },
+    {
+      "type": "home_location",
+      "value": "上海"
+    }
+  ],
+  "chat_history": [],
+  "trip_history": [
+    {
+      "trip_id": "trip_example_1",
+      "timestamp": "2026-01-01T00:00:00.000000",
+      "origin": "上海",
+      "destination": "北京",
+      "start_date": "2026-01-10",
+      "end_date": "2026-01-15",
+      "purpose": "出差"
+    }
+  ],
+  "statistics": {
+    "total_trips": 1,
+    "total_messages": 0,
+    "frequent_destinations": {
+      "北京": 1
+    },
+    "total_queries": 0
+  },
+  "expenses": []
+}

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none">
+  <defs>
+    <linearGradient id="np-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ec4899" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#f472b6" stop-opacity="0.06" />
+    </linearGradient>
+  </defs>
+  <rect width="160" height="120" fill="url(#np-accent)" rx="10" />
+  <!-- Suitcase -->
+  <rect x="50" y="40" width="60" height="45" rx="8" stroke="#ec4899" stroke-width="1.5" fill="none" opacity="0.25" />
+  <!-- Handle -->
+  <path d="M68 40 L68 32 Q68 26 74 26 L86 26 Q92 26 92 32 L92 40" stroke="#ec4899" stroke-width="1.5" fill="none" opacity="0.25" />
+  <!-- Belt -->
+  <line x1="50" y1="58" x2="110" y2="58" stroke="#ec4899" stroke-width="1" opacity="0.15" />
+  <!-- Buckle -->
+  <rect x="74" y="54" width="12" height="8" rx="2" stroke="#ec4899" stroke-width="1" fill="none" opacity="0.2" />
+  <!-- Heart (preference icon) -->
+  <g transform="translate(80, 75)" opacity="0.2">
+    <path d="M0 -3 C-1 -6 -5 -7 -7 -5 C-9 -3 -9 1 0 6 C9 1 9 -3 7 -5 C5 -7 1 -6 0 -3Z" fill="#ec4899" />
+  </g>
+  <!-- Tag -->
+  <g transform="translate(108, 50)" opacity="0.2">
+    <circle r="5" stroke="#ec4899" stroke-width="1" fill="none" />
+    <line x1="5" y1="0" x2="12" y2="0" stroke="#ec4899" stroke-width="1" />
+  </g>
+</svg>

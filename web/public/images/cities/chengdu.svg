@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" fill="none">
+  <!-- Chengdu: Panda + Sichuan Tower -->
+  <g opacity="0.12" fill="#4f8ef7">
+    <!-- Chengdu IFS Tower -->
+    <rect x="120" y="35" width="14" height="60" rx="2" />
+    <path d="M120 35 L127 22 L134 35" fill="#4f8ef7" opacity="0.8" />
+
+    <!-- 339 TV Tower -->
+    <rect x="155" y="28" width="6" height="67" rx="2" />
+    <circle cx="158" cy="42" r="8" fill="none" stroke="#4f8ef7" stroke-width="2" />
+    <circle cx="158" cy="42" r="4" fill="white" opacity="0.3" />
+
+    <!-- Background buildings -->
+    <rect x="90" y="55" width="12" height="40" rx="1" opacity="0.6" />
+    <rect x="140" y="50" width="10" height="45" rx="1" opacity="0.5" />
+    <rect x="175" y="55" width="12" height="40" rx="1" opacity="0.4" />
+
+    <!-- Panda face (simplified) -->
+    <circle cx="50" cy="58" r="20" opacity="0.6" />
+    <!-- Ears -->
+    <circle cx="35" cy="42" r="8" opacity="0.6" />
+    <circle cx="65" cy="42" r="8" opacity="0.6" />
+    <!-- Eyes -->
+    <ellipse cx="42" cy="55" rx="6" ry="5" fill="white" opacity="0.4" />
+    <ellipse cx="58" cy="55" rx="6" ry="5" fill="white" opacity="0.4" />
+    <circle cx="43" cy="56" r="3" fill="white" opacity="0.5" />
+    <circle cx="57" cy="56" r="3" fill="white" opacity="0.5" />
+    <!-- Nose -->
+    <ellipse cx="50" cy="64" rx="4" ry="2.5" opacity="0.5" />
+  </g>
+  <line x1="20" y1="95" x2="185" y2="95" stroke="#4f8ef7" stroke-width="1" opacity="0.08" />
+</svg>

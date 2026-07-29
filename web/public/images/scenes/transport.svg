@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="tp-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#22d3ee" />
+    </linearGradient>
+  </defs>
+  <!-- High-speed train body -->
+  <path d="M8 35 L8 28 Q8 22 14 22 L50 22 Q56 22 56 28 L56 35 Z" stroke="url(#tp-accent)" stroke-width="2" fill="none" opacity="0.3" />
+  <!-- Nose -->
+  <path d="M56 28 Q62 30 62 35 L56 35" stroke="#06b6d4" stroke-width="2" fill="none" opacity="0.25" />
+  <!-- Windows -->
+  <g fill="#06b6d4" opacity="0.2">
+    <rect x="14" y="25" width="6" height="5" rx="1" />
+    <rect x="23" y="25" width="6" height="5" rx="1" />
+    <rect x="32" y="25" width="6" height="5" rx="1" />
+    <rect x="41" y="25" width="6" height="5" rx="1" />
+  </g>
+  <!-- Wheels -->
+  <circle cx="18" cy="40" r="4" stroke="#06b6d4" stroke-width="1.5" fill="none" opacity="0.2" />
+  <circle cx="18" cy="40" r="1.5" fill="#06b6d4" opacity="0.15" />
+  <circle cx="46" cy="40" r="4" stroke="#06b6d4" stroke-width="1.5" fill="none" opacity="0.2" />
+  <circle cx="46" cy="40" r="1.5" fill="#06b6d4" opacity="0.15" />
+  <!-- Track -->
+  <line x1="4" y1="44" x2="60" y2="44" stroke="#06b6d4" stroke-width="1.5" opacity="0.15" />
+  <!-- Speed lines -->
+  <g opacity="0.15" stroke="#06b6d4" stroke-width="1" stroke-linecap="round">
+    <line x1="2" y1="28" x2="10" y2="28" />
+    <line x1="0" y1="32" x2="8" y2="32" />
+    <line x1="2" y1="36" x2="10" y2="36" />
+  </g>
+</svg>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" fill="none">
+  <!-- Beijing: Temple of Heaven + Forbidden City silhouette -->
+  <g opacity="0.12" fill="#4f8ef7">
+    <!-- Temple of Heaven -->
+    <ellipse cx="60" cy="55" rx="28" ry="8" />
+    <rect x="48" y="55" width="24" height="4" rx="1" />
+    <ellipse cx="60" cy="48" rx="22" ry="7" />
+    <rect x="52" y="48" width="16" height="3" rx="1" />
+    <ellipse cx="60" cy="42" rx="16" ry="5" />
+    <rect x="56" y="30" width="8" height="12" rx="2" />
+    <circle cx="60" cy="28" r="3" />
+
+    <!-- Forbidden City roofline -->
+    <rect x="100" y="60" width="80" height="35" rx="2" />
+    <path d="M96 60 L100 50 L104 60" fill="#4f8ef7" />
+    <path d="M116 60 L120 48 L124 60" fill="#4f8ef7" />
+    <path d="M136 60 L140 45 L144 60" fill="#4f8ef7" />
+    <path d="M156 60 L160 48 L164 60" fill="#4f8ef7" />
+    <path d="M176 60 L180 50 L184 60" fill="#4f8ef7" />
+
+    <!-- Gate -->
+    <rect x="130" y="72" width="20" height="23" rx="2" fill="white" opacity="0.3" />
+  </g>
+  <!-- Ground line -->
+  <line x1="20" y1="95" x2="180" y2="95" stroke="#4f8ef7" stroke-width="1" opacity="0.08" />
+</svg>

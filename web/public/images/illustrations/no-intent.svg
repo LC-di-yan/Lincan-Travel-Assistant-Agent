@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none">
+  <defs>
+    <linearGradient id="ni-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f8ef7" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.06" />
+    </linearGradient>
+  </defs>
+  <rect width="160" height="120" fill="url(#ni-accent)" rx="10" />
+  <!-- Radar circle -->
+  <circle cx="80" cy="55" r="35" stroke="#4f8ef7" stroke-width="1.5" fill="none" opacity="0.15" />
+  <circle cx="80" cy="55" r="22" stroke="#4f8ef7" stroke-width="1" fill="none" opacity="0.1" />
+  <circle cx="80" cy="55" r="10" stroke="#4f8ef7" stroke-width="1" fill="none" opacity="0.08" />
+  <!-- Cross hairs -->
+  <line x1="80" y1="18" x2="80" y2="92" stroke="#4f8ef7" stroke-width="0.8" opacity="0.1" />
+  <line x1="43" y1="55" x2="117" y2="55" stroke="#4f8ef7" stroke-width="0.8" opacity="0.1" />
+  <!-- Radar sweep -->
+  <path d="M80 55 L80 20 A35 35 0 0 1 107 35 Z" fill="#4f8ef7" opacity="0.06">
+    <animateTransform attributeName="transform" type="rotate" from="0 80 55" to="360 80 55" dur="4s" repeatCount="indefinite" />
+  </path>
+  <!-- Center dot -->
+  <circle cx="80" cy="55" r="3" fill="#4f8ef7" opacity="0.2" />
+  <!-- Label -->
+  <text x="80" y="108" text-anchor="middle" fill="#94a3b8" font-size="10" opacity="0.3" font-family="system-ui">等待分析</text>
+</svg>

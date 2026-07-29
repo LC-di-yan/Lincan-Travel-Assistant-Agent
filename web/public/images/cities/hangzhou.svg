@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" fill="none">
+  <!-- Hangzhou: Leifeng Pagoda + West Lake outline -->
+  <g opacity="0.12" fill="#4f8ef7">
+    <!-- Leifeng Pagoda -->
+    <path d="M55 95 L55 75 L50 75 L55 65 L50 65 L55 55 L50 55 L55 45 L50 45 L58 30 L66 45 L61 45 L66 55 L61 55 L66 65 L61 65 L66 75 L61 75 L61 95" fill="#4f8ef7" opacity="0.8" />
+    <rect x="56" y="25" width="4" height="8" rx="1" />
+
+    <!-- Modern buildings -->
+    <rect x="100" y="45" width="14" height="50" rx="2" />
+    <path d="M100 45 L107 35 L114 45" fill="#4f8ef7" opacity="0.7" />
+
+    <rect x="125" y="52" width="12" height="43" rx="2" opacity="0.6" />
+
+    <!-- Hangzhou Olympic Center (lotus shape hint) -->
+    <path d="M155 75 Q155 55 165 45 Q175 55 175 75" fill="#4f8ef7" opacity="0.5" />
+    <path d="M158 75 Q158 58 165 50 Q172 58 172 75" fill="white" opacity="0.2" />
+  </g>
+
+  <!-- West Lake wave hint -->
+  <path d="M20 98 Q50 92 80 98 Q110 104 140 98 Q170 92 195 98" stroke="#4f8ef7" stroke-width="1" fill="none" opacity="0.08" />
+
+  <line x1="20" y1="95" x2="185" y2="95" stroke="#4f8ef7" stroke-width="1" opacity="0.08" />
+</svg>

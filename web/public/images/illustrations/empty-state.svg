@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8f0fe" />
+      <stop offset="100%" stop-color="#f7f9fc" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f8ef7" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+    <linearGradient id="cloud" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e8f0fe" />
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e8f0fe" stop-opacity="0.3" />
+      <stop offset="50%" stop-color="#4f8ef7" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#e8f0fe" stop-opacity="0.3" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background gradient -->
+  <rect width="400" height="300" fill="url(#sky)" rx="16" />
+
+  <!-- Subtle grid dots -->
+  <g opacity="0.15" stroke="#4f8ef7" stroke-width="1">
+    <circle cx="40" cy="40" r="1"/><circle cx="80" cy="40" r="1"/><circle cx="120" cy="40" r="1"/><circle cx="160" cy="40" r="1"/><circle cx="200" cy="40" r="1"/><circle cx="240" cy="40" r="1"/><circle cx="280" cy="40" r="1"/><circle cx="320" cy="40" r="1"/><circle cx="360" cy="40" r="1"/>
+    <circle cx="40" cy="80" r="1"/><circle cx="80" cy="80" r="1"/><circle cx="120" cy="80" r="1"/><circle cx="160" cy="80" r="1"/><circle cx="200" cy="80" r="1"/><circle cx="240" cy="80" r="1"/><circle cx="280" cy="80" r="1"/><circle cx="320" cy="80" r="1"/><circle cx="360" cy="80" r="1"/>
+    <circle cx="40" cy="120" r="1"/><circle cx="80" cy="120" r="1"/><circle cx="120" cy="120" r="1"/><circle cx="160" cy="120" r="1"/><circle cx="200" cy="120" r="1"/><circle cx="240" cy="120" r="1"/><circle cx="280" cy="120" r="1"/><circle cx="320" cy="120" r="1"/><circle cx="360" cy="120" r="1"/>
+    <circle cx="40" cy="160" r="1"/><circle cx="80" cy="160" r="1"/><circle cx="120" cy="160" r="1"/><circle cx="160" cy="160" r="1"/><circle cx="200" cy="160" r="1"/><circle cx="240" cy="160" r="1"/><circle cx="280" cy="160" r="1"/><circle cx="320" cy="160" r="1"/><circle cx="360" cy="160" r="1"/>
+  </g>
+
+  <!-- Globe -->
+  <circle cx="200" cy="150" r="55" stroke="url(#accent)" stroke-width="2" fill="none" opacity="0.3"/>
+  <ellipse cx="200" cy="150" rx="55" ry="20" stroke="url(#accent)" stroke-width="1.5" fill="none" opacity="0.2"/>
+  <ellipse cx="200" cy="150" rx="20" ry="55" stroke="url(#accent)" stroke-width="1.5" fill="none" opacity="0.2"/>
+  <line x1="145" y1="150" x2="255" y2="150" stroke="url(#accent)" stroke-width="1" opacity="0.2"/>
+
+  <!-- Flight path (curved arc) -->
+  <path d="M120 110 Q200 60 280 110" stroke="url(#accent)" stroke-width="2" stroke-dasharray="6 4" fill="none" opacity="0.6"/>
+
+  <!-- Airplane -->
+  <g transform="translate(250, 82) rotate(20)" opacity="0.9">
+    <path d="M0 0 L18 -6 L18 -3 L6 -1 L6 1 L18 3 L18 6 Z" fill="url(#accent)"/>
+    <path d="M6 -1 L2 -8 L4 -7 L6 -3 Z" fill="url(#accent)" opacity="0.7"/>
+    <path d="M6 1 L2 8 L4 7 L6 3 Z" fill="url(#accent)" opacity="0.7"/>
+  </g>
+
+  <!-- Clouds -->
+  <g opacity="0.5">
+    <ellipse cx="80" cy="80" rx="25" ry="12" fill="url(#cloud)"/>
+    <ellipse cx="70" cy="76" rx="15" ry="10" fill="url(#cloud)"/>
+    <ellipse cx="95" cy="78" rx="12" ry="8" fill="url(#cloud)"/>
+  </g>
+  <g opacity="0.35">
+    <ellipse cx="320" cy="100" rx="20" ry="10" fill="url(#cloud)"/>
+    <ellipse cx="310" cy="97" rx="12" ry="8" fill="url(#cloud)"/>
+    <ellipse cx="335" cy="98" rx="10" ry="7" fill="url(#cloud)"/>
+  </g>
+
+  <!-- City skyline -->
+  <g opacity="0.15" fill="url(#accent)">
+    <!-- Buildings -->
+    <rect x="50" y="210" width="18" height="50" rx="2"/>
+    <rect x="72" y="195" width="14" height="65" rx="2"/>
+    <rect x="90" y="220" width="20" height="40" rx="2"/>
+    <rect x="115" y="200" width="12" height="60" rx="2"/>
+    <rect x="132" y="215" width="16" height="45" rx="2"/>
+    <rect x="250" y="210" width="16" height="50" rx="2"/>
+    <rect x="270" y="195" width="20" height="65" rx="2"/>
+    <rect x="295" y="205" width="14" height="55" rx="2"/>
+    <rect x="314" y="220" width="18" height="40" rx="2"/>
+    <rect x="336" y="200" width="12" height="60" rx="2"/>
+  </g>
+
+  <!-- Ground line -->
+  <path d="M0 260 Q200 250 400 260" stroke="url(#accent)" stroke-width="1.5" fill="none" opacity="0.2"/>
+  <rect x="0" y="260" width="400" height="40" fill="url(#ground)" rx="0"/>
+
+  <!-- Location pins -->
+  <g opacity="0.6">
+    <g transform="translate(140, 180)">
+      <path d="M0 0 C0 -10 -8 -18 -8 -24 C-8 -28.4 -4.4 -32 0 -32 C4.4 -32 8 -28.4 8 -24 C8 -18 0 -10 0 -0Z" fill="#4f8ef7"/>
+      <circle cx="0" cy="-24" r="3" fill="white"/>
+    </g>
+    <g transform="translate(260, 185)">
+      <path d="M0 0 C0 -10 -8 -18 -8 -24 C-8 -28.4 -4.4 -32 0 -32 C4.4 -32 8 -28.4 8 -24 C8 -18 0 -10 0 -0Z" fill="#8b5cf6"/>
+      <circle cx="0" cy="-24" r="3" fill="white"/>
+    </g>
+  </g>
+
+  <!-- Small decorative stars -->
+  <g opacity="0.3" fill="#4f8ef7">
+    <circle cx="100" cy="50" r="2"/>
+    <circle cx="300" cy="60" r="1.5"/>
+    <circle cx="350" cy="140" r="1.5"/>
+    <circle cx="60" cy="150" r="1"/>
+  </g>
+</svg>

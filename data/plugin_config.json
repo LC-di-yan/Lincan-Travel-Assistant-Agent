@@ -1,0 +1,26 @@
+{
+  "ask-question": {
+    "enabled": true
+  },
+  "event-collection": {
+    "enabled": true
+  },
+  "memory-query": {
+    "enabled": true
+  },
+  "plan-trip": {
+    "enabled": true
+  },
+  "preference": {
+    "enabled": true
+  },
+  "query-info": {
+    "enabled": true
+  },
+  "expense-tracker": {
+    "enabled": true
+  },
+  "currency-converter": {
+    "enabled": true
+  }
+}

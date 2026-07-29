@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" fill="none">
+  <!-- Guangzhou: Canton Tower (twisted) -->
+  <g opacity="0.12" fill="#4f8ef7">
+    <!-- Canton Tower - twisted shape -->
+    <path d="M85 95 Q75 70 80 55 Q85 40 90 30 Q92 25 95 22 Q98 25 100 30 Q105 40 110 55 Q115 70 105 95" fill="#4f8ef7" />
+    <!-- Tower lattice (transparent sections) -->
+    <ellipse cx="95" cy="45" rx="6" ry="8" fill="white" opacity="0.3" />
+    <ellipse cx="95" cy="65" rx="8" ry="10" fill="white" opacity="0.3" />
+    <!-- Antenna -->
+    <rect x="93" y="10" width="4" height="14" rx="1" />
+    <line x1="95" y1="5" x2="95" y2="10" stroke="#4f8ef7" stroke-width="1.5" />
+
+    <!-- Guangzhou IFC -->
+    <rect x="130" y="45" width="14" height="50" rx="2" />
+    <path d="M130 45 L137 32 L144 45" fill="#4f8ef7" opacity="0.8" />
+
+    <!-- CITIC Plaza -->
+    <rect x="155" y="50" width="12" height="45" rx="2" />
+    <path d="M155 50 L161 40 L167 50" fill="#4f8ef7" opacity="0.7" />
+
+    <!-- Background -->
+    <rect x="45" y="65" width="10" height="30" rx="1" opacity="0.5" />
+    <rect x="175" y="60" width="10" height="35" rx="1" opacity="0.4" />
+  </g>
+  <line x1="30" y1="95" x2="185" y2="95" stroke="#4f8ef7" stroke-width="1" opacity="0.08" />
+</svg>
