@@ -31,6 +31,7 @@ class UserSession:
     last_active: float = field(default_factory=time.monotonic)
     long_term_summary: str = ""
     messages_since_summary: int = 0
+    pending_intention: Optional[Dict] = field(default=None)  # 等待用户澄清的意图数据
 
 
 class SessionManager:

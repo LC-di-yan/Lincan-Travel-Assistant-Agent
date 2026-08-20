@@ -1,12 +1,14 @@
-import { CardShell } from './CardShell'
-import { AgentIcon } from '../Icons'
-import { ArrowRight, TrendingUp } from 'lucide-react'
+import { CompactReceipt, CompactReceiptExchange } from './CompactReceipt'
+import { getAgentColor } from '../Icons'
 
-const CURRENCY_FLAGS: Record<string, string> = {
-  CNY: '🇨🇳', USD: '🇺🇸', EUR: '🇪🇺', GBP: '🇬🇧', JPY: '🇯🇵',
-  KRW: '🇰🇷', HKD: '🇭🇰', TWD: '🇹🇼', SGD: '🇸🇬', THB: '🇹🇭',
-  AUD: '🇦🇺', CAD: '🇨🇦',
+const FLAGS: Record<string, string> = {
+  CNY: '\u{1F1E8}\u{1F1F3}', USD: '\u{1F1FA}\u{1F1F8}', EUR: '\u{1F1EA}\u{1F1FA}',
+  GBP: '\u{1F1EC}\u{1F1E7}', JPY: '\u{1F1EF}\u{1F1F5}', KRW: '\u{1F1F0}\u{1F1F7}',
+  HKD: '\u{1F1ED}\u{1F1F0}', TWD: '\u{1F1F9}\u{1F1FC}', SGD: '\u{1F1F8}\u{1F1EC}',
+  THB: '\u{1F1F9}\u{1F1ED}', AUD: '\u{1F1E6}\u{1F1FA}', CAD: '\u{1F1E8}\u{1F1E6}',
 }
+
+const accent = getAgentColor('currency_converter')
 
 export function CurrencyCard({ data }: { data: Record<string, unknown> }) {
   const action = data.action as string
@@ -19,54 +21,27 @@ export function CurrencyCard({ data }: { data: Record<string, unknown> }) {
 
   if (action === 'error') {
     return (
-      <CardShell agentName="currency_converter">
-        <div className="p-4">
-          <h4 className="font-semibold text-sm flex items-center gap-1.5 mb-2">
-            <AgentIcon agentName="currency_converter" size={16} />
-            汇率查询
-          </h4>
-          <p className="text-sm text-[var(--error)]">{answer}</p>
-        </div>
-      </CardShell>
+      <CompactReceipt accentColor="#ef4444">
+        <p className="text-sm text-center text-[var(--error)] py-2">{answer || '查询失败'}</p>
+      </CompactReceipt>
     )
   }
 
   return (
-    <CardShell agentName="currency_converter">
-      <div className="p-4 space-y-3">
-        <h4 className="font-semibold text-sm flex items-center gap-1.5">
-          <AgentIcon agentName="currency_converter" size={16} />
-          汇率换算
-        </h4>
-
-        {/* Conversion display */}
-        <div className="flex items-center justify-center gap-3 p-4 rounded-xl"
-          style={{ backgroundColor: 'var(--bg-secondary)' }}>
-          {/* From */}
-          <div className="text-center">
-            <div className="text-lg mb-1">{CURRENCY_FLAGS[from] || '💱'}</div>
-            <div className="text-xs text-[var(--text-muted)]">{from}</div>
-            <div className="text-xl font-bold mt-1">{amount}</div>
-          </div>
-
-          <ArrowRight size={20} className="text-[var(--accent)] mx-2" />
-
-          {/* To */}
-          <div className="text-center">
-            <div className="text-lg mb-1">{CURRENCY_FLAGS[to] || '💱'}</div>
-            <div className="text-xs text-[var(--text-muted)]">{to}</div>
-            <div className="text-2xl font-bold text-gradient mt-1">{result.toFixed(2)}</div>
-          </div>
-        </div>
-
-        {/* Rate info */}
-        <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-          <TrendingUp size={12} />
-          <span>1 {from} = {rate} {to}</span>
-        </div>
-
-        {answer && <p className="text-xs text-[var(--text-secondary)]">{answer}</p>}
-      </div>
-    </CardShell>
+    <CompactReceipt
+      accentColor={accent}
+      footer={rate ? `\u{1F4CA} 1 ${from} = ${rate} ${to}` : undefined}
+    >
+      <CompactReceiptExchange
+        from={{
+          icon: FLAGS[from] || '\u{1F4B1}',
+          value: `${amount} ${from}`,
+        }}
+        to={{
+          icon: FLAGS[to] || '\u{1F4B1}',
+          value: `${result.toFixed(2)} ${to}`,
+        }}
+      />
+    </CompactReceipt>
   )
 }

@@ -38,6 +38,7 @@ data/rag_knowledge/
 data/models/
 data/preferences/*.json
 !data/preferences/.gitkeep
+data/test_memory/
 
 # Logs
 *.log
@@ -54,9 +55,16 @@ web/dist/
 data/memory/*.json
 !data/memory/.gitkeep
 !data/memory/example_user.json
+server/data/memory/*.json
 
-# Claude local settings
-.claude/settings.local.json
+# Claude Code (removed; do not re-commit)
+.claude/
+
+# Scratch assets (design mockups / downloaded images)
+image/
+
+# Test cache
+.pytest_cache/
 
 # Test results
 tests/results/

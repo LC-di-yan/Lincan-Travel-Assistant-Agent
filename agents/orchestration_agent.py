@@ -166,6 +166,9 @@ class OrchestrationAgent(AgentBase):
             context["fast_train_ticket"] = intention_data["fast_train_ticket"]
         if "fast_currency" in intention_data:
             context["fast_currency"] = intention_data["fast_currency"]
+        # fast_event 合并了 event_collection，直接注入上下文供下游 Agent 使用
+        if intention_data.get("fast_event"):
+            context["event_collection"] = intention_data["fast_event"]
 
         # 从记忆系统获取上下文
         if self.memory_manager:
@@ -479,6 +482,9 @@ class OrchestrationAgent(AgentBase):
                         if r["agent_name"] == "event_collection":
                             event_data = r["result"].get("data", {})
                             break
+                    # 回退：如果 event_collection agent 未执行，从 fast_event 取
+                    if not event_data:
+                        event_data = intention_data.get("fast_event", {})
 
                     origin = event_data.get("origin")
                     destination = event_data.get("destination")

@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Clock, Utensils, ChevronDown, ChevronRight, StickyNote, MapPin } from 'lucide-react'
-import type { Itinerary, DailyPlan } from '../../api/types'
+import { useState, useRef, useEffect } from 'react'
+import { Clock, Utensils, ChevronDown, ChevronRight, StickyNote, MapPin, Pencil } from 'lucide-react'
+import type { Itinerary, DailyPlan, Activity } from '../../api/types'
 import { CardShell } from './CardShell'
 import { ExportButton } from './ExportButton'
 import { CityIllustration } from '../Illustrations'
@@ -17,8 +17,69 @@ function getActivityIcon(activity?: string): string {
   return '📌'
 }
 
+/** 内联可编辑活动名称：点击即改，Enter/失焦保存，Esc 取消 */
+function EditableActivityName({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { setDraft(value) }, [value])
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editing])
+
+  const commit = () => {
+    const trimmed = draft.trim()
+    if (trimmed && trimmed !== value) onChange(trimmed)
+    setEditing(false)
+  }
+
+  const cancel = () => { setDraft(value); setEditing(false) }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        className="font-medium bg-[var(--bg-primary)] border border-[var(--accent)] rounded px-1 py-0.5 text-sm outline-none min-w-0"
+        style={{ color: 'var(--text-primary)' }}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter')  { e.preventDefault(); commit() }
+          if (e.key === 'Escape') { e.preventDefault(); cancel() }
+        }}
+      />
+    )
+  }
+
+  return (
+    <span
+      className="font-medium cursor-pointer group inline-flex items-center gap-1 hover:text-[var(--accent)] transition-colors"
+      onClick={() => { setDraft(value); setEditing(true) }}
+      title="点击编辑活动名称"
+    >
+      {value}
+      <Pencil size={11} className="opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0" />
+    </span>
+  )
+}
+
 function DailyPlanItem({ plan }: { plan: DailyPlan }) {
   const [open, setOpen] = useState(true)
+  /** 本地覆盖：dayIndex 与 actIndex 组合 → 用户编辑后的名称 */
+  const [nameOverrides, setNameOverrides] = useState<Record<number, string>>({})
+
+  const getDisplayName = (act: Activity, idx: number) =>
+    nameOverrides[idx] ?? act.activity ?? '未命名活动'
+
+  const handleNameChange = (idx: number, newName: string) => {
+    setNameOverrides((prev) => ({ ...prev, [idx]: newName }))
+  }
 
   return (
     <div className="relative pl-8 pb-4">
@@ -34,25 +95,31 @@ function DailyPlanItem({ plan }: { plan: DailyPlan }) {
 
       {open && (
         <div className="space-y-2 mt-1">
-          {(plan.activities || []).map((act, i) => (
-            <div key={i}
-              className="flex gap-2 text-sm p-2.5 rounded-xl transition-all hover:shadow-sm card-hover"
-              style={{ backgroundColor: 'var(--bg-secondary)' }}>
-              <span className="flex-shrink-0 text-base">{getActivityIcon(act.activity)}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  {act.time && (
-                    <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
-                      <Clock size={10} />{act.time}
-                    </span>
-                  )}
-                  <span className="font-medium">{act.activity || '未命名活动'}</span>
+          {(plan.activities || []).map((act, i) => {
+            const displayName = getDisplayName(act, i)
+            return (
+              <div key={i}
+                className="flex gap-2 text-sm p-2.5 rounded-xl transition-all hover:shadow-sm card-hover"
+                style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                <span className="flex-shrink-0 text-base">{getActivityIcon(displayName)}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    {act.time && (
+                      <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
+                        <Clock size={10} />{act.time}
+                      </span>
+                    )}
+                    <EditableActivityName
+                      value={displayName}
+                      onChange={(v) => handleNameChange(i, v)}
+                    />
+                  </div>
+                  {act.description && <p className="text-xs text-[var(--text-secondary)] mt-0.5">{act.description}</p>}
+                  {act.transport && <span className="text-xs text-[var(--accent)]">🚗 {act.transport}</span>}
                 </div>
-                {act.description && <p className="text-xs text-[var(--text-secondary)] mt-0.5">{act.description}</p>}
-                {act.transport && <span className="text-xs text-[var(--accent)]">🚗 {act.transport}</span>}
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           {(plan.meals?.lunch || plan.meals?.dinner) && (
             <div className="flex gap-3 text-xs text-[var(--text-secondary)] ml-1">

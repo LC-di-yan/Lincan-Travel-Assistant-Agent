@@ -8,6 +8,7 @@ interface SSECallbacks {
   onAgentResult?: (data: AgentResult) => void
   onComplete?: (data: OrchestrationResult) => void
   onError?: (data: { message: string }) => void
+  onClarification?: (data: { question: string; missing_info?: string[] }) => void
 }
 
 let activeController: AbortController | null = null
@@ -102,6 +103,9 @@ export async function sendChatMessage(
                 break
               case 'error':
                 callbacks.onError?.(data)
+                break
+              case 'clarification':
+                callbacks.onClarification?.(data)
                 break
             }
           } catch {

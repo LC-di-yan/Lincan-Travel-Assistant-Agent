@@ -6,9 +6,23 @@ import { AgentIcon, getAgentLabel } from '../Icons'
 
 export function KnowledgeCard({ data, agentName }: { data: Record<string, unknown>; agentName?: string }) {
   const [showSources, setShowSources] = useState(false)
-  const answer = (data.answer || data.content || data.result || data.message) as string | undefined
+  const rawAnswer = (data.answer || data.content || data.result || data.message) as string | undefined
   const sources = data.sources as { document?: string; similarity?: number; content?: string }[] | undefined
   const label = agentName ? getAgentLabel(agentName) : '知识库回答'
+
+  // 防御：如果 answer 仍是 JSON 字符串，尝试解析提取真实文本
+  let answer = rawAnswer
+  if (answer && typeof answer === 'string') {
+    const trimmed = answer.trim()
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          answer = (parsed.answer || parsed.response || parsed.content || parsed.result || parsed.message || answer) as string
+        }
+      } catch { /* not valid JSON, use as-is */ }
+    }
+  }
 
   if (!answer) return null
 

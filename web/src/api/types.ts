@@ -1,7 +1,7 @@
 // ===== SSE 事件类型 =====
 
 export interface SSEEvent {
-  event: 'thinking' | 'intention' | 'dispatching' | 'agent_result' | 'complete' | 'error'
+  event: 'thinking' | 'intention' | 'dispatching' | 'agent_result' | 'complete' | 'error' | 'clarification'
   data: string
 }
 
@@ -34,6 +34,17 @@ export interface IntentionData {
   intents: Intent[]
   key_entities: KeyEntities
   rewritten_query: string
+  needs_clarification?: boolean
+  clarification_question?: string
+  fast_event?: {
+    origin?: string | null
+    destination?: string | null
+    start_date?: string | null
+    end_date?: string | null
+    duration_days?: number | null
+    trip_purpose?: string | null
+    missing_info?: string[]
+  }
   agent_schedule: AgentSchedule[]
 }
 
@@ -100,6 +111,54 @@ export interface TripRecord {
 export interface FrequentDestination {
   city: string
   count: number
+}
+
+// ===== 酒店搜索 =====
+
+export interface HotelItem {
+  id: string
+  name: string
+  address: string
+  rating: string
+  cost: string
+  tel: string
+  photo: string
+  distance: string
+  type: string
+  location: string
+}
+
+export interface HotelResultData {
+  city: string
+  keyword: string
+  count: number
+  summary: string
+  hotels: HotelItem[]
+  sources: { title: string; url: string }[]
+}
+
+// ===== 餐厅搜索 =====
+
+export interface RestaurantItem {
+  id: string
+  name: string
+  address: string
+  rating: string
+  cost: string
+  tel: string
+  photo: string
+  distance: string
+  type: string
+  location: string
+}
+
+export interface RestaurantResultData {
+  city: string
+  keyword: string
+  count: number
+  summary: string
+  restaurants: RestaurantItem[]
+  sources: { title: string; url: string }[]
 }
 
 // ===== 消息 =====

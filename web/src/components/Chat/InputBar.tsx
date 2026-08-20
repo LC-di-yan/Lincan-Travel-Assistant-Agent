@@ -26,7 +26,6 @@ export function InputBar({ onSend, onCancel, disabled }: { onSend: (text: string
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKey}
           placeholder="输入您的差旅需求，如：明天从北京去上海出差3天..."
-          disabled={disabled}
           rows={1}
           className="flex-1 resize-none rounded-2xl px-4 py-3 text-sm outline-none transition-all
             focus:ring-2 focus:ring-[var(--accent)] focus:shadow-[var(--shadow-glow)]

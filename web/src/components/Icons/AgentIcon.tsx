@@ -8,7 +8,9 @@ const AGENT_CONFIG: Record<string, { icon: string; color: string; label: string 
   preference: { icon: '/images/icons/agent-pref.svg', color: '#ec4899', label: '偏好管理' },
   memory_query: { icon: '/images/icons/agent-memory.svg', color: '#06b6d4', label: '记忆查询' },
   expense_tracker: { icon: '/images/icons/agent-expense.svg', color: '#f97316', label: '费用记录' },
+  expense_tracking: { icon: '/images/icons/agent-expense.svg', color: '#f97316', label: '费用记录' },
   currency_converter: { icon: '/images/icons/agent-currency.svg', color: '#14b8a6', label: '汇率转换' },
+  currency_conversion: { icon: '/images/icons/agent-currency.svg', color: '#14b8a6', label: '汇率转换' },
   visa_info: { icon: '/images/icons/agent-rag.svg', color: '#6366f1', label: '签证信息' },
   translation: { icon: '/images/icons/agent-info.svg', color: '#0ea5e9', label: '翻译' },
 }

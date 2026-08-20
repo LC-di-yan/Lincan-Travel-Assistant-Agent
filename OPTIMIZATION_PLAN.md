@@ -315,9 +315,9 @@ class MemoryQueryAgent:
 |------|------|--------|
 | 实现 FastRouter | 新增 `agents/fast_router.py` | 4h |
 | 修改 OrchestrationAgent | `agents/orchestration_agent.py` | 2h |
-| ExpenseTrackerAgent 快速执行 | `.claude/skills/expense-tracker/script/agent.py` | 2h |
-| InformationQueryAgent 快速执行 | `.claude/skills/query-info/script/agent.py` | 1h |
-| CurrencyConverterAgent 快速执行 | `.claude/skills/currency-converter/script/agent.py` | 2h |
+| ExpenseTrackerAgent 快速执行 | `skills/expense-tracker/script/agent.py` | 2h |
+| InformationQueryAgent 快速执行 | `skills/query-info/script/agent.py` | 1h |
+| CurrencyConverterAgent 快速执行 | `skills/currency-converter/script/agent.py` | 2h |
 
 ### Phase 2：意图识别优化（1天）
 

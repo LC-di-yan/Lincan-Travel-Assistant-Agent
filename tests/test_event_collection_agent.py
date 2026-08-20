@@ -18,7 +18,7 @@ from config import LLM_CONFIG
 # importlib 加载避免模块名冲突
 _spec = importlib.util.spec_from_file_location(
     "event_collection_agent",
-    os.path.join(project_root, '.claude', 'skills', 'event-collection', 'script', 'agent.py'),
+    os.path.join(project_root, 'skills', 'event-collection', 'script', 'agent.py'),
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)

@@ -22,5 +22,8 @@
   },
   "currency-converter": {
     "enabled": true
+  },
+  "hotel-search": {
+    "enabled": true
   }
 }

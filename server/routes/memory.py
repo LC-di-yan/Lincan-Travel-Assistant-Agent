@@ -126,7 +126,7 @@ async def get_plugins():
     registry._skill_map = {}
     registry.cache = {}
     from pathlib import Path as _Path
-    registry.skills_root = _Path(__file__).resolve().parent.parent.parent / ".claude" / "skills"
+    registry.skills_root = _Path(__file__).resolve().parent.parent.parent / "skills"
     registry._discover_skills()
     return {"plugins": registry.get_all_plugins()}
 

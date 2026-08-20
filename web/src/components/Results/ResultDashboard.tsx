@@ -7,6 +7,8 @@ import { PreferenceCard } from './PreferenceCard'
 import { ExpenseCard } from './ExpenseCard'
 import { CurrencyCard } from './CurrencyCard'
 import { TranslationCard } from './TranslationCard'
+import { HotelCard } from './HotelCard'
+import { RestaurantCard } from './RestaurantCard'
 import { AlertCircle } from 'lucide-react'
 
 function ResultCard({ result }: { result: AgentResult }) {
@@ -40,8 +42,10 @@ function ResultCard({ result }: { result: AgentResult }) {
     case 'preference':
       return <PreferenceCard data={inner} />
     case 'expense_tracker':
+    case 'expense_tracking':
       return <ExpenseCard data={inner} />
     case 'currency_converter':
+    case 'currency_conversion':
       return <CurrencyCard data={inner} />
     case 'memory_query':
       return <KnowledgeCard data={inner} agentName={agent} />
@@ -49,6 +53,10 @@ function ResultCard({ result }: { result: AgentResult }) {
       return <KnowledgeCard data={inner} agentName={agent} />
     case 'translation':
       return <TranslationCard data={inner} />
+    case 'hotel_search':
+      return <HotelCard data={inner} />
+    case 'restaurant_search':
+      return <RestaurantCard data={inner} />
     default:
       return <KnowledgeCard data={inner} agentName={agent} />
   }

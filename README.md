@@ -5,37 +5,43 @@
 ## ✨ 核心亮点
 
 ### 🎯 智能意图识别
+
 - 基于LLM语义理解的多意图识别（准确率90%+，对比关键词匹配提升25%）
 - 支持6大类意图：行程规划、记忆查询、偏好管理、知识问答、信息查询、事项收集
 - 自然语言理解，无需关键词匹配
 
 ### 🧠 两层记忆架构
+
 - **短期记忆**：内存滑动窗口（10轮对话，会话级隔离）
 - **长期记忆**：JSON文件持久化 + LLM异步总结
 - 智能识别偏好追加/覆盖动作（"我还喜欢如家" vs "我搬家到上海了"）
 - 跨会话持久化，支持用户偏好、行程历史、聊天记录、费用记录
 
 ### 📚 RAG知识库
+
 - Milvus Lite向量数据库 + BGE-small-zh-v1.5 Embedding模型（本地部署）
 - 智能分块（Chunking）+ 滑动窗口切分 + 余弦相似度检索
 - 知识溯源：返回文档来源，准确率95%
 
 ### ⚡ 优先级并行调度
+
 - Plan-and-Execute架构：IntentionAgent → OrchestrationAgent → 子Agent
 - 同优先级Agent并行执行（asyncio.gather）
 - 系统响应时间从30秒优化到15秒（-50%）
 
 ### 🏗️ 插件化架构
-- **Skill Plugins**：所有子Agent重构为独立插件（`.claude/skills/`）
+
+- **Skill Plugins**：所有子Agent重构为独立插件（`skills/`）
 - **LazyAgentRegistry**：动态发现机制，自动扫描注册
 - **懒加载**：未使用的Skill不加载，启动速度3秒
 - **Progressive Disclosure**：渐进式暴露，意图识别阶段仅加载元数据
 
 ### 🛡️ 稳定性保障
+
 - **熔断器**：连续失败后自动熔断，保护服务
 - **指数退避重试**：自动重试失败请求（最大3次）
 - **健康检查**：实时监控LLM服务可用性
-
+  
 ---
 
 ## 系统架构
@@ -116,11 +122,11 @@
 
 为保证 LLM 服务不稳定时的可用性，在调用链外增加了以下机制（不改变原有业务逻辑）：
 
-| 机制 | 说明 |
-|------|------|
-| **熔断器** | 连续失败若干次后暂停调用 LLM，直接提示「服务暂时不可用」；一段时间后自动半开试探恢复。 |
-| **重试与退避** | 对意图识别、编排两次 LLM 调用做有限次重试，仅对超时、429、5xx 等可重试错误生效，采用指数退避。 |
-| **健康检查** | 会话内输入 `health` 可查看熔断状态并探测 LLM 是否可达；命令行执行 `python cli.py health` 可单独做一次探测（退出码 0/1，便于监控）。 |
+| 机制        | 说明                                                                                      |
+| --------- | --------------------------------------------------------------------------------------- |
+| **熔断器**   | 连续失败若干次后暂停调用 LLM，直接提示「服务暂时不可用」；一段时间后自动半开试探恢复。                                           |
+| **重试与退避** | 对意图识别、编排两次 LLM 调用做有限次重试，仅对超时、429、5xx 等可重试错误生效，采用指数退避。                                   |
+| **健康检查**  | 会话内输入 `health` 可查看熔断状态并探测 LLM 是否可达；命令行执行 `python cli.py health` 可单独做一次探测（退出码 0/1，便于监控）。 |
 
 配置见 `config.py` 中的 `RESILIENCE_CONFIG`（重试次数、熔断阈值、恢复时间等）。
 
@@ -128,16 +134,17 @@
 
 ## 📊 关键指标
 
-| 指标 | 优化前 | 优化后 | 提升幅度 |
-|------|--------|--------|----------|
-| 意图识别准确率 | 65% | 90%+ | +25% |
-| 知识库问答准确率 | - | 95% | 新增功能 |
-| 用户偏好记忆准确率 | - | 95% | 新增功能 |
-| 系统响应时间 | 30秒 | 15秒 | -50% |
-| 用户偏好缓存命中率 | - | 85% | 新增功能 |
-| 系统启动速度 | 未优化 | 3秒 | 懒加载优化 |
+| 指标        | 优化前 | 优化后  | 提升幅度  |
+| --------- | --- | ---- | ----- |
+| 意图识别准确率   | 65% | 90%+ | +25%  |
+| 知识库问答准确率  | -   | 95%  | 新增功能  |
+| 用户偏好记忆准确率 | -   | 95%  | 新增功能  |
+| 系统响应时间    | 30秒 | 15秒  | -50%  |
+| 用户偏好缓存命中率 | -   | 85%  | 新增功能  |
+| 系统启动速度    | 未优化 | 3秒   | 懒加载优化 |
 
 **优化路径**：
+
 1. **V1.0**: 关键词匹配意图识别（准确率65%） + 串行调度（响应时间30秒）
 2. **V2.0**: 两层记忆系统 + RAG知识库 + 联网搜索
 3. **V3.0**: LLM语义理解意图识别（准确率90%+） + 优先级并行调度（响应时间15秒）
@@ -165,6 +172,7 @@
   - 自动提取：出发地、目的地、出发时间、返程时间、出行目的
 
 **意图识别示例**：
+
 ```
 用户: "我过去都去哪旅游过？"
 → IntentionAgent 识别为 memory_query
@@ -181,12 +189,14 @@
 ### 2. 两层记忆系统
 
 **短期记忆（会话级）**
+
 - 基于**内存**的滑动窗口机制
 - 保存最近10轮对话（20条消息）
 - 会话级隔离，不持久化
 - 用于上下文理解和快速访问
 
 **长期记忆（持久化）**
+
 - 💾 **JSON文件持久化存储**（`data/memory/{user_id}.json`）：用户偏好、历史行程、完整聊天历史、费用记录
 - 🎯 **用户偏好管理**：支持动态添加任意偏好类型，智能识别追加/覆盖动作
 - 📅 **历史行程记录**：出发地、目的地、时间、目的，支持跨会话查询
@@ -195,11 +205,13 @@
 - ⚡ **写回缓存**：内存缓存 + atexit自动刷盘
 
 **测试记忆系统**：
+
 ```bash
 pytest tests/test_memory_system.py
 ```
 
 测试覆盖：
+
 - ✅ 短期记忆：添加、查询、统计
 - ✅ 长期记忆-偏好：动态添加、跨会话访问
 - ✅ 长期记忆-行程：保存、查询、高频目的地统计
@@ -212,6 +224,7 @@ pytest tests/test_memory_system.py
 基于 **Milvus Lite** 和 **BGE-small-zh-v1.5 Embedding模型**的企业差旅知识检索系统。
 
 **技术方案**：
+
 - **向量数据库**: Milvus（本地存储）
 - **Embedding模型**: BGE-small-zh-v1.5（中文向量化，首次运行自动从 HuggingFace 下载）
 - **文档处理**: 智能分块（Chunking）+ 滑动窗口切分
@@ -220,11 +233,13 @@ pytest tests/test_memory_system.py
 - **准确率**: 95%（知识库问答准确率）
 
 **初始化知识库**：
+
 ```bash
-python .claude/skills/ask-question/script/init_knowledge_base.py
+python skills/ask-question/script/init_knowledge_base.py
 ```
 
 **知识库内容**（8类文档）：
+
 - 差旅标准和规定
 - 报销政策
 - 预订指南
@@ -234,10 +249,10 @@ python .claude/skills/ask-question/script/init_knowledge_base.py
 - 城市差旅指南
 - 环保倡议
 
-
 ### 4. 信息查询（联网搜索）
 
 基于 **DuckDuckGo (DDGS)** 的免费网络搜索功能：
+
 - 🌐 实时网络搜索（天气、景点、实时新闻）
 - 📝 LLM自动摘要（提取关键信息）
 - 🔗 来源追踪（返回搜索来源）
@@ -246,6 +261,7 @@ python .claude/skills/ask-question/script/init_knowledge_base.py
 ### 5. 优先级并行调度
 
 基于 **asyncio.gather** 的智能并行调度机制：
+
 - 📋 **多意图识别**：支持6大类意图（规划行程、查询记忆、管理偏好、知识问答、信息查询、实时检索）
 - ⚡ **优先级+并行混合模式**：同优先级Agent并行执行，不同优先级串行依赖
 - 🎯 **动态调度**：根据意图识别结果动态分配优先级
@@ -287,6 +303,7 @@ ALIGO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 ```
 
 **配置说明**：
+
 - `ALIGO_API_KEY`: MiMo大模型API密钥（必填）
 - `ALIGO_MODEL_NAME`: 模型名称（默认 mimo-v2-pro）
 - `ALIGO_BASE_URL`: API地址
@@ -295,17 +312,19 @@ ALIGO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 ### 3. 初始化知识库
 
 ```bash
-python .claude/skills/ask-question/script/init_knowledge_base.py
+python skills/ask-question/script/init_knowledge_base.py
 ```
 
 ### 4. 启动系统
 
 **CLI模式**：
+
 ```bash
 python cli.py
 ```
 
 **Web模式**（FastAPI + React）：
+
 ```bash
 # 启动后端
 cd server && uvicorn app:app --reload --port 8000
@@ -320,9 +339,9 @@ cd web && npm install && npm run dev
 
 ## 子智能体详解 (Skills)
 
-所有子智能体已重构为 **Skill Plugins**，位于 `.claude/skills/` 目录下，支持动态发现与加载。
+所有子智能体已重构为 **Skill Plugins**，位于 `skills/` 目录下，支持动态发现与加载。
 
-### 1. MemoryQueryAgent (记忆查询智能体) 
+### 1. MemoryQueryAgent (记忆查询智能体)
 
 - **职责**: 查询用户的历史记忆
 - **查询内容**:
@@ -416,15 +435,15 @@ python cli.py
 
 ### 内置命令
 
-| 命令 | 说明 |
-|------|------|
-| `help` | 显示帮助信息 |
-| `status` | 查看当前状态和记忆 |
-| `health` | 检查 LLM 服务是否可用并显示熔断器状态 |
-| `clear` | 清空当前任务（保留长期记忆） |
-| `history` | 查看历史行程 |
-| `preferences` | 查看用户偏好 |
-| `exit` | 退出程序 |
+| 命令            | 说明                    |
+| ------------- | --------------------- |
+| `help`        | 显示帮助信息                |
+| `status`      | 查看当前状态和记忆             |
+| `health`      | 检查 LLM 服务是否可用并显示熔断器状态 |
+| `clear`       | 清空当前任务（保留长期记忆）        |
+| `history`     | 查看历史行程                |
+| `preferences` | 查看用户偏好                |
+| `exit`        | 退出程序                  |
 
 单独做健康检查（不进入交互）：`python cli.py health`，返回 `OK` / `FAIL: ...`，退出码 0/1。
 
@@ -433,17 +452,21 @@ python cli.py
 ## 测试
 
 ### 运行全部测试
+
 ```bash
 pytest
 ```
 
 ### 集成测试 (QA)
+
 完整跑通所有意图和子智能体的端到端测试：
+
 ```bash
 python tests/test_cli_qa.py
 ```
 
 ### 单元测试
+
 针对各个核心模块的测试：
 
 ```bash
@@ -465,7 +488,7 @@ pytest tests/test_json_parser.py          # JSON解析
 │   ├── intention_agent.py           # 意图识别（语义理解）
 │   ├── orchestration_agent.py       # 协调器（并行调度）
 │   └── lazy_agent_registry.py       # 智能体插件注册器（懒加载）
-├── .claude/skills/                  # Skill Plugins (子智能体)
+├── skills/                          # Skill Plugins (子智能体)
 │   ├── ask-question/                # 知识库问答 Skill (RAG)
 │   ├── event-collection/            # 事项收集 Skill
 │   ├── plan-trip/                   # 行程规划 Skill
@@ -474,6 +497,7 @@ pytest tests/test_json_parser.py          # JSON解析
 │   ├── memory-query/                # 记忆查询 Skill
 │   ├── expense-tracker/             # 费用记录 Skill
 │   ├── currency-converter/          # 汇率换算 Skill
+│   ├── hotel-search/                # 酒店搜索 Skill
 │   ├── translation/                 # 翻译 Skill
 │   └── visa-info/                   # 签证信息 Skill
 ├── context/                         # 记忆系统
@@ -528,19 +552,23 @@ pytest tests/test_json_parser.py          # JSON解析
 ## 技术栈总览
 
 ### 核心框架
+
 - 📦 **AgentScope 1.0.16** - 多智能体框架
 - 🤖 **小米MiMo (mimo-v2-pro)** - 大语言模型
 
 ### 数据存储
+
 - 💾 **JSON文件** - 长期记忆持久化（用户偏好、历史行程、聊天记录、费用）
 - 🔍 **Milvus Lite** - 向量数据库（本地.db文件，RAG知识库）
 
 ### 向量化与检索
+
 - 🧠 **BGE-small-zh-v1.5** - 中文Embedding模型（本地部署）
 - 📚 **Sentence-Transformers 5.2.3** - 向量化工具库
 - 🎯 **余弦相似度检索** - Top-K=3检索算法
 
 ### 联网与搜索
+
 - 🌐 **DuckDuckGo (DDGS 9.10.0)** - 免费网络搜索引擎
 - 🌤️ **wttr.in** - 免费天气查询API
 - 💱 **frankfurter.app** - 免费汇率查询API
@@ -548,6 +576,7 @@ pytest tests/test_json_parser.py          # JSON解析
 - 📝 **LLM自动摘要** - 搜索结果智能提取
 
 ### Web服务
+
 - 🚀 **FastAPI** - 异步Web框架（REST + SSE流式接口）
 - ⚛️ **React 19 + TypeScript** - 前端框架
 - 🎨 **Tailwind CSS 4** - 样式框架
@@ -556,19 +585,22 @@ pytest tests/test_json_parser.py          # JSON解析
 - 📡 **SSE (Server-Sent Events)** - 实时流式响应
 
 ### 架构设计
-- 🏗️ **Skill Plugins插件化架构** - 10个独立Skill插件
+
+- 🏗️ **Skill Plugins插件化架构** - 12个独立Skill插件
 - 🔄 **LazyAgentRegistry动态发现** - 自动扫描注册Agent插件
 - ⚡ **懒加载机制** - 未使用的Skill不加载（启动速度3秒）
 - 🔀 **Progressive Disclosure渐进式暴露** - 意图识别阶段仅加载元数据，执行阶段按需加载
 - 🎯 **优先级+并行混合调度** - asyncio.gather并发执行
 
 ### 稳定性保障
+
 - 🔁 **指数退避重试** - 自动重试失败请求（最大2次）
 - 🩺 **熔断器机制** - 连续失败5次后暂停调用，60秒后自动恢复
 - 💊 **健康检查** - 实时监控LLM服务可用性
 - 🛡️ **健壮JSON解析** - 6种降级策略处理LLM输出异常
 
 ### 用户界面
+
 - 🖥️ **Rich 13.9.4** - 精美的CLI终端界面
 - 🌐 **React Web界面** - 暗色/亮色主题、SSE实时流式展示
 
@@ -577,24 +609,29 @@ pytest tests/test_json_parser.py          # JSON解析
 ## ⚠️ 注意事项
 
 ### 模型配置
+
 - 必须配置MiMo大模型API密钥（通过 `.env` 文件或 `config.py`）
 - BGE Embedding模型首次运行时自动从 HuggingFace 下载（约 90MB），缓存到 `data/models/`
 
 ### 数据存储
+
 - 当前版本使用**JSON文件存储**长期记忆（`data/memory/{user_id}.json`）
 - 如需切换到数据库存储，需修改 `context/long_term_memory.py` 和 `context/short_term_memory.py`
 
 ### 知识库初始化
+
 - 首次运行前必须初始化RAG知识库
-- 知识库文档位于 `.claude/skills/ask-question/data/documents/`
-- Milvus数据库文件生成在 `.claude/skills/ask-question/data/milvus_travel_kb.db`
+- 知识库文档位于 `skills/ask-question/data/documents/`
+- Milvus数据库文件生成在 `skills/ask-question/data/milvus_travel_kb.db`
 
 ### Web模式
+
 - 后端默认运行在 `localhost:8000`，前端默认运行在 `localhost:5173`
 - Vite开发模式下自动代理 `/api` 请求到后端
 - 生产模式：先 `cd web && npm run build`，然后启动后端即可访问 `http://localhost:8000`
 
 ### 性能优化
+
 - 懒加载机制：系统启动时仅扫描Skill元数据，首次调用时才加载
 - 并行调度：同优先级Agent并发执行，提升响应速度
 - 写回缓存：长期记忆使用内存缓存，atexit时自动刷盘

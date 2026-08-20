@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 懒加载智能体注册器
-基于 .claude/skills 目录结构的插件化加载机制
+基于 skills 目录结构的插件化加载机制
 """
 import os
 import sys
@@ -20,7 +20,7 @@ class LazyAgentRegistry:
     """
     懒加载智能体注册器 - 插件化版本
 
-    自动扫描 .claude/skills 下的技能目录，动态加载 script/agent.py
+    自动扫描 skills 下的技能目录，动态加载 script/agent.py
     """
 
     CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "plugin_config.json"
@@ -34,7 +34,7 @@ class LazyAgentRegistry:
         self._user_id = user_id
 
         # 技能目录路径 (基于项目根目录)
-        self.skills_root = Path(__file__).resolve().parent.parent / ".claude" / "skills"
+        self.skills_root = Path(__file__).resolve().parent.parent / "skills"
 
         # 技能映射表: skill_name -> agent_script_path
         self._skill_map: Dict[str, Path] = {}
@@ -60,6 +60,8 @@ class LazyAgentRegistry:
             "visa_info": "visa-info",
             "translation": "translation",
             "train_ticket": "train-ticket",
+            "hotel_search": "hotel-search",
+            "restaurant_search": "hotel-search",
         }
 
     def _load_config_sync(self) -> Dict[str, Any]:
@@ -137,7 +139,7 @@ class LazyAgentRegistry:
         return plugins
 
     def _discover_skills(self):
-        """扫描 .claude/skills 目录寻找可用的 Agent"""
+        """扫描 skills 目录寻找可用的 Agent"""
         if not self.skills_root.exists():
             logger.warning(f"Skills directory {self.skills_root} not found")
             return

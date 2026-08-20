@@ -16,11 +16,13 @@ LLM_CONFIG = {
 }
 
 # 按场景 token 预算 — 减少 LLM 输出 token 数以提速
+# 注意：当前使用推理模型（deepseek-v4-flash），其 thinking 与最终答案共享 max_tokens 预算。
+# 若预算过小，thinking 会占满预算导致最终 content 为空（解析失败）。因此行程规划需留足余量。
 SCENARIO_TOKENS = {
     "intention": 4096,           # 意图识别（长 prompt + MiMo 思考 1000-1500 token，需足够余量）
     "event_collection": 4096,    # 事项提取（同上）
-    "itinerary": 2048,           # 简单行程（≤1 天）
-    "itinerary_complex": 4096,   # 复杂行程（多日 / 多城市）
+    "itinerary": 8192,           # 简单行程（≤1 天）— 推理模型需为 thinking 预留空间
+    "itinerary_complex": 16384,  # 复杂行程（多日 / 多城市）— thinking 较长，预算需充足
     "rag": 2048,                 # 知识库问答
     "info_query": 2048,          # 天气 / 搜索
     "chat": 1024,                # 闲聊 / 记忆总结

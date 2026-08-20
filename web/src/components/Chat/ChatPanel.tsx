@@ -3,7 +3,7 @@ import { useChatStore } from '../../store/chatStore'
 import { sendChatMessage, createSession, abortActiveRequest } from '../../api/client'
 import { uid } from '../../store/chatStore'
 import { MessageBubble } from './MessageBubble'
-import { ThinkingIndicator } from './ThinkingIndicator'
+import { ThinkingJourney } from './ThinkingJourney'
 import { InputBar } from './InputBar'
 import type { OrchestrationResult } from '../../api/types'
 
@@ -11,6 +11,9 @@ export function ChatPanel() {
   const messages = useChatStore((s) => s.messages)
   const isProcessing = useChatStore((s) => s.isProcessing)
   const thinkingStatus = useChatStore((s) => s.thinkingStatus)
+  const currentIntention = useChatStore((s) => s.currentIntention)
+  const currentAgents = useChatStore((s) => s.currentAgents)
+  const runningAgents = useChatStore((s) => s.runningAgents)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -19,6 +22,8 @@ export function ChatPanel() {
 
   const handleSend = async (text: string) => {
     const store = useChatStore.getState()
+
+    if (store.isProcessing) return
 
     if (!store.sessionId) {
       const session = await createSession(store.userId)
@@ -79,9 +84,23 @@ export function ChatPanel() {
               continue
             }
             const d = r.data as Record<string, unknown>
-            const answer = d.answer || d.content || d.result || d.message || d.summary || d.text || d.description
-            if (answer && typeof answer === 'string') {
-              textParts.push(answer)
+            const raw = d.answer || d.content || d.result || d.message || d.summary || d.text || d.description
+            if (raw && typeof raw === 'string') {
+              // 防御：如果 answer 仍是 JSON 字符串，尝试解析提取真实文本
+              const trimmed = raw.trim()
+              if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                try {
+                  const parsed = JSON.parse(trimmed)
+                  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    const innerText = parsed.answer || parsed.response || parsed.content || parsed.result || parsed.message
+                    if (innerText && typeof innerText === 'string') {
+                      textParts.push(innerText)
+                      continue
+                    }
+                  }
+                } catch { /* not valid JSON, use as-is */ }
+              }
+              textParts.push(raw)
             } else if (d.data && typeof d.data === 'object') {
               const inner = d.data as Record<string, unknown>
               const innerAnswer = inner.answer || inner.content || inner.result
@@ -101,6 +120,10 @@ export function ChatPanel() {
           if (textParts.length > 0) {
             store.updateLastAssistant({ content: textParts.join('\n\n') })
           }
+        },
+        onClarification: (data) => {
+          store.updateLastAssistant({ content: data.question })
+          store.setThinkingStatus('')
         },
         onError: (data) => {
           store.updateLastAssistant({ content: `❌ ${data.message}` })
@@ -203,10 +226,29 @@ export function ChatPanel() {
             msg.role === 'assistant' &&
             i === messages.length - 1 &&
             isProcessing
-          return <MessageBubble key={msg.id} msg={msg} isRunning={isLastAssistant} />
+          // 找到此助手消息对应的用户消息
+          let userMessage = ''
+          if (msg.role === 'assistant') {
+            for (let j = i - 1; j >= 0; j--) {
+              if (messages[j].role === 'user') {
+                userMessage = messages[j].content
+                break
+              }
+            }
+          }
+          return <MessageBubble key={msg.id} msg={msg} isRunning={isLastAssistant} onSend={handleSend} userMessage={userMessage} />
         })}
 
-        {isProcessing && <ThinkingIndicator status={thinkingStatus} />}
+        {isProcessing && (
+          <div className="max-w-[80%] pl-5">
+            <ThinkingJourney
+              thinkingStatus={thinkingStatus}
+              intention={currentIntention}
+              agentResults={currentAgents}
+              runningAgents={runningAgents}
+            />
+          </div>
+        )}
 
         <div ref={bottomRef} />
       </div>

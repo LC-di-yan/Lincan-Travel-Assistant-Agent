@@ -51,6 +51,15 @@ async def lifespan(app: FastAPI):
     if redis_pool:
         logger.info("Redis cache initialized")
 
+    # 启动：预加载 RAG Embedding 模型（避免首次请求时加载导致进程崩溃）
+    try:
+        from sentence_transformers import SentenceTransformer
+        _model = SentenceTransformer("BAAI/bge-small-zh-v1.5", local_files_only=True)
+        _dim = _model.get_sentence_embedding_dimension()
+        logger.info(f"RAG embedding model pre-loaded (dim={_dim})")
+    except Exception as _e:
+        logger.warning(f"RAG embedding model pre-load failed: {_e}")
+
     yield
 
     # 关闭：释放数据库连接池

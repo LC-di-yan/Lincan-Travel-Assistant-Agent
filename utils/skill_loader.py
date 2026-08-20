@@ -3,9 +3,9 @@ import yaml
 from typing import Dict, List, Optional
 
 class SkillLoader:
-    """加载 .claude/skills 下的技能描述"""
+    """加载 skills 下的技能描述"""
     
-    def __init__(self, skills_dir: str = ".claude/skills"):
+    def __init__(self, skills_dir: str = "skills"):
         # 获取当前文件的绝对路径，然后找到项目根目录
         current_file_path = os.path.abspath(__file__)
         project_root = os.path.dirname(os.path.dirname(current_file_path))
