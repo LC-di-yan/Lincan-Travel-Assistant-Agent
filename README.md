@@ -1,6 +1,6 @@
 # Aligo 智能旅行助手
 
-基于**小米MiMo大模型**和**AgentScope框架**的多智能体旅行规划系统，采用Plan-and-Execute架构，实现智能意图识别、两层记忆系统、RAG知识库、联网搜索和优先级并行调度。提供CLI终端和Web前端两种交互方式。
+基于**大语言模型**（GLM-5.2 / DeepSeek，OpenAI 兼容）和**AgentScope框架**的多智能体旅行规划系统，采用Plan-and-Execute架构，实现智能意图识别、两层记忆系统、RAG知识库、联网搜索和优先级并行调度。提供CLI终端和Web前端两种交互方式。
 
 ## ✨ 核心亮点
 
@@ -286,28 +286,56 @@ pip install rich==13.9.4                    # CLI界面
 pip install ddgs==9.10.0                    # 网络搜索
 ```
 
-### 2. 配置模型
+### 2. 配置模型与密钥
 
-复制 `.env.example` 为 `.env`，填入你的API密钥：
+复制 `.env.example` 为 `.env`，填入 API 密钥：
 
 ```bash
 cp .env.example .env
 ```
 
-编辑 `.env` 文件：
+**必填密钥**（与 `ALIGO_BASE_URL` 对应的模型服务商）：
 
 ```env
 ALIGO_API_KEY=your-api-key-here
-ALIGO_MODEL_NAME=mimo-v2-pro
-ALIGO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 ```
 
-**配置说明**：
+**完整环境变量说明**：
 
-- `ALIGO_API_KEY`: MiMo大模型API密钥（必填）
-- `ALIGO_MODEL_NAME`: 模型名称（默认 mimo-v2-pro）
-- `ALIGO_BASE_URL`: API地址
-- 也可直接编辑 `config.py` 中的 `LLM_CONFIG`
+| 变量 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `ALIGO_API_KEY` | ✅ | - | LLM API 密钥（OpenAI 兼容接口） |
+| `ALIGO_MODEL_NAME` | | `glm-5.2-fast-preview` | 模型名称 |
+| `ALIGO_BASE_URL` | | 阿里云 MAAS（见 `.env.example`） | OpenAI 兼容 API 地址 |
+| `AMAP_API_KEY` | | - | 高德天气 Key（不填则天气降级为网络搜索） |
+| `ALIGO_EMBEDDING_MODEL` | | `BAAI/bge-small-zh-v1.5` | RAG 向量模型 |
+| `ALIGO_DATABASE_URL` | | - | PostgreSQL 连接串（不填则 JSON 文件持久化） |
+| `ALIGO_REDIS_URL` | | - | Redis 连接串（不填则进程内缓存） |
+| `ALIGO_CACHE_TTL` | | `3600` | 缓存 TTL（秒） |
+| `CORS_ORIGINS` | | - | 允许的跨域来源（逗号分隔，生产环境配置） |
+| `HF_ENDPOINT` / `HF_HUB_OFFLINE` | | - | HuggingFace 镜像，国内加速模型下载 |
+
+**切换模型**（GLM-5.2 ↔ DeepSeek，均 OpenAI 兼容）：
+
+```env
+# GLM-5.2 Fast Preview（阿里云 MAAS）
+ALIGO_MODEL_NAME=glm-5.2-fast-preview
+ALIGO_BASE_URL=https://ws-qvg9u4gn3ewyjs3t.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+
+# 或 DeepSeek
+ALIGO_MODEL_NAME=deepseek-chat
+ALIGO_BASE_URL=https://api.deepseek.com/v1
+```
+
+**前端智能追问（可选）**：在 `web/.env` 中配置（参考 `web/.env.example`，不配置则该功能自动降级）：
+
+```env
+VITE_LLM_API_URL=https://api.deepseek.com/v1/chat/completions
+VITE_LLM_API_KEY=your-api-key-here
+VITE_LLM_MODEL=deepseek-chat
+```
+
+也可直接编辑 `config.py` 中的 `LLM_CONFIG`。
 
 ### 3. 初始化知识库
 
@@ -554,7 +582,7 @@ pytest tests/test_json_parser.py          # JSON解析
 ### 核心框架
 
 - 📦 **AgentScope 1.0.16** - 多智能体框架
-- 🤖 **小米MiMo (mimo-v2-pro)** - 大语言模型
+- 🤖 **GLM-5.2 / DeepSeek（OpenAI 兼容）** - 大语言模型
 
 ### 数据存储
 
@@ -610,7 +638,7 @@ pytest tests/test_json_parser.py          # JSON解析
 
 ### 模型配置
 
-- 必须配置MiMo大模型API密钥（通过 `.env` 文件或 `config.py`）
+- 必须配置 LLM API 密钥（通过 `.env` 文件或 `config.py`）
 - BGE Embedding模型首次运行时自动从 HuggingFace 下载（约 90MB），缓存到 `data/models/`
 
 ### 数据存储
