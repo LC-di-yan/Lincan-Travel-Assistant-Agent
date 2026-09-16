@@ -13,6 +13,7 @@ if project_root not in sys.path:
 
 from agents.intention_agent import IntentionAgent
 from agentscope.message import Msg
+from config import SCENARIO_TOKENS
 
 
 class FakeModel:
@@ -21,8 +22,12 @@ class FakeModel:
     def __init__(self, responses):
         self.responses = list(responses)
         self.call_count = 0
+        self.last_kwargs = {}
 
-    async def __call__(self, messages):
+    async def __call__(self, messages, **kwargs):
+        # 生产侧会传入 max_tokens 等生成参数，测试桩必须一并接收，
+        # 否则 TypeError 会被 reply() 的兜底分支吞掉，断言全部失真。
+        self.last_kwargs = kwargs
         if self.call_count >= len(self.responses):
             raise RuntimeError("No more mocked responses")
         response = self.responses[self.call_count]
@@ -65,6 +70,7 @@ class TestIntentionAgentRetry:
         data = json.loads(result.content)
         assert data["intents"][0]["type"] == "event_collection"
         assert agent.model.call_count == 1
+        assert agent.model.last_kwargs["max_tokens"] == SCENARIO_TOKENS["intention"]
 
     def test_json_parse_failure_then_success(self, agent_factory):
         agent = agent_factory([
