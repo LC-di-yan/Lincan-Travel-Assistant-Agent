@@ -23,6 +23,8 @@ import json
 import time
 import importlib.util
 
+import pytest
+
 # 添加项目根目录到 Python 路径
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
@@ -40,6 +42,9 @@ _spec = importlib.util.spec_from_file_location(
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 InformationQueryAgent = _mod.InformationQueryAgent
+
+
+pytestmark = pytest.mark.integration  # 真实调用 LLM/网络，无凭证时由 conftest 跳过
 
 
 async def test_information_query_agent():

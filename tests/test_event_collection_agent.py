@@ -7,6 +7,8 @@ import asyncio
 import json
 import importlib.util
 
+import pytest
+
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
@@ -23,6 +25,9 @@ _spec = importlib.util.spec_from_file_location(
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 EventCollectionAgent = _mod.EventCollectionAgent
+
+
+pytestmark = pytest.mark.integration  # 真实调用 LLM，无凭证时由 conftest 跳过
 
 
 async def test_event_collection_agent():

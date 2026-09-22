@@ -13,6 +13,9 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 import asyncio
+
+import pytest
+
 from context.memory_manager import MemoryManager
 from agentscope import init as init_agentscope
 from agentscope.model import OpenAIChatModel
@@ -33,6 +36,9 @@ def print_section(title):
     print("\n" + "=" * 80)
     print(f"  {title}")
     print("=" * 80 + "\n")
+
+
+pytestmark = pytest.mark.integration  # 真实调用 LLM，无凭证时由 conftest 跳过
 
 
 async def test_memory_system():

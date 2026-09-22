@@ -8,6 +8,8 @@ import os
 import asyncio
 import json
 
+import pytest
+
 # 添加项目根目录到路径
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
@@ -20,6 +22,9 @@ from context.memory_manager import MemoryManager
 from agents.intention_agent import IntentionAgent
 from agents.orchestration_agent import OrchestrationAgent
 from agents.lazy_agent_registry import LazyAgentRegistry
+
+
+pytestmark = pytest.mark.integration  # 真实调用 LLM，无凭证时由 conftest 跳过
 
 
 async def test_orchestration():
