@@ -563,8 +563,11 @@ def _extract_train_entities(query: str):
     返回 (from_city, to_city, date_str) 或 None（提取不到两个城市）。
     """
     q = query
-    # 日期：支持 7月31日、2026-07-31、明天/后天/今天
-    date_match = re.search(r"(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}月\d{1,2}[日号]|明天|后天|今天|大后天)", q)
+    # 日期：支持 7月31日、2026-07-31、明天/明早/今晚/后天 等口语
+    date_match = re.search(
+        r"(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}月\d{1,2}[日号]|大后天|今天|今日|今早|今晚|明天|明日|明早|明晚|后天|后早)",
+        q,
+    )
     date_str = date_match.group(1) if date_match else ""
 
     # 按出现顺序收集城市名，去重，取前两个
@@ -898,9 +901,12 @@ def _fast_match(query: str, dialogue_history: list = None) -> Optional[dict]:
                             from_city = g
                         elif not to_city:
                             to_city = g
-            # 从整个查询中提取日期
+            # 从整个查询中提取日期（含「明早/今晚/后天上午」这类口语）
             date_str = ""
-            date_match = re.search(r"(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}月\d{1,2}[日号]|明天|后天|今天)", q)
+            date_match = re.search(
+                r"(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}月\d{1,2}[日号]|大后天|今天|今日|今早|今晚|明天|明日|明早|明晚|后天|后早)",
+                q,
+            )
             if date_match:
                 date_str = date_match.group(1)
             return {

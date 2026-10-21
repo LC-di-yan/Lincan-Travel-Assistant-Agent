@@ -32,6 +32,65 @@ STATIONS_CACHE_TTL = 86400  # 24小时
 _query_cache = {}
 QUERY_CACHE_TTL = 600  # 10分钟
 
+# ── 相对日期词 ────────────────────────────────────────────────
+# 用户常说「明早」「今晚」「后天上午」，以前只认「明天/后天/今天」，
+# 「明早」会被兜底成"今天"，于是夜里查询拿到的是当天已发车的车次、显示暂无余票。
+_DAY_WORD_OFFSETS = {
+    "今天": 0, "今日": 0, "今儿": 0, "今早": 0, "今晨": 0, "今晚": 0,
+    "明天": 1, "明日": 1, "明儿": 1, "明早": 1, "明晨": 1, "明晚": 1,
+    "后天": 2, "后日": 2, "后早": 2, "后晚": 2,
+    "大后天": 3,
+}
+# 长词优先，避免「大后天」被「后天」先匹配
+_DAY_WORD_PATTERN = r"(大后天|今天|今日|今儿|今早|今晨|今晚|明天|明日|明儿|明早|明晨|明晚|后天|后日|后早|后晚)"
+
+_PERIODS = (
+    ("morning", ("凌晨", "清晨", "早上", "早晨", "明早", "今早", "上午", "早班")),
+    ("afternoon", ("下午", "午后")),
+    ("evening", ("晚上", "今晚", "明晚", "傍晚")),
+)
+
+
+def _convert_chinese_month_day(text: str) -> str:
+    """7月31日 → 具体年份的 YYYY-MM-DD（已过则算明年）。"""
+    m = re.search(r"(\d{1,2})月(\d{1,2})[日号]", text)
+    if not m:
+        return ""
+    month, day = int(m.group(1)), int(m.group(2))
+    now = datetime.now()
+    year = now.year + (1 if (month, day) < (now.month, now.day) else 0)
+    return f"{year}-{month:02d}-{day:02d}"
+
+
+def _day_word_to_date(word: str) -> str:
+    """「明早」→ 2026-10-22（按系统本地日期推算）。"""
+    offset = _DAY_WORD_OFFSETS.get(word)
+    if offset is None:
+        return ""
+    return (datetime.now() + timedelta(days=offset)).strftime("%Y-%m-%d")
+
+
+def _normalize_date_str(value: str) -> str:
+    """把各种日期写法统一成 YYYY-MM-DD；已经是标准格式则原样返回。"""
+    v = (value or "").strip()
+    if not v:
+        return ""
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+        return v
+    if v in _DAY_WORD_OFFSETS:
+        return _day_word_to_date(v)
+    if re.match(r"^\d{1,2}月\d{1,2}[日号]$", v):
+        return _convert_chinese_month_day(v)
+    return v
+
+
+def _detect_period(text: str) -> str:
+    """从「明早」「晚上」这类词里取出时段，用于筛早班/晚班。"""
+    for period, words in _PERIODS:
+        if any(w in (text or "") for w in words):
+            return period
+    return ""
+
 
 def _load_stations() -> Dict[str, Dict]:
     """加载站点编码表"""
@@ -236,6 +295,9 @@ class TrainTicketAgent(AgentBase):
                 "results": {"message": f"未找到目的地: {to_city}"}
             }
 
+        # 统一日期写法（明早 / 今晚 / 7月31日 → YYYY-MM-DD）
+        date_str = _normalize_date_str(date_str) or date_str
+
         # 处理日期
         if not date_str:
             date_str = datetime.now().strftime("%Y-%m-%d")
@@ -266,8 +328,11 @@ class TrainTicketAgent(AgentBase):
             # 兜底：尝试用通用方法解析
             date_str = self._convert_chinese_date(date_str) or datetime.now().strftime("%Y-%m-%d")
 
+        # 时段偏好（早班/晚班）：fast 参数优先，其次从原话里判断
+        period = (fast_params or {}).get("period") or _detect_period(query)
+
         # 检查缓存
-        cache_key = f"tickets:{from_code}:{to_code}:{date_str}"
+        cache_key = f"tickets:{from_code}:{to_code}:{date_str}:{period}"  # 时段也要进 key，否则「明早」的筛选结果会被「明天」复用
         cached = _get_cached(cache_key)
         if cached:
             print(f"[TRAIN-TICKET] returning cached result", flush=True)
@@ -385,10 +450,26 @@ class TrainTicketAgent(AgentBase):
                     "no_seat": no_seat
                 })
 
+            # 「明早」这类诉求：优先只留上午发车的车次；没有则保留全部并说明
+            period_filtered = False
+            total_before = len(trains)
+            if trains and period == "morning":
+                morning = [t for t in trains if (t.get("depart_time") or "99:99") < "12:00"]
+                if morning:
+                    trains = morning
+                    # 只有真的筛掉了车次才标注「上午」，否则所有车次本来就在上午
+                    period_filtered = len(morning) < total_before
+            elif trains and period == "evening":
+                evening = [t for t in trains if (t.get("depart_time") or "00:00") >= "17:00"]
+                if evening:
+                    trains = evening
+                    period_filtered = len(evening) < total_before
+
             # 构建摘要
             summary_parts = [f"{from_city}→{to_city} ({date_str})"]
             if trains:
-                summary_parts.append(f"共{len(trains)}趟列车")
+                label = {"morning": "上午", "evening": "晚间"}.get(period) if period_filtered else ""
+                summary_parts.append(f"共{len(trains)}趟{label + '列车' if label else '列车'}")
                 # 列出前3趟
                 for t in trains[:3]:
                     summary_parts.append(f"{t['train_no']} {t['depart_time']}-{t['arrive_time']} 二等座{t['second_class']}")
@@ -531,8 +612,10 @@ class TrainTicketAgent(AgentBase):
         date_str = ""
         date_patterns = [
             (r"(\d{4}-\d{1,2}-\d{1,2})", lambda m: m.group(1)),
-            (r"(\d{1,2}月\d{1,2}[日号])", lambda m: self._convert_chinese_date(m.group(1))),
-            (r"(明天|明日|后天|大后天)", lambda m: m.group(1)),
+            (r"(\d{1,2}月\d{1,2}[日号])", lambda m: _convert_chinese_month_day(m.group(1))),
+            # 明早 / 今晚 / 后天上午 等：直接换算成具体日期（以前只认「明天/后天」，
+            # 「明早」会落到兜底的"今天"，夜里查就成了当天已无票）
+            (_DAY_WORD_PATTERN, lambda m: _day_word_to_date(m.group(1))),
             (r"(\d{1,2})[日号]", lambda m: m.group(1)),
         ]
         for pattern, converter in date_patterns:
@@ -544,19 +627,24 @@ class TrainTicketAgent(AgentBase):
         # 提取出发地和目的地
         from_city = ""
         to_city = ""
+        _TAIL = r"(?=[的\s，。]|高铁|动车|火车|列车|车次|票|$)"
 
-        # 模式1：XX到XX
-        match = re.search(r"([一-龥]{2,6})\s*[到至去往]\s*([一-龥]{2,6})", q)
+        # 模式1：从X去/到Y —— 最可靠，前面带多少口语都不影响
+        match = re.search(rf"从\s*([一-龥]{{2,6}}?)\s*(?:出发)?\s*[到至去往]\s*([一-龥]{{2,6}}?){_TAIL}", q)
         if match:
-            from_city = match.group(1)
-            to_city = match.group(2)
+            from_city, to_city = match.group(1), match.group(2)
 
-        # 模式2：从XX出发到XX
+        # 模式2：句首/标点后的 X到Y（避免把「看看明早从北京」整段当地名）
         if not from_city:
-            match = re.search(r"从\s*([一-龥]{2,6}).*?[到至去往]\s*([一-龥]{2,6})", q)
+            match = re.search(rf"(?:^|[，。、\s])([一-龥]{{2,6}}?)\s*[到至去往]\s*([一-龥]{{2,6}}?){_TAIL}", q)
             if match:
-                from_city = match.group(1)
-                to_city = match.group(2)
+                from_city, to_city = match.group(1), match.group(2)
+
+        # 模式3：兜底（老逻辑）
+        if not from_city:
+            match = re.search(r"([一-龥]{2,6})\s*[到至去往]\s*([一-龥]{2,6})", q)
+            if match:
+                from_city, to_city = match.group(1), match.group(2)
 
         return from_city, to_city, date_str
 
