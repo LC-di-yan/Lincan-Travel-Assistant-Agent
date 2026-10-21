@@ -3,8 +3,8 @@
 用于维护当前会话中的短期上下文，如焦点城市、当前行程目的地等。
 该状态不持久化，仅用于提升多轮对话中的上下文消解能力。
 """
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -14,6 +14,9 @@ class SessionFocusState:
     focus_city: Optional[str] = None
     current_trip_destination: Optional[str] = None
     last_search_city: Optional[str] = None
+    # 最近一次「列表型」结果（车票/酒店/餐厅/景点），供「列出来 / 全部」这类追问展开
+    # 结构：{"agent": "train_ticket", "data": {...}, "ts": 1700000000.0}
+    last_list_result: Optional[Dict[str, Any]] = field(default=None)
 
     def update_from_intention(self, intention_data: dict) -> None:
         """根据意图识别结果更新焦点城市。"""

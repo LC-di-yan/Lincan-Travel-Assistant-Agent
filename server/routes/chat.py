@@ -112,6 +112,27 @@ async def chat(request: ChatRequest):
             rc = RESILIENCE_CONFIG
             max_retries = rc.get("max_retries", 2)
 
+            # ── 「列出来 / 全部 / 展开」：展开上一轮的列表结果，不调模型、不联网 ──
+            from server.utils.list_expander import build_expand_payload, is_expand_request
+
+            if session.focus_state.last_list_result and is_expand_request(request.message):
+                expand_payload = build_expand_payload(session.focus_state.last_list_result)
+                if expand_payload:
+                    logger.info("[CHAT] expand last list result: %s", expand_payload.get("agent_name"))
+                    yield _sse("thinking", {"status": "analyzing_intent"})
+                    yield _sse("agent_result", expand_payload)
+                    _expand_text = (expand_payload.get("data") or {}).get("answer", "")
+                    yield _sse("complete", {
+                        "status": "completed",
+                        "intention": {"intents": [], "key_entities": {}},
+                        "agents_executed": 1,
+                        "results": [expand_payload],
+                        "expanded": True,
+                    })
+                    await session.memory_manager.add_message_async("assistant", _expand_text[:500])
+                    session.messages_since_summary += 1
+                    return
+
             yield _sse("thinking", {"status": "analyzing_intent"})
 
             # 诊断日志
@@ -439,6 +460,11 @@ async def chat(request: ChatRequest):
                 getattr(orchestration_result, "content", ""),
                 fallback={"results": [], "error": "parse_failed"},
             )
+
+            # 记住本轮的列表型结果（车票/酒店/餐厅/景点），供后续「列出来」展开
+            from server.utils.list_expander import remember_list_result
+
+            remember_list_result(session, result_data)
 
             yield _sse("complete", result_data)
 

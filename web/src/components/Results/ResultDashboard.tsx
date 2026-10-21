@@ -10,6 +10,7 @@ import { TranslationCard } from './TranslationCard'
 import { HotelCard } from './HotelCard'
 import { RestaurantCard } from './RestaurantCard'
 import { ScenicCard } from './ScenicCard'
+import { TrainCard } from './TrainCard'
 import { getAgentLabel } from '../Icons/AgentIcon'
 import { AlertCircle } from 'lucide-react'
 
@@ -60,6 +61,8 @@ function ResultCard({ result }: { result: AgentResult }) {
       return <RestaurantCard data={inner} />
     case 'scenic_search':
       return <ScenicCard data={inner} />
+    case 'train_ticket':
+      return <TrainCard data={inner} />
     default:
       return <KnowledgeCard data={inner} agentName={agent} />
   }
