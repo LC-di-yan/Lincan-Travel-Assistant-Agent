@@ -22,6 +22,7 @@ from typing import Optional, Union, List, Dict
 import json
 import logging
 import os
+import re
 import hashlib
 from pathlib import Path
 
@@ -62,6 +63,58 @@ def _get_embedding_model(model_path: str) -> 'SentenceTransformer':
 # RAG 结果缓存（避免重复查询和 LLM 调用）
 _RAG_CACHE: Dict[str, Dict] = {}
 _RAG_CACHE_MAX_SIZE = 100
+
+# 知识库原始文档目录（用于「有哪些知识库」这类清单类提问）
+_DOC_DIR = Path(__file__).resolve().parent.parent / "data" / "documents"
+_LIST_DOC_PATTERN = re.compile(
+    r"(?:(?:有哪些|有什么|多少|列出|清单|列表|目录).{0,8}(?:知识库|文档|资料|文件))"
+    r"|(?:(?:知识库|文档库|资料库).{0,8}(?:有哪些|包含|覆盖|清单|列表|目录))"
+    r"|^(?:知识库|文档列表)$"
+)
+# 政策/标准类关键词：这类问题即使带「有哪些」，也要先检索条款而不是列文档清单
+_POLICY_HINT = re.compile(r"标准|政策|规定|额度|上限|报销|补贴|协议|优惠|折扣|审批|怎么报|能报")
+
+
+def _first_line(text: str) -> str:
+    for line in text.splitlines():
+        if line.strip():
+            return line.strip()
+    return ""
+
+
+def list_documents() -> List[Dict]:
+    """列出知识库里的原始文档（文件名 / 标题 / 字数）。"""
+    docs = []
+    if not _DOC_DIR.is_dir():
+        return docs
+    for p in sorted(_DOC_DIR.glob("*.txt")):
+        try:
+            text = p.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        docs.append({
+            "file": p.name,
+            "title": _first_line(text) or p.stem,
+            "chars": len(text),
+        })
+    return docs
+
+
+def _collect_sources(docs: List[Dict]) -> List[Dict]:
+    """从检索结果里按文档去重，得到「引用来源」。"""
+    seen, out = set(), []
+    for d in docs:
+        md = d.get("metadata") or {}
+        fname = md.get("parent_doc") or ""
+        if not fname or fname in seen:
+            continue
+        seen.add(fname)
+        out.append({
+            "file": fname,
+            "title": (md.get("title") or fname).split(" (Part")[0],
+        })
+    return out
+
 
 
 class RAGKnowledgeAgent(AgentBase):
@@ -345,8 +398,33 @@ class RAGKnowledgeAgent(AgentBase):
             cached = _RAG_CACHE[cache_key]
             return Msg(name=self.name, content=json.dumps(cached, ensure_ascii=False), role="assistant")
 
+        # 「目前有哪些知识库 / 有哪些文档」→ 直接列清单，不用去检索
+        if _LIST_DOC_PATTERN.search(user_query) and not _POLICY_HINT.search(user_query):
+            docs = list_documents()
+            lines = [f"知识库共 {len(docs)} 份文档：", ""]
+            for i, d in enumerate(docs, 1):
+                lines.append(f"{i}. {d['title']}（{d['file']}，约 {d['chars'] // 1000}k 字）")
+            answer = "\n".join(lines)
+            result = {
+                "status": "document_list",
+                "query": user_query,
+                "answer": answer,
+                "documents": docs,
+                "proactive_question": "需要我帮你查具体条款吗？",
+            }
+            return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+
         # 检索相关知识
         retrieved_docs = self.search_knowledge(user_query)
+
+        # 二次检索：问「优惠/折扣/标准/额度」这类问题时，top_k=3 容易漏掉真正的条款，
+        # 补一次关键词式检索再合并（去重，最多 6 条）
+        if retrieved_docs and re.search(r"优惠|折扣|比例|多少|标准|额度|上限|补贴", user_query):
+            seen_ids = {d.get("id") for d in retrieved_docs}
+            for d in self.search_knowledge(f"{user_query} 具体标准 比例 折扣 金额", top_k=4):
+                if d.get("id") not in seen_ids and len(retrieved_docs) < 6:
+                    retrieved_docs.append(d)
+                    seen_ids.add(d.get("id"))
 
         if not retrieved_docs:
             result = {
@@ -381,7 +459,8 @@ class RAGKnowledgeAgent(AgentBase):
 
 【约束】
 1. 只基于知识库信息回答，没有就直接说"知识库中没有找到相关信息"
-2. 不要编造答案
+2. 不要编造答案；数字、金额、比例必须与知识条款完全一致
+3. 涉及城市档位时，先说明属于哪一档（如"一线城市：北京、上海、广州、深圳"），再给标准
 
 输出JSON时使用以下格式，包含"proactive_question"字段：
 - 答案内容用"answer"字段，如 "answer": "上海美食推荐：...\\n- ..."
@@ -424,11 +503,19 @@ class RAGKnowledgeAgent(AgentBase):
             # 如果没有LLM，直接返回检索到的知识
             answer = "以下是知识库中的相关信息：\n\n" + knowledge_context
 
+        # 引用来源：去重后的文档，并在答案末尾标注，方便核对（避免看起来像编的）
+        sources = _collect_sources(retrieved_docs)
+        if sources and answer:
+            cite = "、".join(f"《{s['title']}》" for s in sources[:3])
+            if cite not in answer:
+                answer = answer.rstrip() + f"\n\n依据：{cite}"
+
         result = {
             "status": "success",
             "query": user_query,
             "answer": answer,
             "proactive_question": proactive_question,
+            "sources": sources,
             "retrieved_documents": [
                 {
                     "content": doc['content'][:200] + "..." if len(doc['content']) > 200 else doc['content'],

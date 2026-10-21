@@ -70,7 +70,11 @@ _HOTEL_KEYWORDS = r"酒店|民宿|宾馆|旅馆|客栈|青旅|青年旅舍|招�
 # 政策/标准类问题信号：命中时不能当酒店/景点搜索
 # 反例：「国际差旅住宿标准」曾命中 hotel 正则，又从历史里抽到"西安"当目的地，
 # 结果把政策咨询做成了西安酒店搜索。
-_POLICY_QUERY = re.compile(r"标准|政策|规定|制度|报销|额度|上限|补贴|办法|条款|规范|流程")
+# 2026-10-22 补充：协议/优惠/折扣/差标/审批 也属于政策咨询
+# 反例：「请帮我查协议酒店优惠」被当成酒店搜索，返回 600+ 家酒店。
+_POLICY_QUERY = re.compile(
+    r"标准|政策|规定|制度|报销|额度|上限|补贴|补助|办法|条款|规范|流程|协议|优惠|折扣|差标|审批"
+)
 
 _HOTEL_PATTERNS = [
     # "北京有哪些酒店" / "上海有没有住的地方"
@@ -622,9 +626,26 @@ def _fast_match(query: str, dialogue_history: list = None) -> Optional[dict]:
     if _has_trip_signal(q):
         return None
 
-    # ── 政策/标准类问题短路：问「住宿标准/报销政策」不是找酒店，交 LLM 判别 ──
+    # ── 政策/标准类问题：直接走知识库，不是找酒店 ──
+    # 「上海住宿标准是多少」「协议酒店有什么优惠」这类问题问的是制度，不是具体商家。
     if _POLICY_QUERY.search(q) and re.search(_HOTEL_KEYWORDS, q):
-        return None
+        return {
+            "reasoning": "规则匹配: 差旅政策/标准咨询",
+            "intents": [{
+                "type": "rag_knowledge",
+                "confidence": 0.9,
+                "description": "差旅政策/标准查询",
+                "reason": "命中政策类关键词，走知识库而不是地点搜索",
+            }],
+            "key_entities": {},
+            "rewritten_query": q,
+            "agent_schedule": [{
+                "agent_name": "rag_knowledge",
+                "priority": 1,
+                "reason": "查差旅政策/标准",
+                "expected_output": "政策条款与标准",
+            }],
+        }
 
     # 记账
     _CATEGORY_MAP = {
@@ -1081,6 +1102,7 @@ class IntentionAgent(AgentBase):
 - "北京怎么样？" → information_query（客观信息）
 - "我想去北京" → itinerary_planning（规划行程）
 - "北京有哪些酒店" / "上海住宿" → hotel_search（酒店/民宿搜索）
+- "上海住宿标准是多少" / "协议酒店有什么优惠" / "报销额度" → rag_knowledge（问的是制度/标准/优惠规则，不是找具体商家；这类问题不要调度 hotel_search）
 - "北京有什么好吃的" / "成都火锅推荐" / "附近美食" → restaurant_search（餐厅/美食搜索）
 - "北京有哪些景点" / "上海好玩的地方" / "杭州旅游景点" → scenic_search（景点搜索）
 - 当查询同时包含"住宿"+"天气"时，同时调度 information_query 和 hotel_search（同P1并行）

@@ -1,7 +1,7 @@
 {
   "user_id": "test_user_001",
   "created_at": "2026-07-28T11:41:00.217054",
-  "updated_at": "2026-10-21T23:33:20.739369",
+  "updated_at": "2026-10-22T01:15:42.602264",
   "preferences": [
     {
       "type": "budget",
@@ -230,6 +230,36 @@
       "content": "是的，我想去故宫和长城",
       "timestamp": "2026-10-21T23:33:18.212794",
       "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "你好，我想去北京旅游",
+      "timestamp": "2026-10-22T01:15:40.659832",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "好的，请问您计划什么时候去北京？",
+      "timestamp": "2026-10-22T01:15:40.660831",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "下周三出发",
+      "timestamp": "2026-10-22T01:15:40.661836",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "明白了，下周三出发去北京。需要帮您规划行程吗？",
+      "timestamp": "2026-10-22T01:15:40.663830",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "是的，我想去故宫和长城",
+      "timestamp": "2026-10-22T01:15:40.664831",
+      "session_id": "test_session_001"
     }
   ],
   "trip_history": [
@@ -421,17 +451,44 @@
       "start_date": "2026-03-05",
       "end_date": "2026-03-09",
       "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_22",
+      "timestamp": "2026-10-22T01:15:40.671832",
+      "origin": "上海",
+      "destination": "北京",
+      "start_date": "2026-01-15",
+      "end_date": "2026-01-18",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_23",
+      "timestamp": "2026-10-22T01:15:40.673829",
+      "origin": "上海",
+      "destination": "杭州",
+      "start_date": "2026-02-10",
+      "end_date": "2026-02-12",
+      "purpose": "出差"
+    },
+    {
+      "trip_id": "trip_24",
+      "timestamp": "2026-10-22T01:15:40.675832",
+      "origin": "上海",
+      "destination": "成都",
+      "start_date": "2026-03-05",
+      "end_date": "2026-03-09",
+      "purpose": "旅游"
     }
   ],
   "expenses": [],
   "statistics": {
-    "total_trips": 21,
-    "total_messages": 35,
+    "total_trips": 24,
+    "total_messages": 40,
     "total_queries": 0,
     "frequent_destinations": {
-      "北京": 7,
-      "杭州": 7,
-      "成都": 7
+      "北京": 8,
+      "杭州": 8,
+      "成都": 8
     }
   }
 }
