@@ -5,6 +5,9 @@
 基于 **AgentScope 多智能体框架 + FastAPI + React 19** 的差旅规划系统：意图识别 → 优先级并行调度 → 10 个技能智能体 → 两层记忆 → SSE 流式回显。
 模型层做了**多通道路由与故障转移**，单个模型服务挂掉不会让整站瘫痪。
 
+🔗 **在线展示页**：<https://lc-di-yan.github.io/Lincan-Travel-Assistant-Agent/>（含完整截图、能力矩阵与架构说明）
+
+
 <p>
 <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white">
 <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white">
