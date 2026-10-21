@@ -1,0 +1,66 @@
+[
+  {
+    "id": "FR-001",
+    "category": "fast_route_hijack",
+    "query": "明天从北京去上海出差3天，第一天下午要去上海大学开会，第二天早上想去上海大学附近的酒店玩玩",
+    "expected": {
+      "fast_route_miss": true,
+      "note": "差旅信号短路，走 LLM 由其生成多意图 agent_schedule 与 fast_event"
+    },
+    "note": "核心意图：出差行程规划+上海大学附近酒店，快速路由把多意图塌缩为单酒店搜索"
+  },
+  {
+    "id": "FR-002",
+    "category": "fast_route_hijack",
+    "query": "下周从广州去成都旅游5天，想住春熙路附近的酒店",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "差旅+酒店组合被吞为单 hotel_search"
+  },
+  {
+    "id": "FR-003",
+    "category": "fast_route_hijack",
+    "query": "帮我规划一下从北京到西安的3天行程，顺便帮我看看大雁塔附近的酒店",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "用户明说'规划行程'+酒店需求，应双 Skill"
+  },
+  {
+    "id": "FR-004",
+    "category": "fast_route_hijack",
+    "query": "明天去杭州出差，会议结束后想去西湖玩，需要订个西湖边的民宿",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "出差+游玩+民宿，三重语义被酒店关键词劫持"
+  },
+  {
+    "id": "FR-005",
+    "category": "fast_route_hijack",
+    "query": "周末从深圳去厦门3天2夜出差，第一天要去客户公司开会",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "纯出差无酒店关键词，但 fast route 无差旅检测应 fall through 给 LLM"
+  },
+  {
+    "id": "FR-006",
+    "category": "fast_route_hijack",
+    "query": "下周三从上海飞北京出差2天，想看看故宫附近的酒店",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "出差+景点附近酒店"
+  },
+  {
+    "id": "FR-007",
+    "category": "fast_route_hijack",
+    "query": "安排一下从成都到丽江的4天旅游行程，想住束河古镇的客栈",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "'安排'是规划信号，'客栈'命中酒店关键词"
+  }
+]

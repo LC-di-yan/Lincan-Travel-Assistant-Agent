@@ -1,0 +1,90 @@
+# 变更记录
+
+> 这里记录 2026-10 这一轮集中排障与加固的过程与结论，方便回溯「为什么代码长这样」。
+> 所有时间均为 Asia/Shanghai。
+
+## 2026-10-20 00:44 · 模型鉴权失效（401）
+
+- **现象**：页面提示「意图识别出错，使用默认策略」，搜索成功但摘要生成失败。
+- **根因**：`ALIGO_API_KEY` 被服务商删除/重置，所有 LLM 调用返回 `401 Authentication Fails`。
+- **修复**：切换到可用的 OpenAI 兼容通道，改 `.env` 三行；日志确认 0 次 401。
+- **验证**：`/api/chat` 端到端通过，意图识别、天气、火车票反问正常。
+
+## 2026-10-20 01:03 · 「已读乱回」
+
+- **现象**：问「查去北京的火车票」，却弹出上一轮的「北京—上海 3 天出差行程」。
+- **根因**：取消/换话题后，旧请求仍在后台跑完并回写；追问问答状态没有失效时间。
+- **修复**：
+  - 追问（pending）加 5 分钟 TTL，并增加「换话题」判定（含「酒店/天气/推荐/吗」等词即视为新话题）；
+  - 请求与响应用会话内的序号对齐，过期响应直接丢弃。
+- **验证**：连续切换话题 6 轮，未再复现串台。
+
+## 2026-10-20 10:20 · 行程规划 403：不是代码 bug，是通道被回收
+
+- **现象**：`itinerary_planning 执行失败：...403 AccessDenied.Unpurchased`。
+- **证据链**：
+  - `GET /models` 仍 200（Key 有效）；
+  - `POST /chat/completions` 对 9 个不同模型**全部 403**；
+  - 换阿里云官方口复现出更明确的原始错误：`400 Arrearage`（账号欠费）。
+- **结论**：中转站把「账号欠费」包装成了「未购买」。换 key/换模型名都无效。
+- **同时暴露并修掉的三个代码问题**：
+  1. **单通道单点**：所有智能体共用一个模型实例，通道挂 = 全站挂 → 新增 `utils/llm_failover.py`（主/备通道、自动切换、sticky、`should_failover` 分类）。
+  2. **错误原文直出**：异常 JSON 被拼进 `result["error"]` → 写进记忆、渲染到前端、还被 TTS 念出来 → 新增 `utils/llm_errors.py`，用户只看人话，细节进日志。
+  3. **失败也写记忆**：规划失败仍把占位行程写进 `trip_history`（`trip_2` 起止日期为空）→ 改为要求 `planning_complete` 且 `daily_plans` 非空才落库，日期缺失时用 `daily_plans[].date` 回填。
+- **新增**：`verify_llm.py`（3 秒体检通道）、`tools/probe_key.py`（判断 key 卡在哪种错误）。
+
+## 2026-10-20 11:05 · 补漏：另外三处「原始报错直出」
+
+用户截图暴露了上一条没覆盖的位置：
+
+| 位置 | 泄漏内容 |
+|---|---|
+| 侧栏 REASONING | `意图识别出错，使用默认策略。错误: Error code: 403 - {...}` |
+| 编排层失败消息 | `并行执行失败: Error code: 403 - {...}` |
+| SSE error 事件 | `执行失败: {原始异常}` |
+
+- **修复**：新增 `friendly_text()`；三处统一成人话，原始异常只写日志；JSON 解析失败不再回显模型原文。
+- **验证**：`tools/check_error_surfaces.py` 2/2 通过；同一句话复跑识别为「偏好管理 96%」。
+
+## 2026-10-20 11:30 · 模型方案切到 aiping，端到端 55s → 5s
+
+- aiping 模型库里有 `DeepSeek-V4.1-Flash-1017`（与事故前同一模型快照），实测同题 14.2s；
+- 确认支持 `enable_thinking=False`（4.1s → 2.8s），plan-trip 的「关思考提速」继续有效；
+- 最终通道链：`aiping/DeepSeek-V4.1-Flash-1017` → `aiping/GLM-4.7-Flash` → `tierflow/tierflow`；
+- 实测：3 天行程 5.0–6.4s（此前 18–55s）。
+
+## 2026-10-20 11:45 · 第二把 key 也不能用：确认是「账号欠费」
+
+- 新 key 同样：`/models` 200、所有 chat 403、embeddings 也 403；
+- 走官方口得到 `400 Arrearage`（`overdue-payment`）；
+- 两把 key 属同一账号，结清欠费即可恢复；
+- 顺带加固：整链总预算 `ALIGO_LLM_TOTAL_TIMEOUT=110`（此前两个通道各卡 60s + SDK 重试 = **183s** 无响应）、`max_retries=1`、单测覆盖「两通道都卡死时 2s 内放弃」。
+
+## 2026-10-20 13:05 · 全量测试：又发现 2 个真 bug
+
+| 套件 | 结果 |
+|---|---|
+| `pytest -q`（停服务） | 75 passed / 6 skipped |
+| `pytest tests/test_web_contracts.py`（起服务） | 4 passed / 2 skipped |
+| `tools/full_test.py` | 16/16 |
+| `tools/edge_cases.py` | 7/7 |
+
+1. **会话不复用**
+   - 不带 `session_id` 时每次都新建会话 → 短期 10 轮记忆清零；
+   - `get_existing()` 取字典里第一个（可能是空壳）→ `/api/preferences`、`/api/expenses` 永远读到空快照（文件里有数据、接口返回 `{}`）。
+   - 修复：复用最近会话；`get_existing` 取 `max(last_active)`；新增 `tests/test_session_reuse.py`。
+
+2. **同用户并发时一条消息静默返回空**
+   - 复现：并发「酒店 + 天气」，酒店那条 0 个 `agent_result`、HTTP 200、无报错；
+   - 原因：`orchestrator.result_queue` 与 `pending_intention` 是会话级共享状态，互相覆盖；
+   - 修复：`UserSession.chat_lock` 按会话串行（不同用户不受影响）。
+
+3. **5 条过期测试**：假模型没接 `max_tokens`；两条断言还要求 reasoning 带原始报错（与「不泄漏」约定冲突）——已更新。
+
+## 2026-10-21 20:45 · 上传 GitHub 前的清理
+
+- 把含生产服务器口令的 8 个运维脚本移到 `private/`（已 gitignore）；
+- `tools/bench_*.py` 去掉硬编码 key，改为从 `.env` 读取；
+- 新增 `tools/scan_secrets.py`，提交前统一扫描；
+- 补齐 `.gitignore`：`.env.*`、`*.bak-*`、`private/`、`.pytest_cache/`；
+- 新增 `docs/screenshots/`（7 张真实界面图）、`docs/showcase.html`（可离线展示页）。

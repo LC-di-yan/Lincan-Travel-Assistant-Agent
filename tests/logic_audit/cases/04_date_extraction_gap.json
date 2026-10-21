@@ -1,0 +1,52 @@
+[
+  {
+    "id": "DT-001",
+    "category": "date_extraction_gap",
+    "query": "下周三从北京到上海出差",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "fast_event.start_date 应为下周三的 YYYY-MM-DD"
+    },
+    "note": "'下周三'不在 _TRAIN_PATTERNS 日期正则 (明天|后天|今天|月日|YYYY-MM-DD)"
+  },
+  {
+    "id": "DT-002",
+    "category": "date_extraction_gap",
+    "query": "月底去广州出差",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "'月底'无法解析为具体日期"
+    },
+    "note": "'月底'相对日期词未覆盖"
+  },
+  {
+    "id": "DT-003",
+    "category": "date_extraction_gap",
+    "query": "中秋节去杭州旅游",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "节假日名应映射到具体日期"
+    },
+    "note": "节假日名（中秋/国庆/春节）未覆盖"
+  },
+  {
+    "id": "DT-004",
+    "category": "date_extraction_gap",
+    "query": "12月25日从北京去三亚",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "无年份时的 YYYY-MM-DD 推断"
+    },
+    "note": "月日格式但无年份"
+  },
+  {
+    "id": "DT-005",
+    "category": "date_extraction_gap",
+    "query": "下周一到下周三去深圳出差",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "应识别为 start_date=下周一, end_date=下周三"
+    },
+    "note": "日期范围未覆盖"
+  }
+]

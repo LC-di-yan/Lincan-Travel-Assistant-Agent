@@ -1,0 +1,57 @@
+[
+  {
+    "id": "PS-001",
+    "category": "place_type_suppression",
+    "query": "酒店附近有什么好吃的",
+    "expected": {
+      "place_type": "餐厅搜索",
+      "place_city": ""
+    },
+    "note": "用户真实意图是餐厅，但 _is_restaurant_query 因含'酒店'返回 False，被压制为酒店搜索"
+  },
+  {
+    "id": "PS-002",
+    "category": "place_type_suppression",
+    "query": "民宿周边有什么景点",
+    "expected": {
+      "place_type": "景点搜索"
+    },
+    "note": "用户问景点，但含'民宿'被 _is_scenic_query 排除"
+  },
+  {
+    "id": "PS-003",
+    "category": "place_type_suppression",
+    "query": "宾馆楼下有什么好吃的餐厅",
+    "expected": {
+      "place_type": "餐厅搜索"
+    },
+    "note": "'楼下'修饰符后 _is_restaurant_query 应继续检查，但'宾馆'在前压制"
+  },
+  {
+    "id": "PS-004",
+    "category": "place_type_suppression",
+    "query": "客栈对面的火锅店",
+    "expected": {
+      "place_type": "餐厅搜索"
+    },
+    "note": "'对面'修饰符后餐厅词在 _NON_RESTAURANT 关键词前，逻辑应能识别"
+  },
+  {
+    "id": "PS-005",
+    "category": "place_type_suppression",
+    "query": "住的地方附近有什么好玩的",
+    "expected": {
+      "place_type": "景点搜索"
+    },
+    "note": "'住的地方'是 HOTEL_KEYWORDS，会压制景点识别"
+  },
+  {
+    "id": "PS-006",
+    "category": "place_type_suppression",
+    "query": "酒店附近有哪些公园可以逛逛",
+    "expected": {
+      "place_type": "景点搜索"
+    },
+    "note": "明确问公园+逛逛，景点意图，但被'酒店'压制"
+  }
+]

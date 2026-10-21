@@ -1,0 +1,53 @@
+[
+  {
+    "id": "EL-001",
+    "category": "elliptical_limit",
+    "query": "那虹桥呢",
+    "dialogue": ["用户: 上海有哪些酒店", "助手: 上海共有N家酒店..."],
+    "expected": {
+      "elliptical_resolved": true,
+      "note_for_llm": "虹桥现为扩展地理词库条目，可消解为上海虹桥的酒店/景点追问"
+    },
+    "note": "_resolve_elliptical 改用 _EXTENDED_GEO_NAMES，'虹桥'已纳入地标群可消解"
+  },
+  {
+    "id": "EL-002",
+    "category": "elliptical_limit",
+    "query": "那大学城呢",
+    "dialogue": ["用户: 上海有什么好吃的", "助手: 上海共有N家美食..."],
+    "expected": {
+      "elliptical_resolved": true
+    },
+    "note": "'大学城'已纳入扩展地理词库的泛称条目"
+  },
+  {
+    "id": "EL-003",
+    "category": "elliptical_limit",
+    "query": "那香格里拉呢",
+    "dialogue": ["用户: 丽江有什么景点", "助手: 丽江共有N家景点..."],
+    "expected": {
+      "elliptical_resolved": true
+    },
+    "note": "旅游目的地'香格里拉'已纳入扩展地理词库"
+  },
+  {
+    "id": "EL-004",
+    "category": "elliptical_limit",
+    "query": "那浦东新区呢",
+    "dialogue": ["用户: 上海有哪些酒店", "助手: 上海共有N家酒店..."],
+    "expected": {
+      "elliptical_resolved": true
+    },
+    "note": "'浦东'已纳入扩展地理词库（地标群），'浦东新区'正则可消解"
+  },
+  {
+    "id": "EL-005",
+    "category": "elliptical_limit",
+    "query": "那嘉兴呢",
+    "dialogue": ["用户: 杭州有什么景点", "助手: 杭州共有N家景点..."],
+    "expected": {
+      "elliptical_resolved": true
+    },
+    "note": "'嘉兴'已纳入 _CITY_KEYWORDS 与扩展地理词库"
+  }
+]

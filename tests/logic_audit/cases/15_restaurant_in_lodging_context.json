@@ -1,0 +1,47 @@
+[
+  {
+    "id": "RL-001",
+    "category": "restaurant_in_lodging_context",
+    "query": "酒店附近有什么好吃的",
+    "expected": {
+      "place_type": "餐厅搜索"
+    },
+    "note": "用户问餐厅，但 _is_restaurant_query 因'酒店'在 _NON_RESTAURANT_KEYWORDS 直接返回 False"
+  },
+  {
+    "id": "RL-002",
+    "category": "restaurant_in_lodging_context",
+    "query": "民宿周边的火锅店",
+    "expected": {
+      "place_type": "餐厅搜索"
+    },
+    "note": "'民宿周边'+'火锅店'，餐厅词在'民宿'后，_is_restaurant_query 检查 after_kw 应能识别"
+  },
+  {
+    "id": "RL-003",
+    "category": "restaurant_in_lodging_context",
+    "query": "住的地方附近有什么特色菜",
+    "expected": {
+      "place_type": "餐厅搜索"
+    },
+    "note": "'住的地方'是 HOTEL_KEYWORDS，'特色菜'在 after_kw 应继续识别"
+  },
+  {
+    "id": "RL-004",
+    "category": "restaurant_in_lodging_context",
+    "query": "酒店里的餐厅",
+    "expected": {
+      "place_type": "餐厅搜索"
+    },
+    "note": "'酒店里的餐厅'，'餐厅'在'酒店'后，应识别为餐厅搜索"
+  },
+  {
+    "id": "RL-005",
+    "category": "restaurant_in_lodging_context",
+    "query": "酒店早餐",
+    "expected": {
+      "place_type": "餐厅搜索"
+    },
+    "note": "'早餐'是 RESTAURANT_KEYWORDS，但'酒店'在前压制"
+  }
+]

@@ -1,0 +1,89 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# AgentScope
+.agentscope/
+
+# Data
+data/rag_knowledge/
+data/models/
+data/preferences/*.json
+!data/preferences/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# 运行时数据（用户记忆、会话落盘、调试产物）
+server/data/
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Environment & Secrets
+.env
+.env.local
+.env.*
+!.env.example
+!.env.production.example
+*.bak-*
+*.bak
+
+# 本地运维脚本 / 备份（含服务器口令），只留本机，不进仓库
+private/
+
+# 调试产物
+models_out.json
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# User memory data (contains personal info)
+data/memory/*.json
+!data/memory/.gitkeep
+!data/memory/example_user.json
+
+# Claude local settings
+.claude/settings.local.json
+
+# Test results
+tests/results/
+
+# Database files
+*.db
+
+# OS
+.DS_Store
+Thumbs.db

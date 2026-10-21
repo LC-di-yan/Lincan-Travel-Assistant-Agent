@@ -1,0 +1,56 @@
+[
+  {
+    "id": "KB-001",
+    "category": "keyword_too_broad",
+    "query": "我住在北京朝阳区",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "'住在'含'住'，可能被住宿关键词命中"
+  },
+  {
+    "id": "KB-002",
+    "category": "keyword_too_broad",
+    "query": "今天玩得很开心",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "'玩'是 SCENIC_KEYWORDS，但句中非查询"
+  },
+  {
+    "id": "KB-003",
+    "category": "keyword_too_broad",
+    "query": "他住的地方离公司很远",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "'住的地方'是 HOTEL_KEYWORDS，但语义是居住地非住宿搜索"
+  },
+  {
+    "id": "KB-004",
+    "category": "keyword_too_broad",
+    "query": "昨晚吃了一顿大餐",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "'大餐'是 RESTAURANT_KEYWORDS，但语义是过去事件"
+  },
+  {
+    "id": "KB-005",
+    "category": "keyword_too_broad",
+    "query": "我们去逛逛街吧",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "'逛逛'是 SCENIC_KEYWORDS，但语义是日常提议非景点查询"
+  },
+  {
+    "id": "KB-006",
+    "category": "keyword_too_broad",
+    "query": "公司在哪个楼层",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "通用问句，无任何差旅意图"
+  }
+]

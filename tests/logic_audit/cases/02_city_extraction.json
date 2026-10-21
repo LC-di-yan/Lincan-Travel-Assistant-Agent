@@ -1,0 +1,63 @@
+[
+  {
+    "id": "CE-001",
+    "category": "city_extraction",
+    "query": "从北京去上海出差3天",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "应 origin=北京, destination=上海；fast route 命中酒店/景点正则会丢出发地"
+    },
+    "note": "多城市查询的 origin/destination 错配测试基准"
+  },
+  {
+    "id": "CE-002",
+    "category": "city_extraction",
+    "query": "上海有哪些酒店",
+    "expected": {
+      "agents": ["hotel_search"],
+      "key_entities_destination": "上海"
+    },
+    "note": "单城市酒店查询基线（应正确）"
+  },
+  {
+    "id": "CE-003",
+    "category": "city_extraction",
+    "query": "北京到广州的火车票",
+    "expected": {
+      "agents": ["train_ticket"],
+      "key_entities_origin": "北京",
+      "key_entities_destination": "广州"
+    },
+    "note": "火车票提取 from/to，单城市应保序"
+  },
+  {
+    "id": "CE-004",
+    "category": "city_extraction",
+    "query": "广州到北京到上海的火车票",
+    "expected": {
+      "agents": ["train_ticket"],
+      "note_for_llm": "三城市场景，正则只取前两城市为 from/to，上海丢失"
+    },
+    "note": "三段行程，正则只能取两个城市"
+  },
+  {
+    "id": "CE-005",
+    "category": "city_extraction",
+    "query": "我想查杭州西湖附近的酒店",
+    "expected": {
+      "agents": ["hotel_search"],
+      "key_entities_destination": "杭州"
+    },
+    "note": "城市+地标组合，应取杭州"
+  },
+  {
+    "id": "CE-006",
+    "category": "city_extraction",
+    "query": "虹桥火车站附近的酒店",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "虹桥已从 _CITY_KEYWORDS 移除（非城市），city 提取为空，走 LLM 由其推断'虹桥=上海虹桥'"
+    },
+    "note": "虹桥/南站等火车站名不再误识为城市，走 LLM 兜底"
+  }
+]

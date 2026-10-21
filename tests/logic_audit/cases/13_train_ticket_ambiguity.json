@@ -1,0 +1,51 @@
+[
+  {
+    "id": "TT-001",
+    "category": "train_ticket_ambiguity",
+    "query": "北京去上海玩",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "应触发 itinerary_planning 而非 train_ticket"
+    },
+    "note": "'A去B玩'被 _TRAIN_PATTERNS 命中（[一-龥]{2,4} 到/至/去/往 [一-龥]{2,4}），误判为火车票"
+  },
+  {
+    "id": "TT-002",
+    "category": "train_ticket_ambiguity",
+    "query": "从广州到深圳出差",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "'从A到B出差'被火车票正则命中，应进 itinerary_planning"
+  },
+  {
+    "id": "TT-003",
+    "category": "train_ticket_ambiguity",
+    "query": "上海到杭州旅游",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "'A到B旅游'被误判为火车票"
+  },
+  {
+    "id": "TT-004",
+    "category": "train_ticket_ambiguity",
+    "query": "帮我查火车票广州到深圳",
+    "expected": {
+      "agents": ["train_ticket"],
+      "key_entities_origin": "广州",
+      "key_entities_destination": "深圳"
+    },
+    "note": "基线：明确火车票意图"
+  },
+  {
+    "id": "TT-005",
+    "category": "train_ticket_ambiguity",
+    "query": "明天从北京到上海出差3天",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "应进 itinerary_planning"
+    },
+    "note": "'从A到B出差N天'被火车票正则命中"
+  }
+]

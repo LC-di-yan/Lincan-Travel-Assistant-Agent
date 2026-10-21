@@ -1,0 +1,47 @@
+[
+  {
+    "id": "TL-001",
+    "category": "translation_lang_gap",
+    "query": "翻译成俄语",
+    "expected": {
+      "agents": ["translation"]
+    },
+    "note": "'俄语'不在 _TRANSLATION_PATTERNS 白名单，fast route miss → LLM"
+  },
+  {
+    "id": "TL-002",
+    "category": "translation_lang_gap",
+    "query": "用阿拉伯语怎么说",
+    "expected": {
+      "agents": ["translation"]
+    },
+    "note": "'阿拉伯语'不在白名单"
+  },
+  {
+    "id": "TL-003",
+    "category": "translation_lang_gap",
+    "query": "翻译成西班牙语",
+    "expected": {
+      "agents": ["translation"]
+    },
+    "note": "'西班牙语'不在白名单"
+  },
+  {
+    "id": "TL-004",
+    "category": "translation_lang_gap",
+    "query": "翻译成英文",
+    "expected": {
+      "agents": ["translation"]
+    },
+    "note": "基线（应正确命中）"
+  },
+  {
+    "id": "TL-005",
+    "category": "translation_lang_gap",
+    "query": "translate to Russian",
+    "expected": {
+      "agents": ["translation"]
+    },
+    "note": "英文版白名单只含 english/chinese/japanese/korean/french/german，Russian miss"
+  }
+]

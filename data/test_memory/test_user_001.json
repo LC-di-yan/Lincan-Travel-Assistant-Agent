@@ -1,0 +1,380 @@
+{
+  "user_id": "test_user_001",
+  "created_at": "2026-07-28T11:41:00.217054",
+  "updated_at": "2026-10-21T20:51:55.279322",
+  "preferences": [
+    {
+      "type": "budget",
+      "value": "经济型，每晚酒店预算500元以内"
+    },
+    {
+      "type": "accommodation",
+      "value": "喜欢连锁酒店，如家、汉庭"
+    },
+    {
+      "type": "transportation",
+      "value": "优先高铁，避免飞机"
+    },
+    {
+      "type": "food",
+      "value": "喜欢本地特色美食，不吃辣"
+    }
+  ],
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "你好，我想去北京旅游",
+      "timestamp": "2026-07-28T11:41:00.217054",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "好的，请问您计划什么时候去北京？",
+      "timestamp": "2026-07-28T11:41:00.217054",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "下周三出发",
+      "timestamp": "2026-07-28T11:41:00.217054",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "明白了，下周三出发去北京。需要帮您规划行程吗？",
+      "timestamp": "2026-07-28T11:41:00.217054",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "是的，我想去故宫和长城",
+      "timestamp": "2026-07-28T11:41:00.217054",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "你好，我想去北京旅游",
+      "timestamp": "2026-07-30T22:09:03.117514",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "好的，请问您计划什么时候去北京？",
+      "timestamp": "2026-07-30T22:09:03.118522",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "下周三出发",
+      "timestamp": "2026-07-30T22:09:03.119522",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "明白了，下周三出发去北京。需要帮您规划行程吗？",
+      "timestamp": "2026-07-30T22:09:03.120523",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "是的，我想去故宫和长城",
+      "timestamp": "2026-07-30T22:09:03.123048",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "你好，我想去北京旅游",
+      "timestamp": "2026-10-20T12:41:45.610125",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "好的，请问您计划什么时候去北京？",
+      "timestamp": "2026-10-20T12:41:45.610125",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "下周三出发",
+      "timestamp": "2026-10-20T12:41:45.611125",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "明白了，下周三出发去北京。需要帮您规划行程吗？",
+      "timestamp": "2026-10-20T12:41:45.612138",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "是的，我想去故宫和长城",
+      "timestamp": "2026-10-20T12:41:45.612138",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "你好，我想去北京旅游",
+      "timestamp": "2026-10-20T12:49:43.463333",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "好的，请问您计划什么时候去北京？",
+      "timestamp": "2026-10-20T12:49:43.465329",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "下周三出发",
+      "timestamp": "2026-10-20T12:49:43.466329",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "明白了，下周三出发去北京。需要帮您规划行程吗？",
+      "timestamp": "2026-10-20T12:49:43.467329",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "是的，我想去故宫和长城",
+      "timestamp": "2026-10-20T12:49:43.468329",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "你好，我想去北京旅游",
+      "timestamp": "2026-10-20T12:57:22.659166",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "好的，请问您计划什么时候去北京？",
+      "timestamp": "2026-10-20T12:57:22.660164",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "下周三出发",
+      "timestamp": "2026-10-20T12:57:22.661151",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "明白了，下周三出发去北京。需要帮您规划行程吗？",
+      "timestamp": "2026-10-20T12:57:22.661151",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "是的，我想去故宫和长城",
+      "timestamp": "2026-10-20T12:57:22.662151",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "你好，我想去北京旅游",
+      "timestamp": "2026-10-21T20:51:52.046343",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "好的，请问您计划什么时候去北京？",
+      "timestamp": "2026-10-21T20:51:52.048327",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "下周三出发",
+      "timestamp": "2026-10-21T20:51:52.049327",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "assistant",
+      "content": "明白了，下周三出发去北京。需要帮您规划行程吗？",
+      "timestamp": "2026-10-21T20:51:52.050328",
+      "session_id": "test_session_001"
+    },
+    {
+      "role": "user",
+      "content": "是的，我想去故宫和长城",
+      "timestamp": "2026-10-21T20:51:52.052347",
+      "session_id": "test_session_001"
+    }
+  ],
+  "trip_history": [
+    {
+      "trip_id": "trip_1",
+      "timestamp": "2026-07-28T11:41:00.232888",
+      "origin": "上海",
+      "destination": "北京",
+      "start_date": "2026-01-15",
+      "end_date": "2026-01-18",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_2",
+      "timestamp": "2026-07-28T11:41:00.232888",
+      "origin": "上海",
+      "destination": "杭州",
+      "start_date": "2026-02-10",
+      "end_date": "2026-02-12",
+      "purpose": "出差"
+    },
+    {
+      "trip_id": "trip_3",
+      "timestamp": "2026-07-28T11:41:00.232888",
+      "origin": "上海",
+      "destination": "成都",
+      "start_date": "2026-03-05",
+      "end_date": "2026-03-09",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_4",
+      "timestamp": "2026-07-30T22:09:03.129567",
+      "origin": "上海",
+      "destination": "北京",
+      "start_date": "2026-01-15",
+      "end_date": "2026-01-18",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_5",
+      "timestamp": "2026-07-30T22:09:03.130569",
+      "origin": "上海",
+      "destination": "杭州",
+      "start_date": "2026-02-10",
+      "end_date": "2026-02-12",
+      "purpose": "出差"
+    },
+    {
+      "trip_id": "trip_6",
+      "timestamp": "2026-07-30T22:09:03.133087",
+      "origin": "上海",
+      "destination": "成都",
+      "start_date": "2026-03-05",
+      "end_date": "2026-03-09",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_7",
+      "timestamp": "2026-10-20T12:41:45.617664",
+      "origin": "上海",
+      "destination": "北京",
+      "start_date": "2026-01-15",
+      "end_date": "2026-01-18",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_8",
+      "timestamp": "2026-10-20T12:41:45.617664",
+      "origin": "上海",
+      "destination": "杭州",
+      "start_date": "2026-02-10",
+      "end_date": "2026-02-12",
+      "purpose": "出差"
+    },
+    {
+      "trip_id": "trip_9",
+      "timestamp": "2026-10-20T12:41:45.618638",
+      "origin": "上海",
+      "destination": "成都",
+      "start_date": "2026-03-05",
+      "end_date": "2026-03-09",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_10",
+      "timestamp": "2026-10-20T12:49:43.472261",
+      "origin": "上海",
+      "destination": "北京",
+      "start_date": "2026-01-15",
+      "end_date": "2026-01-18",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_11",
+      "timestamp": "2026-10-20T12:49:43.473268",
+      "origin": "上海",
+      "destination": "杭州",
+      "start_date": "2026-02-10",
+      "end_date": "2026-02-12",
+      "purpose": "出差"
+    },
+    {
+      "trip_id": "trip_12",
+      "timestamp": "2026-10-20T12:49:43.474276",
+      "origin": "上海",
+      "destination": "成都",
+      "start_date": "2026-03-05",
+      "end_date": "2026-03-09",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_13",
+      "timestamp": "2026-10-20T12:57:22.666302",
+      "origin": "上海",
+      "destination": "北京",
+      "start_date": "2026-01-15",
+      "end_date": "2026-01-18",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_14",
+      "timestamp": "2026-10-20T12:57:22.666302",
+      "origin": "上海",
+      "destination": "杭州",
+      "start_date": "2026-02-10",
+      "end_date": "2026-02-12",
+      "purpose": "出差"
+    },
+    {
+      "trip_id": "trip_15",
+      "timestamp": "2026-10-20T12:57:22.666302",
+      "origin": "上海",
+      "destination": "成都",
+      "start_date": "2026-03-05",
+      "end_date": "2026-03-09",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_16",
+      "timestamp": "2026-10-21T20:51:52.057354",
+      "origin": "上海",
+      "destination": "北京",
+      "start_date": "2026-01-15",
+      "end_date": "2026-01-18",
+      "purpose": "旅游"
+    },
+    {
+      "trip_id": "trip_17",
+      "timestamp": "2026-10-21T20:51:52.057354",
+      "origin": "上海",
+      "destination": "杭州",
+      "start_date": "2026-02-10",
+      "end_date": "2026-02-12",
+      "purpose": "出差"
+    },
+    {
+      "trip_id": "trip_18",
+      "timestamp": "2026-10-21T20:51:52.058328",
+      "origin": "上海",
+      "destination": "成都",
+      "start_date": "2026-03-05",
+      "end_date": "2026-03-09",
+      "purpose": "旅游"
+    }
+  ],
+  "expenses": [],
+  "statistics": {
+    "total_trips": 18,
+    "total_messages": 30,
+    "total_queries": 0,
+    "frequent_destinations": {
+      "北京": 6,
+      "杭州": 6,
+      "成都": 6
+    }
+  }
+}

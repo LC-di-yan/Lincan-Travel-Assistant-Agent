@@ -1,0 +1,47 @@
+[
+  {
+    "id": "MF-001",
+    "category": "memory_false_trigger",
+    "query": "我想去北京",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "'想去'非'去过'，不应触发 memory_query；应是 itinerary_planning"
+  },
+  {
+    "id": "MF-002",
+    "category": "memory_false_trigger",
+    "query": "我去过北京吗",
+    "expected": {
+      "agents": ["memory_query"]
+    },
+    "note": "询问是否去过，基线（应正确）"
+  },
+  {
+    "id": "MF-003",
+    "category": "memory_false_trigger",
+    "query": "去年去过北京，今年还想去",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "含'去过'+'想去'，但语义是新行程规划，应进 LLM 而非 memory_query"
+  },
+  {
+    "id": "MF-004",
+    "category": "memory_false_trigger",
+    "query": "记得上次去北京的时候",
+    "expected": {
+      "agents": ["memory_query"]
+    },
+    "note": "回忆历史，基线"
+  },
+  {
+    "id": "MF-005",
+    "category": "memory_false_trigger",
+    "query": "我去过哪些地方旅游",
+    "expected": {
+      "agents": ["memory_query"]
+    },
+    "note": "明确历史查询，基线"
+  }
+]

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "CR-001",
+    "category": "context_resolution",
+    "query": "请帮我查询具体的汉庭酒店房型和价格",
+    "dialogue": [
+      "用户: 明天从北京去上海出差3天",
+      "助手: 北京到上海3日出差行程...汉庭酒店(近外滩)..."
+    ],
+    "expected": {
+      "agents": ["hotel_search"],
+      "key_entities_destination": "上海",
+      "needs_clarification_not_true": true
+    },
+    "note": "追问酒店时应从历史回填 destination=上海，不应反问城市"
+  },
+  {
+    "id": "CR-002",
+    "category": "context_resolution",
+    "query": "帮我查一下全季的房型",
+    "dialogue": [
+      "用户: 帮我规划杭州2天旅游",
+      "助手: 杭州2日行程...全季酒店..."
+    ],
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "'全季'不在 _HOTEL_KEYWORDS，走 LLM 由其识别品牌+从历史回填 destination=杭州"
+    },
+    "note": "品牌名'全季'未命中 fast route，走 LLM 路径由其回填（LLM 行为不在静态审计范围）"
+  },
+  {
+    "id": "CR-003",
+    "category": "context_resolution",
+    "query": "有什么好吃的推荐",
+    "dialogue": [
+      "用户: 明天去成都出差",
+      "助手: 成都出差行程..."
+    ],
+    "expected": {
+      "agents": ["restaurant_search"],
+      "key_entities_destination": "成都",
+      "needs_clarification_not_true": true
+    },
+    "note": "追问美食应从历史回填成都"
+  },
+  {
+    "id": "CR-004",
+    "category": "context_resolution",
+    "query": "有哪些景点可以逛",
+    "dialogue": [
+      "用户: 下周去西安旅游",
+      "助手: 西安3日行程..."
+    ],
+    "expected": {
+      "agents": ["scenic_search"],
+      "key_entities_destination": "西安",
+      "needs_clarification_not_true": true
+    },
+    "note": "追问景点应从历史回填西安"
+  },
+  {
+    "id": "CR-005",
+    "category": "context_resolution",
+    "query": "请帮我查询具体的汉庭酒店房型和价格",
+    "dialogue": [],
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "无历史时，'查汉庭酒店'无城市应走 LLM 由其反问"
+  },
+  {
+    "id": "CR-006",
+    "category": "context_resolution",
+    "query": "附近有哪些酒店和餐厅",
+    "dialogue": [
+      "用户: 明天从北京去上海出差3天",
+      "助手: 已规划3天行程：上海出差3日行程，目的地：上海，关键地点：虹桥、外滩、豫园、南京路，交通：高铁。"
+    ],
+    "expected": {
+      "agents": ["hotel_search", "restaurant_search"],
+      "key_entities_destination": "上海",
+      "needs_clarification_not_true": true
+    },
+    "note": "assistant 摘要含'南京路'商圈，不应被误回填为南京；应从'目的地：上海'结构化提取"
+  }
+]

@@ -1,0 +1,41 @@
+[
+  {
+    "id": "WM-001",
+    "category": "weather_mixed_query",
+    "query": "查北京天气和上海酒店",
+    "expected": {
+      "agent_count_min": 2,
+      "note_for_runner": "fast route 天气分支把 city=北京，hotel_search 也用北京，上海丢失"
+    },
+    "note": "天气城市(北京)与酒店城市(上海)不同，fast route 仅取首城市"
+  },
+  {
+    "id": "WM-002",
+    "category": "weather_mixed_query",
+    "query": "上海天气和北京天气",
+    "expected": {
+      "agent_count_min": 1,
+      "note_for_runner": "两个天气城市不同，fast route 只取一个"
+    },
+    "note": "双城市天气，仅识别首城市"
+  },
+  {
+    "id": "WM-003",
+    "category": "weather_mixed_query",
+    "query": "杭州天气和杭州酒店",
+    "expected": {
+      "agent_count_min": 2,
+      "agents_contains": ["information_query", "hotel_search"]
+    },
+    "note": "同城市天气+酒店，基线（应正确）"
+  },
+  {
+    "id": "WM-004",
+    "category": "weather_mixed_query",
+    "query": "查一下上海天气，然后帮我搜北京的酒店",
+    "expected": {
+      "agent_count_min": 2
+    },
+    "note": "口语化双城市，城市错配风险"
+  }
+]

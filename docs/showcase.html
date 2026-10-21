@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aligo · 智能差旅助手</title>
+<style>
+  :root{
+    --paper:#f5f2ea; --paper-raised:#fbf9f4; --ink:#26241f; --ink-soft:#5c574c;
+    --rule:#d9d2c2; --accent:#b23a2a; --accent-soft:#f0ddd6;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --serif:Georgia,"Times New Roman","Songti SC","Noto Serif SC",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+       -webkit-font-smoothing:antialiased;line-height:1.7}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 32px}
+  .mono{font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:var(--ink-soft)}
+
+  /* header */
+  header{border-bottom:1px solid var(--rule);background:var(--paper-raised);position:sticky;top:0;z-index:9}
+  .bar{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .mark{width:30px;height:30px;border:1px solid var(--accent);display:grid;place-items:center;
+        color:var(--accent);font-family:var(--serif);font-size:16px}
+  .brand b{font-family:var(--serif);font-size:19px;letter-spacing:.22em;font-weight:600}
+  .brand span{color:var(--ink-soft);font-size:12px;letter-spacing:.12em}
+  nav{display:flex;gap:26px}
+  nav a{color:var(--ink-soft);font-size:13px}
+  nav a:hover{color:var(--accent)}
+
+  /* hero */
+  .hero{padding:78px 0 40px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+  .hero h1{font-family:var(--serif);font-size:47px;line-height:1.2;margin:16px 0 18px;font-weight:600}
+  .hero h1 em{font-style:normal;color:var(--accent)}
+  .hero p{color:var(--ink-soft);font-size:15.5px;max-width:40em;margin:0 0 26px}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:26px}
+  .pill{border:1px solid var(--rule);background:var(--paper-raised);border-radius:999px;
+        padding:5px 13px;font-size:12px;color:var(--ink-soft);font-family:var(--mono);letter-spacing:.06em}
+  .cta{display:flex;gap:12px;flex-wrap:wrap}
+  .btn{display:inline-block;padding:11px 20px;border:1px solid var(--ink);border-radius:2px;
+       font-size:13.5px;color:var(--ink);background:transparent}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn:hover{text-decoration:none;opacity:.88}
+
+  .frame{background:var(--paper-raised);border:1px solid var(--rule);border-radius:3px;
+         box-shadow:0 18px 44px rgba(60,48,32,.10);overflow:hidden}
+  .frame-bar{display:flex;align-items:center;gap:7px;padding:9px 13px;border-bottom:1px solid var(--rule)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--rule)}
+  .frame-bar span{margin-left:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--ink-soft)}
+  .frame img{display:block;width:100%;height:auto}
+
+  /* stats */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--rule);
+         border-bottom:1px solid var(--rule);margin-top:26px}
+  .stat{padding:26px 24px;border-right:1px solid var(--rule)}
+  .stat:last-child{border-right:0}
+  .stat b{display:block;font-family:var(--serif);font-size:32px;font-weight:600;line-height:1.1}
+  .stat b i{font-style:normal;font-size:15px;color:var(--ink-soft);margin-left:3px}
+  .stat span{font-size:12.5px;color:var(--ink-soft)}
+
+  /* sections */
+  section{padding:76px 0}
+  section + section{border-top:1px solid var(--rule)}
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:24px;margin-bottom:34px}
+  .sec-head h2{font-family:var(--serif);font-size:31px;margin:8px 0 0;font-weight:600}
+  .sec-head p{color:var(--ink-soft);font-size:13.5px;max-width:32em;margin:0}
+
+  .grid{display:grid;gap:18px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .card{background:var(--paper-raised);border:1px solid var(--rule);border-radius:3px;padding:24px 22px}
+  .card h3{font-size:15px;margin:0 0 8px;font-weight:600}
+  .card p{margin:0;color:var(--ink-soft);font-size:13.5px}
+  .card .geo{width:26px;height:26px;border:1px solid var(--accent);color:var(--accent);
+             display:grid;place-items:center;font-family:var(--mono);font-size:11px;margin-bottom:14px}
+
+  .shot{background:var(--paper-raised);border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+  .shot img{display:block;width:100%;height:auto;border-bottom:1px solid var(--rule)}
+  .shot .cap{padding:14px 16px}
+  .shot .cap b{font-size:14px}
+  .shot .cap p{margin:3px 0 0;font-size:12.5px;color:var(--ink-soft)}
+
+  pre{background:#211f1a;color:#e8e2d4;border-radius:3px;padding:22px 24px;overflow:auto;
+      font-family:var(--mono);font-size:12.5px;line-height:1.75;margin:0}
+  pre .c{color:#8d8474}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:start}
+
+  ul.clean{list-style:none;padding:0;margin:0}
+  ul.clean li{padding:11px 0;border-bottom:1px solid var(--rule);font-size:13.5px;color:var(--ink-soft)}
+  ul.clean li b{color:var(--ink);font-weight:600}
+  ul.clean li:last-child{border-bottom:0}
+
+  footer{border-top:1px solid var(--rule);padding:34px 0 54px;color:var(--ink-soft);font-size:12.5px}
+  .foot{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}
+
+  @media (max-width:900px){
+    .hero{grid-template-columns:1fr;gap:34px;padding-top:48px}
+    .hero h1{font-size:34px}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .stat{border-bottom:1px solid var(--rule)}
+    .g3,.g2,.split{grid-template-columns:1fr}
+    nav{display:none}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <div class="brand">
+      <div class="mark">A</div>
+      <div><b>ALIGO</b> &nbsp;<span>差旅文件 · 智能行程助手</span></div>
+    </div>
+    <nav>
+      <a href="#feature">能力</a>
+      <a href="#scene">场景</a>
+      <a href="#arch">架构</a>
+      <a href="#start">快速开始</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="hero">
+    <div>
+      <div class="mono">Multi-Agent · RAG · Fault-tolerant</div>
+      <h1>一句话，<br>把出差<em>排明白</em>。</h1>
+      <p>
+        说一句「明天从北京去上海出差 3 天，预算 2000」，Aligo 会判断意图、并行调度技能智能体，
+        产出每天可执行的活动安排，并把酒店、车次、天气、记账、汇率一并处理。
+        多轮追问接得上，模型通道挂了会自动切换。
+      </p>
+      <div class="pills">
+        <span class="pill">AgentScope 1.0.16</span>
+        <span class="pill">FastAPI</span>
+        <span class="pill">React 19</span>
+        <span class="pill">Milvus Lite RAG</span>
+        <span class="pill">3 通道容灾</span>
+      </div>
+      <div class="cta">
+        <a class="btn primary" href="#start">看怎么跑起来</a>
+        <a class="btn" href="#scene">看实际效果</a>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i>
+        <span>ALIGO / 行程文件 · 5s</span></div>
+      <img src="screenshots/02-itinerary.png" alt="行程规划界面：北京至上海 3 天差旅行程">
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b>5<i>s</i></b><span>一句话 → 3 天行程</span></div>
+    <div class="stat"><b>10</b><span>技能智能体</span></div>
+    <div class="stat"><b>81</b><span>自动化用例全绿</span></div>
+    <div class="stat"><b>3<i>层</i></b><span>模型通道路由</span></div>
+  </div>
+
+  <section id="feature">
+    <div class="sec-head">
+      <div><div class="mono">Capabilities</div><h2>它能替你做的事</h2></div>
+      <p>不是把所有问题丢给一个大模型，而是先判意图、再按技能调度，该并行的并行。</p>
+    </div>
+    <div class="grid g3">
+      <div class="card"><div class="geo">01</div><h3>行程规划</h3>
+        <p>多日 / 单日、预算约束、品牌偏好、车次建议；每天给出时间、地点、餐饮与交通。</p></div>
+      <div class="card"><div class="geo">02</div><h3>酒店 · 餐厅 · 景点</h3>
+        <p>接入高德 POI，按评分排序，带图片、地址、均价，支持按品牌与商圈筛选。</p></div>
+      <div class="card"><div class="geo">03</div><h3>火车票查询</h3>
+        <p>12306 车次、时刻、历时与席别票价；查不到时也能给出替代交通建议。</p></div>
+      <div class="card"><div class="geo">04</div><h3>天气与联网</h3>
+        <p>目的地天气优先走高德；接口异常自动降级到联网搜索，不让卡片空着。</p></div>
+      <div class="card"><div class="geo">05</div><h3>偏好与记忆</h3>
+        <p>「我住酒店喜欢汉庭」说一次就记住；下次规划自动带上，也能随时查询和修改。</p></div>
+      <div class="card"><div class="geo">06</div><h3>记账 · 汇率 · 翻译</h3>
+        <p>一句话记账并按分类汇总；实时汇率换算；中英日韩互译，术语保持原样。</p></div>
+    </div>
+  </section>
+
+  <section id="scene">
+    <div class="sec-head">
+      <div><div class="mono">Walkthrough</div><h2>三个真实场景</h2></div>
+      <p>下面都是系统实际运行截图，同一套界面、同一套接口。</p>
+    </div>
+
+    <div class="split" style="margin-bottom:26px">
+      <div class="shot">
+        <img src="screenshots/03-hotel.png" alt="酒店搜索结果">
+        <div class="cap"><b>「上海有什么推荐酒店」</b>
+          <p>0.4 秒返回 600+ 家，按评分排序；侧栏同步显示识别到的目的地与调度路径。</p></div>
+      </div>
+      <div class="shot">
+        <img src="screenshots/05-train.png" alt="火车票查询结果">
+        <div class="cap"><b>「查一下明天北京到上海的高铁」</b>
+          <p>车次、时刻、历时与票价一屏看完，结论写在卡片上方，不用逐条翻。</p></div>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="shot">
+        <img src="screenshots/06-preference.png" alt="偏好记忆">
+        <div class="cap"><b>「我住酒店喜欢汉庭」</b>
+          <p>识别为偏好管理，写入长期记忆并回显「已追加」；后续行程会自动使用该偏好。</p></div>
+      </div>
+      <div class="shot">
+        <img src="screenshots/07-expense-currency.png" alt="记账与汇率">
+        <div class="cap"><b>「今天打车花了 80 元」+「100 美元等于多少人民币」</b>
+          <p>连续两条消息，记账立即入账、汇率实时换算，侧栏费用汇总同步更新。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="arch">
+    <div class="sec-head">
+      <div><div class="mono">Architecture</div><h2>请求是怎么走的</h2></div>
+      <p>意图 → 编排 → 技能 → 记忆：每一层都能单独替换和测试。</p>
+    </div>
+    <div class="split">
+<pre>
+用户 ──HTTP/SSE──▶ FastAPI  /api/chat
+                     │
+                     ├─ 意图识别
+                     │    ├─ 规则快路由      0 ms
+                     │    └─ LLM 兜底      ~2 s
+                     │
+                     ├─ 编排调度（按优先级并行）
+                     │    ├─ plan-trip        行程
+                     │    ├─ place-search     酒店/餐厅/景点
+                     │    ├─ query-info       天气/搜索
+                     │    ├─ train-ticket     12306
+                     │    ├─ preference       偏好
+                     │    ├─ memory-query     记忆
+                     │    ├─ expense-tracker  记账
+                     │    ├─ currency         汇率
+                     │    ├─ translation      翻译
+                     │    └─ ask-question     RAG
+                     │
+                     ├─ 记忆：短期 10 轮 + 长期 JSON/PG
+                     └─ 模型层：主 → 备 → 兜底
+                          401/403/429/5xx/超时自动切换
+</pre>
+      <ul class="clean">
+        <li><b>快路由省钱省时</b>　「A 到 B + N 天」这类表达不调模型，直接出意图。</li>
+        <li><b>失败要体面</b>　上游报错只进日志，用户看到的是「模型服务账号欠费，结清后可用」。</li>
+        <li><b>通道有预算</b>　整条链 110 秒封顶，避免「每个通道各卡 60 秒」拖成 3 分钟。</li>
+        <li><b>记忆不撒谎</b>　规划失败不会写进历史行程；同一句话重复说也不会出现重复偏好。</li>
+        <li><b>并发不串台</b>　同一会话串行执行，不同用户互不影响。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="start">
+    <div class="sec-head">
+      <div><div class="mono">Quick start</div><h2>四步跑起来</h2></div>
+      <p>需要 Python 3.12 与 Node 18+；模型只需一个 OpenAI 兼容的 key。</p>
+    </div>
+    <div class="split">
+<pre><span class="c"># 1. 依赖</span>
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+
+<span class="c"># 2. 配置（key 只留在本机，.env 已被 gitignore）</span>
+copy .env.example .env
+<span class="c">#   填写 ALIGO_API_KEY / ALIGO_BASE_URL / ALIGO_MODEL_NAME</span>
+
+<span class="c"># 3. 前端</span>
+cd web &amp;&amp; npm install &amp;&amp; npm run build &amp;&amp; cd ..
+
+<span class="c"># 4. 启动</span>
+python -m uvicorn server.app:app --port 3003
+<span class="c"># 打开 http://127.0.0.1:3003</span></pre>
+      <div class="card">
+        <h3>怎么确认自己配对了</h3>
+        <p style="margin-bottom:14px">跑一次通道体检，三秒内给出结论：</p>
+        <pre style="font-size:12px;padding:16px">python verify_llm.py
+<span class="c"># [OK] primary DeepSeek-V4.1-Flash-1017</span></pre>
+        <p style="margin-top:14px">再跑端到端矩阵，覆盖 16 个真实场景：</p>
+        <pre style="font-size:12px;padding:16px;margin-top:10px">python tools/full_test.py
+<span class="c"># 用例 16 个，失败 0</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot" style="padding:0">
+      <div>ALIGO · 差旅文件　—　多智能体 + RAG 的差旅规划系统</div>
+      <div>截图来自本机实际运行；文档见 README 与 docs/</div>
+    </div>
+  </footer>
+
+</main>
+</body>
+</html>

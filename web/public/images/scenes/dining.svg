@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="dn-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#fbbf24" />
+    </linearGradient>
+  </defs>
+  <!-- Plate -->
+  <ellipse cx="32" cy="40" rx="22" ry="8" stroke="url(#dn-accent)" stroke-width="2" fill="none" opacity="0.3" />
+  <ellipse cx="32" cy="40" rx="16" ry="5" stroke="#f59e0b" stroke-width="1" fill="none" opacity="0.15" />
+  <!-- Steam -->
+  <g opacity="0.2" stroke="#f59e0b" stroke-width="1.5" fill="none" stroke-linecap="round">
+    <path d="M26 28 Q24 22 26 16" />
+    <path d="M32 26 Q30 20 32 14" />
+    <path d="M38 28 Q36 22 38 16" />
+  </g>
+  <!-- Chopsticks -->
+  <line x1="44" y1="18" x2="52" y2="50" stroke="#f59e0b" stroke-width="1.5" opacity="0.25" stroke-linecap="round" />
+  <line x1="46" y1="18" x2="54" y2="50" stroke="#f59e0b" stroke-width="1.5" opacity="0.25" stroke-linecap="round" />
+  <!-- Bowl -->
+  <path d="M14 35 Q14 50 32 50 Q50 50 50 35" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity="0.2" />
+</svg>

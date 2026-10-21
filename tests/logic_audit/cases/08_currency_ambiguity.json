@@ -1,0 +1,48 @@
+[
+  {
+    "id": "CA-001",
+    "category": "currency_ambiguity",
+    "query": "打车花了100元",
+    "expected": {
+      "agents": ["expense_tracking"],
+      "currency_extracted": null
+    },
+    "note": "记账场景含金额，不应触发汇率"
+  },
+  {
+    "id": "CA-002",
+    "category": "currency_ambiguity",
+    "query": "100元打车的发票",
+    "expected": {
+      "currency_extracted": null
+    },
+    "note": "金额+元+非货币动词，_extract_currency 可能误判"
+  },
+  {
+    "id": "CA-003",
+    "category": "currency_ambiguity",
+    "query": "酒店一晚500元",
+    "expected": {
+      "currency_extracted": null
+    },
+    "note": "酒店价格含'元'，不应触发汇率"
+  },
+  {
+    "id": "CA-004",
+    "category": "currency_ambiguity",
+    "query": "100美元换人民币",
+    "expected": {
+      "currency_extracted": {"from_currency": "USD", "to_currency": "CNY", "amount": 100}
+    },
+    "note": "正常汇率查询基线"
+  },
+  {
+    "id": "CA-005",
+    "category": "currency_ambiguity",
+    "query": "日元汇率怎么样",
+    "expected": {
+      "currency_extracted": {"from_currency": "JPY", "to_currency": "CNY", "amount": 1}
+    },
+    "note": "纯汇率关键词基线"
+  }
+]

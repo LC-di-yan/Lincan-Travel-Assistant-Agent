@@ -1,0 +1,48 @@
+[
+  {
+    "id": "EV-001",
+    "category": "event_extraction_loss",
+    "query": "明天从北京去上海出差3天",
+    "expected": {
+      "fast_route_miss": true,
+      "note": "差旅信号短路，走 LLM 由其生成 fast_event"
+    },
+    "note": "fast route 路径完全不生成 fast_event，行程要素丢失到长期记忆"
+  },
+  {
+    "id": "EV-002",
+    "category": "event_extraction_loss",
+    "query": "后天从广州去深圳出差1天",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "单天出差也应提取 fast_event"
+  },
+  {
+    "id": "EV-003",
+    "category": "event_extraction_loss",
+    "query": "下个月去三亚旅游5天",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "旅游目的应进 fast_event.trip_purpose"
+  },
+  {
+    "id": "EV-004",
+    "category": "event_extraction_loss",
+    "query": "下周从上海去北京探亲4天",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "探亲目的应进 fast_event.trip_purpose"
+  },
+  {
+    "id": "EV-005",
+    "category": "event_extraction_loss",
+    "query": "明天去杭州开会",
+    "expected": {
+      "fast_route_miss": true
+    },
+    "note": "开会=出差，但 fast route 不提取"
+  }
+]

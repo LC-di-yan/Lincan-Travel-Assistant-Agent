@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Flight path -->
+  <path d="M4 16 Q12 4 20 16" stroke-dasharray="3 2" opacity="0.5"/>
+  <!-- Airplane -->
+  <path d="M17 8 L21 6 L21 7.5 L18.5 8.5 L14 12 L8.5 10.5 L7 13 L9 14 L12.5 13 L17 8Z" fill="#4f8ef7" stroke="none" opacity="0.9"/>
+  <!-- Location pin -->
+  <path d="M6 20 C6 17 4 15 4 13 C4 10.8 5.8 9 8 9 C10.2 9 12 10.8 12 13 C12 15 10 17 10 20" fill="none"/>
+  <circle cx="8" cy="13" r="1.5" fill="#4f8ef7" stroke="none"/>
+</svg>

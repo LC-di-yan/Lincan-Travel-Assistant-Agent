@@ -1,0 +1,50 @@
+[
+  {
+    "id": "MI-001",
+    "category": "multi_intent_collapse",
+    "query": "查一下北京的天气和上海的酒店",
+    "expected": {
+      "agent_count_min": 2,
+      "agents_contains": ["information_query", "hotel_search"]
+    },
+    "note": "天气+酒店混合查询，fast route 天气分支只取首城市，酒店错配为同一城市"
+  },
+  {
+    "id": "MI-002",
+    "category": "multi_intent_collapse",
+    "query": "广州天气和美食",
+    "expected": {
+      "agent_count_min": 2,
+      "agents_contains": ["information_query", "restaurant_search"]
+    },
+    "note": "天气+美食，fast route 天气分支不附加 restaurant_search"
+  },
+  {
+    "id": "MI-003",
+    "category": "multi_intent_collapse",
+    "query": "北京景点和酒店",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "景点+酒店无动词组合，走 LLM 由其识别多意图 scenic_search + hotel_search"
+    },
+    "note": "_HOTEL_PATTERNS 收紧后无动词组合不命中，走 LLM 兜底多意图识别"
+  },
+  {
+    "id": "MI-004",
+    "category": "multi_intent_collapse",
+    "query": "杭州天气和景点和美食",
+    "expected": {
+      "agent_count_min": 3
+    },
+    "note": "三意图组合，fast route 命中天气后只附加酒店"
+  },
+  {
+    "id": "MI-005",
+    "category": "multi_intent_collapse",
+    "query": "查上海天气顺便搜一下外滩附近的酒店",
+    "expected": {
+      "agent_count_min": 2
+    },
+    "note": "口语化多意图，fast route 仅识别天气+酒店(上海)"
+  }
+]

@@ -1,0 +1,54 @@
+[
+  {
+    "id": "LC-001",
+    "category": "location_context_over_extract",
+    "query": "上海大学附近的酒店",
+    "expected": {
+      "agents": ["hotel_search"],
+      "place_city": "上海",
+      "place_keywords_contains": "上海大学"
+    },
+    "note": "_extract_location_context 把'上海大学'作为地标提取，keywords 拼成'上海大学 酒店'"
+  },
+  {
+    "id": "LC-002",
+    "category": "location_context_over_extract",
+    "query": "北京大学周边的民宿",
+    "expected": {
+      "agents": ["hotel_search"],
+      "place_city": "北京",
+      "place_keywords_contains": "北京大学"
+    },
+    "note": "高校作为地标，城市仍应正确提取为北京"
+  },
+  {
+    "id": "LC-003",
+    "category": "location_context_over_extract",
+    "query": "复旦大学邯郸校区附近酒店",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "城市名隐含在校名里，走 LLM 由其推断'复旦大学=上海'"
+    },
+    "note": "城市名隐含在校名里，走 LLM 推断"
+  },
+  {
+    "id": "LC-004",
+    "category": "location_context_over_extract",
+    "query": "中关村地铁站附近的酒店",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "城市名未出现，走 LLM 由其推断'中关村=北京'"
+    },
+    "note": "地标含'地铁站'后缀但城市名未出现，走 LLM 推断"
+  },
+  {
+    "id": "LC-005",
+    "category": "location_context_over_extract",
+    "query": "外滩附近的酒店",
+    "expected": {
+      "fast_route_miss": true,
+      "note_for_llm": "城市名未出现，走 LLM 由其推断'外滩=上海'"
+    },
+    "note": "外滩是上海地标但 city 提取失败，走 LLM 推断"
+  }
+]

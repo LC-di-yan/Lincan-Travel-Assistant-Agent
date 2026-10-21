@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Calendar -->
+  <rect x="3" y="4" width="18" height="18" rx="2"/>
+  <line x1="3" y1="10" x2="21" y2="10"/>
+  <line x1="8" y1="2" x2="8" y2="6"/>
+  <line x1="16" y1="2" x2="16" y2="6"/>
+  <!-- Checkmark -->
+  <circle cx="12" cy="16" r="3" fill="#10b981" opacity="0.15" stroke="none"/>
+  <path d="M10 16 L11.5 17.5 L14.5 14.5" stroke="#10b981" stroke-width="1.5"/>
+</svg>
