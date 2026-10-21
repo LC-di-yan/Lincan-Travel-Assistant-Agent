@@ -220,6 +220,7 @@ python verify_llm.py
 ## 文档
 
 - [设计文档与开发指南](docs/DEVELOPER_GUIDE.md)（原 README，含子智能体详解与 CLI 用法）
+- [演示脚本](docs/DEMO_SCRIPT.md)（8 分钟逐幕台词 + 故障预案 + HR 问答）
 - [变更记录](docs/CHANGELOG.md)（2026-10 的故障复盘与修复）
 - [产品展示页](docs/showcase.html)（可离线打开）
 - 其它设计与方案：`docs/` 目录
