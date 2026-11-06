@@ -6,13 +6,13 @@
 
 | 指标 | 1.0.16（升级前） | 1.0.16（P2 收口后） | 2.0.11 |
 |---|---|---|---|
-| pytest | 157 passed, 7 skipped | 进行中（待记录） | 待记录 |
+| pytest | **157 passed, 7 skipped** | **169 passed, 7 skipped** | **169 passed, 7 skipped（0 failed）** |
 | RAG 检索 Hit@1（40 题） | 0.575 | 0.575 | **0.575** |
 | RAG 检索 Hit@3 | 0.900 | 0.900 | **0.900** |
 | RAG 检索 Hit@4 | 0.975 | 0.975 | **0.975** |
 | RAG MRR | 0.744 | 0.744 | **0.744** |
 | 树导航参与 | 38/40 | 38/40 | 38/40 |
-| 静态门禁违规（file:pattern） | 61（初始全量捕获） | 6 →（fork 收尾后清零） | 0 |
+| 静态门禁违规（file:pattern） | 61（初始全量捕获） | 0 | 0 |
 
 ## 升级前依赖快照
 
@@ -53,3 +53,25 @@
 - `experiments/smoke_as2_intention.py / _intention2.py`：意图识别真实 LLM 冒烟（快路由 / LLM 路径）
 - `tools/check_as2_gate.py`：静态门禁（--update / --prune），白名单 `data/as2_gate_allowlist.json`
 - `experiments/impact_audit.py / hazard_scan.py / as211_probe*.py`：升级前的 API 实证与冲击面量化
+
+## 最终验收（2026-11-06 完成）
+
+- **主环境已切换至 agentscope 2.0.11**（mcp 1.27.2 → 2.3.0；Python 3.12.8）
+- **2.0.11 全量测试：169 passed / 7 skipped / 0 failed（exit 0，376s）**
+- **1.0.16 全量测试（收口后）：169 passed / 7 skipped / 0 failed**
+- 静态门禁：全仓 0 残留（8 类模式 × 全部业务代码）
+- 真实通道探活：`python verify_llm.py` → 响应 {"city":"上海","days":3}
+- 回滚：`pip install -r data/baseline/pip-1.0.16.txt`（或 `pip install agentscope==1.0.16`）+ `git revert`
+
+## 已知遗留（非本次升级引入）
+
+1. `tests/test_cli_qa.py` 依赖 `AligoCLI._display_results`，该接口在 cli.py 中已不存在（既有接口漂移）。
+   脚本型测试不会被 pytest 收集，10 题 LLM 管线可跑通，仅结果渲染处报错。
+2. `test_hotel_search.py` 需要 `AMAP_API_KEY` 才能验证高德 POI 路径（本机未配置，脚本自带守卫退出）。
+3. pip 报 `openjiuwen`/`student-profile-agent`/`fastmcp` 的版本冲突均为升级前既有、与本项目代码无关
+   （项目不使用 mcp/fastmcp/pymilvus）。
+4. Windows 控制台 GBK：`scripts/build_rag_index.py` 打印 ✓ 需 `PYTHONIOENCODING=utf-8`（既有问题）。
+
+## 后续阶段（升级计划 P5-P8，未开工）
+
+P5 Skill→Toolkit/FunctionTool、P6 structured output + Pipeline/SOP、P7 EventType SSE + 权限 + 决策层换 JevClassifierModel、P8 灰度双跑。

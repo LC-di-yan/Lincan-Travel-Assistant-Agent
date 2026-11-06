@@ -106,3 +106,4 @@ data/collect*.txt
 data/baseline_p2_tests.txt
 experiments/pytest_*.txt
 data/p2_batch3_tests.txt
+data/commit_msg.txt
