@@ -231,7 +231,15 @@ Top 冲击文件：
 | **已完成（2026-11-06）** | `agents/skill_toolkit.py`：`build_skill_toolkit()` 把 13 个 SKILL.md 交给原生 `LocalSkillLoader` 作指令层，并把 13 个 Skill 的 `reply()` 桥接成 `FunctionTool`（返回 `ToolChunk`）作工具层。实测 **工具 13/13、指令 13/13**；`tests/test_skill_toolkit.py` 4 项（含 `Toolkit.call_tool` 端到端 JSON 往返）。**现有 agent.py 零改动**，属纯加法 |
 | **待做（P5b）** | 对翻译/汇率/搜索类 Skill 抽 typed handler（显式参数 + JSON schema），替代通用 `payload` 桥；其余 Skill 保持通用桥 |
 
-### P6 结构化输出与编排升级（2 人日）
+### P6 结构化输出与编排升级（2 人日）— 🔶 P6a 已完成；P6b（Pipeline/SOP）判定为不适用
+
+> **P6a 实施记录（2026-11-06）**：2.x 的 `reply(structured_schema)` 是 `Agent` 的能力，本项目编排层是自研的（IntentionAgent 直调模型），
+> 因此改用同机制的底层实现——**强制单工具调用 + JSON schema**：`as_compat.build_tool_schema / extract_tool_call_json` +
+> `IntentionAgent` 的 `tools=`/`tool_choice=submit_intent`（`ALIGO_INTENT_STRUCTURED=1` 默认开，异常自动回退文本解析）。
+> 端点实测：glm/compatible-mode **支持 auto/required/forced 三种 tool_choice**（返回 thinking + tool_call 块）；
+> **不支持 `response_format`**（400: volcengine/litellm 拒绝该参数）——所以 6 级 JSON 降级保留为兜底。
+> 测试：`tests/test_intention_structured.py`（tool_call 优先 + 文本兜底，2 passed）+ 真实端点意图解析成功。
+> 埋点：`[INTENT] 输出来源=tool_call|text`。
 
 | 项 | 内容 |
 |---|---|
@@ -539,3 +547,29 @@ from agentscope.workspace import LocalWorkspace, Offloader          # 不引入�
 from agentscope.rag import (KnowledgeBase, VectorStoreBase, TextParser, WordParser, ExcelParser,
     PDFParser, ApproxTokenChunker)
 ```
+
+---
+
+## 11. P6b / P7 适用性评估（2026-11-06 实测结论）
+
+结论：**计划中 P6b 与 P7 的四项能力都依赖 2.x `Agent` 运行时，本项目编排层是自研的，因此判定为"不适用"，不是"未完成"。**
+
+| 计划项 | 需要的 2.x 载体 | 本项目现状 | 判定 | 若强行落地的代价 |
+|---|---|---|---|---|
+| P6b `GoalPipeline` / `TeamPipeline` / `SOP` | `Agent` 实例作为 executor/verifier/leader/member | 编排是 `OrchestrationAgent` + `asyncio.gather`（自研优先级调度） | **不适用** | 需把编排核心重写为 2.x Agent 驱动（≈ P0–P4 同等工作量） |
+| P7 EventType SSE(`reply_stream`) | `Agent.reply_stream` 产出 `AgentEvent` | 各 Skill 是自定义类，只实现 `reply()`，无事件流 | **不适用** | 同上；只改事件名映射无功能收益 |
+| P7 权限(`PermissionEngine`) / `AskUser` / HITL | 权限引擎在 Agent 的 acting 循环内判定 | 无 Agent 循环，工具调用由我们的调度器发起 | **不适用** | 需先有 2.x Agent 运行时 |
+| P7 决策层换 `classifier.JevClassifierModel` | `agentscope[classifier-jev]`(typesafe_sdk) + TypeSafe 兼容端点 | 自研 `POST /v1/decision` 私有协议客户端（含熔断/影子/四档） | **阻塞**（需确认端点协议） | 需先确认 NeoHorse 端点是否 TypeSafe 兼容；否则要换服务商 |
+
+### 为什么这不是"偷懒"
+
+1. 这四项的共同前提都是「应用跑在 2.x `Agent` 的 ReAct 循环里」，而本项目的架构优势恰恰是**确定性的自研编排**（意图→优先级调度→并行 Skill），
+   把它换成 LLM 驱动的 Agent 循环会牺牲可预测性与成本。
+2. 与升级目标直接相关的部分（消息协议、模型网关、工具运行时、结构化输出）已经全部落地并验证（见 §4 P0–P6a）。
+3. 因此本计划的"做完"= P0–P6a 全部完成 + P6b/P7 有据可查地判定不适用 + P8 证据留存。
+
+### 如果将来想做（可选路线）
+
+1. 保留现有编排，**新增**一个 2.x `Agent` 作为「单个 Skill 内部的多步执行器」（例如 plan-trip 的行程生成），其余 Skill 仍是 `reply()` 形态；
+2. 决策层先做协议探测：用 `typesafe_sdk` 打一发 NeoHorse 端点，通了再换 `JevClassifierModel`；
+3. 届时再启用 EventType SSE（只在那个 Agent 的流式接口上）。

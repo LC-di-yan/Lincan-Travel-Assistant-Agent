@@ -82,3 +82,23 @@ P5 Skill→Toolkit/FunctionTool、P6 structured output + Pipeline/SOP、P7 Event
 - 经真实 `LazyAgentRegistry` 装载：**工具 13/13、指令 13/13**
 - `Toolkit.call_tool` 端到端：ToolCallBlock(type="tool_call", input=JSON字符串) → ToolChunk → 最终 ToolResponse，文本为 Skill 的 JSON
 - 结论：**skill 思路没有放弃**；2.x 的 Skill 是"纯指令包"（官方模板原文 "Skills are NOT tools"），本项目 Skill 是"指令+执行"合一，桥接层负责把后者投影到前者之上
+
+## P6a 结构化输出（2026-11-06）
+
+- 机制：强制单工具调用（`tool_choice=ToolChoice(mode="submit_intent")`）+ JSON schema；
+  `as_compat.build_tool_schema / extract_tool_call_json`；`ALIGO_INTENT_STRUCTURED=1`（默认）可关。
+- 端点能力实测（glm/compatible-mode）：
+  - function calling `auto / required / forced(指定工具名)` **全部支持**（响应含 thinking + tool_call 块）
+  - `response_format` **不支持**（400: volcengine/litellm 拒绝）→ 6 级文本降级保留为兜底
+- 测试：`tests/test_intention_structured.py` 2 passed（tool_call 优先 + 文本兜底）
+- 真实端点：意图识别经 tool_call 通道解析成功（intents=[itinerary_planning, hotel_search]）
+- 埋点：`[INTENT] 输出来源=tool_call|text structured_mode=True|False`
+
+## 最终测试矩阵
+
+| 环境 | 结果 |
+|---|---|
+| 1.0.16（P2 收口后） | 169 passed / 7 skipped / 0 failed |
+| 2.0.11（P0–P5 后） | 169 passed / 7 skipped / 0 failed |
+| **2.0.11（P6a 后，当前）** | **175 passed / 7 skipped / 0 failed（354s）** |
+| 门禁 | 0 残留（8 类 1.x 写法） |

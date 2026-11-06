@@ -15,11 +15,18 @@
 """
 from agents.base import SkillAgentBase
 from agentscope.message import Msg  # 仅作类型注解；构造一律走 utils.as_compat.mk_msg
-from utils.as_compat import mk_msg, msg_text, as_messages
+from utils.as_compat import (
+    mk_msg,
+    msg_text,
+    as_messages,
+    build_tool_schema,
+    extract_tool_call_json,
+)
 from typing import Optional, Union, List
 import asyncio
 import json
 import logging
+import os
 import random
 import re
 import traceback
@@ -30,6 +37,34 @@ from utils.decision_router import maybe_use_decision
 from cache.decorators import cached
 
 logger = logging.getLogger(__name__)
+
+# P6a 结构化输出：用「强制单工具调用 + JSON schema」承载意图结果，
+# 与 Agent.reply(structured_schema=...) 同机制（实测 glm/compatible-mode 端点支持
+# auto/required/forced 三种 tool_choice）。任何失败都回退到文本解析。
+try:
+    from agentscope.tool import ToolChoice as _ToolChoice
+except ImportError:  # 1.x 无该类型
+    _ToolChoice = None
+
+_INTENT_STRUCTURED = os.environ.get("ALIGO_INTENT_STRUCTURED", "1") == "1" and _ToolChoice is not None
+
+_INTENT_TOOL_SCHEMA = [
+    build_tool_schema(
+        "submit_intent",
+        "提交意图识别结果（结构化 JSON）",
+        {
+            "reasoning": {"type": "string", "description": "判断依据，30 字以内"},
+            "intents": {"type": "array", "items": {"type": "object"}},
+            "key_entities": {"type": "object"},
+            "fast_event": {"type": "object"},
+            "rewritten_query": {"type": "string"},
+            "needs_clarification": {"type": "boolean"},
+            "clarification_question": {"type": "string"},
+            "agent_schedule": {"type": "array", "items": {"type": "object"}},
+        },
+    )
+]
+_INTENT_TOOL_CHOICE = _ToolChoice(mode="submit_intent") if _ToolChoice is not None else None
 
 
 def _intention_cache_key(x) -> str:
@@ -1256,12 +1291,21 @@ P2（依赖P1结果）: itinerary_planning
         _t_llm_start = _time.monotonic()
         for attempt in range(1, max_attempts + 1):
             try:
-                response = await self.model(as_messages(messages), max_tokens=SCENARIO_TOKENS["intention"])
+                _extra: dict = {}
+                if _INTENT_STRUCTURED:
+                    _extra = {"tools": _INTENT_TOOL_SCHEMA, "tool_choice": _INTENT_TOOL_CHOICE}
+                response = await self.model(as_messages(messages), max_tokens=SCENARIO_TOKENS["intention"], **_extra)
                 _t_llm = (_time.monotonic() - _t_llm_start) * 1000
                 _msg = f"[TIMING] LLM call took {_t_llm:.0f}ms (attempt {attempt}/{max_attempts})"
                 logger.info(_msg)
                 print(_msg, flush=True)
-                parsed = extract_llm_json(response, fallback=None)
+                # 结构化输出优先：tool_call.input 即 JSON；无 tool_call 时回退文本解析
+                parsed = extract_tool_call_json(response, default=None)
+                _parse_source = "tool_call" if parsed is not None else "text"
+                if parsed is None:
+                    parsed = extract_llm_json(response, fallback=None)
+                if attempt == 1:
+                    logger.info("[INTENT] 输出来源=%s structured_mode=%s", _parse_source, _INTENT_STRUCTURED)
                 if parsed is None or (isinstance(parsed, dict) and "error" in parsed):
                     raw_text = extract_llm_text(response, fallback="<empty>")
                     logger.warning(

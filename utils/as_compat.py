@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Dict, Iterable, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -287,3 +287,48 @@ def setup(logging_level: str = "INFO", **kwargs: Any) -> None:
             logging_level=logging_level,
         )
         logger.info("AgentScope %s initialized", agentscope.__version__)
+
+
+# ── 结构化输出（P6a）────────────────────────────────────────────────────────
+def build_tool_schema(name: str, description: str, properties: Dict[str, Any], required: Optional[list] = None) -> Dict[str, Any]:
+    """构造 OpenAI function-tool JSON schema（供强制单工具调用承载结构化输出）。"""
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required or [],
+            },
+        },
+    }
+
+
+def extract_tool_call_json(resp: Any, default: Any = None) -> Any:
+    """从模型响应的 tool_call 块里取 JSON（2.x Agent.reply(structured_schema) 的机制）。
+
+    端点需支持 function calling（glm/compatible-mode 实测支持 auto/required/forced 三种模式）。
+    没有 tool_call 块或 JSON 非法 → 返回 default（调用方自行回退到文本解析）。
+    """
+    blocks = _safe_getattr(resp, "content", None)
+    if not isinstance(blocks, list):
+        return default
+    for block in blocks:
+        if getattr(block, "type", None) != "tool_call" and not (
+            isinstance(block, dict) and block.get("type") == "tool_call"
+        ):
+            continue
+        raw = getattr(block, "input", None)
+        if raw is None and isinstance(block, dict):
+            raw = block.get("input")
+        if raw is None:
+            continue
+        if not isinstance(raw, str):
+            return raw
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return default
+    return default
