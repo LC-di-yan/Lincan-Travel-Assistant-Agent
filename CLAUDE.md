@@ -150,5 +150,6 @@ python cli.py health
 | `data/decision_shadow/` | 决策层影子日志（jsonl，按日滚动） |
 | `docs/decision-layer-dev-plan.md` | 决策层设计与实现文档 |
 | `docs/agentscope-2-upgrade-dev-plan.md` | AgentScope 2.0.11 升级与架构重构开发计划（含实测 API 速查与门禁方案） |
+| `docs/agentscope-2-delivery.md` | 升级交付说明（范围 / 验收 / 踩坑 / 回滚，README 摘要） |
 | `docs/agentscope-2-baseline.md` | 升级基线与双版本验证记录 |
 | `experiments/as211_probe*.py` / `impact_audit.py` / `hazard_scan.py` | 升级计划的实证脚本：wheel API 探测 / 冲击面审计 / 静默点扫描 |

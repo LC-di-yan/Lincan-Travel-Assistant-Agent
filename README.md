@@ -9,7 +9,7 @@
 <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white">
 <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white">
 <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black">
-<img alt="AgentScope" src="https://img.shields.io/badge/AgentScope-1.0.16-blueviolet">
+<img alt="AgentScope" src="https://img.shields.io/badge/AgentScope-2.0.11-blueviolet">
 <img alt="Tests" src="https://img.shields.io/badge/tests-81%20passed-brightgreen">
 </p>
 
@@ -91,7 +91,7 @@
                      └─ 存储：JSON/SQLite · Redis(可选)
 ```
 
-**技术栈**：Python 3.12 · FastAPI · AgentScope 1.0.16 · 树索引 RAG（jieba + rank-bm25） · React 19 + Vite + TypeScript + Zustand + Tailwind。
+**技术栈**：Python 3.12 · FastAPI · AgentScope 2.0.11 · 树索引 RAG（jieba + rank-bm25） · React 19 + Vite + TypeScript + Zustand + Tailwind。
 
 目录速览：
 
@@ -217,6 +217,10 @@ python verify_llm.py
 
 ## 文档
 
+- **AgentScope 2.0.11 升级交付说明**：[docs/agentscope-2-delivery.md](docs/agentscope-2-delivery.md)（范围 / 验收矩阵 / 踩坑索引 / 回滚）
+- 升级开发计划：[docs/agentscope-2-upgrade-dev-plan.md](docs/agentscope-2-upgrade-dev-plan.md)（API 速查 · 冲击面 · P0–P8 · 风险册）
+- 验收基线： [docs/agentscope-2-baseline.md](docs/agentscope-2-baseline.md)（双版本 / 线上模型 / 决策层实测）
+- 双跑对比： [docs/as2-ab-report.md](docs/as2-ab-report.md)（1.0.16 vs 2.0.11 + 回滚演练）
 - [设计文档与开发指南](docs/DEVELOPER_GUIDE.md)（原 README，含子智能体详解与 CLI 用法）
 - [变更记录](docs/CHANGELOG.md)（2026-10 的故障复盘与修复）
 - 其它设计与方案：`docs/` 目录
