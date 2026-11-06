@@ -94,13 +94,29 @@ class JevDecisionBackend:
         from agentscope.classifier import JevClassifierModel
         from agentscope.credential import TypeSafeCredential
 
+        # TypeSafe SDK 会自己在 base_url 后拼 /v1/systemone；
+        # 项目配置的 base_url 惯例带 /v1（https://tokenrhythm.studio/v1），必须剥掉，
+        # 否则变成 /v1/v1/systemone（实测 404/400）。
+        clean = base_url.rstrip("/")
+        if clean.endswith("/v1"):
+            clean = clean[: -len("/v1")]
         self._model = JevClassifierModel(
-            credential=TypeSafeCredential(api_key=api_key, base_url=base_url.rstrip("/")),
+            credential=TypeSafeCredential(api_key=api_key, base_url=clean),
             model=model,
             timeout=float(timeout),
             max_retries=1,
             retry_delay=0.5,
         )
+        # 网关兼容性 workaround（2026-11-06 实测）：typesafe-sdk 的 Config 默认 compression="zstd"，
+        # body ≥1024B 会压缩传输，而 tokenrhythm 的 nginx 对压缩请求体报
+        # 400 "Request body size did not match Content-Length"（小 body 不触发，故单发探针不炸）。
+        # SDK 未暴露开关，只能改 _config；仅影响本模型实例。
+        try:
+            # 注意：必须用 None 而不是 False —— SDK 的判断是 `compression is not None`，
+            # 传 False 会被当成编码器名（报 'bool' object has no attribute 'encode'）。
+            self._model.client._config.compression = None
+        except AttributeError:
+            logger.warning("typesafe-sdk 结构变化：未能关闭 zstd 压缩，大题面可能 400")
 
     async def decide(self, state: str, questions: Mapping[str, dict], timeout: Optional[float] = None) -> Dict[str, Any]:
         import time

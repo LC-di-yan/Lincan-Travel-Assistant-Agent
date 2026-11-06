@@ -38,6 +38,8 @@ async def main() -> int:
     ap.add_argument("--key", default=os.environ.get("TR_KEY") or os.environ.get("NEOHOUSE_API_KEY", ""))
     ap.add_argument("--base", default=os.environ.get("NEOHOUSE_BASE_URL", "https://tokenrhythm.studio/v1"))
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--backend", default=os.environ.get("ALIGO_DECISION_BACKEND", "custom"),
+                    choices=["custom", "jev"], help="custom=/v1/decision 自研客户端；jev=TypeSafe JevClassifierModel")
     args = ap.parse_args()
 
     if not args.key:
@@ -46,7 +48,7 @@ async def main() -> int:
         return 2
 
     os.environ.setdefault("ALIGO_DECISION_MODE", "assist")
-    engine = DecisionEngine(api_key=args.key, base_url=args.base, mode="assist")
+    engine = DecisionEngine(api_key=args.key, base_url=args.base, mode="assist", backend=args.backend)
 
     cases = json.loads(open(CASES, encoding="utf-8").read())["cases"]
     hit_req = hit_gate = hit_intent = 0
@@ -54,6 +56,7 @@ async def main() -> int:
     lat = []
 
     print(f"base_url : {args.base}")
+    print(f"backend  : {args.backend}")
     print(f"api_key  : {mask(args.key)}\n")
 
     for c in cases:

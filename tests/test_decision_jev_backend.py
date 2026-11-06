@@ -130,3 +130,17 @@ def test_from_config_passes_backend():
 
     engine = DecisionEngine.from_config({"mode": "assist", "api_key": "k", "backend": "jev"})
     assert engine is not None and engine.backend == "jev"
+
+# ── 网关兼容性 workaround（线上实测发现，2026-11-06）──────────
+def test_backend_strips_v1_suffix_and_disables_compression():
+    """base_url 带 /v1 时必须剥掉（SDK 自己拼 /v1/systemone）；
+    且必须把 SDK 默认的 zstd 压缩设为 None（网关对大 body 压缩请求体回 400）。"""
+    be = JevDecisionBackend(
+        api_key="sk_tr_test_key_for_construction",
+        base_url="https://tokenrhythm.studio/v1",
+        model="NeoHorse-Jev-4B",
+        timeout=8,
+    )
+    cfg = be._model.client._config
+    assert cfg.base_url == "https://tokenrhythm.studio"
+    assert cfg.compression is None

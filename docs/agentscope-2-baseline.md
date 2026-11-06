@@ -141,3 +141,33 @@ ALIGO_DECISION_MODE=shadow ALIGO_DECISION_BACKEND=jev NEOHOUSE_API_KEY=sk_tr_xxx
   - 意图识别 LLM 路径端到端 ✅（intents=[itinerary_planning, hotel_search]）
   - **全量 pytest：182 passed / 7 skipped / 0 failed（390s，含真实 LLM 用例）**
 - 决策层影响：无（默认 mode=off 不走决策层）；若要启用仍需 tokenrhythm.studio 的 `sk_tr_` key
+
+## 决策层线上验证（2026-11-06，真实 sk_tr_ key）
+
+`.env`：`ALIGO_DECISION_MODE=shadow` + `ALIGO_DECISION_BACKEND=jev` + `NEOHOUSE_*`（gitignored）
+
+### 24 条金标准双后端对比（`python tools/bench_decision.py --backend {custom,jev}`）
+
+| 后端 | is_request | gates | intent | 中位耗时 | P90 |
+|---|---|---|---|---|---|
+| custom（`/v1/decision`，urllib） | 20/24 · 83.3% | 22/24 · 91.7% | 17/18 · 94.4% | 609ms | 1078ms |
+| **jev（`/v1/systemone`，TypeSafe SDK）** | **20/24 · 83.3%** | **22/24 · 91.7%** | **17/18 · 94.4%** | **375ms** | **485ms** |
+
+- 逐条判定一致，MISS 集合相同：MF-004 / FR-004 / TL-002 / CA-001
+- jev 更快（-38% 中位）：SDK 复用 httpx 连接池，自研 urllib 每请求新建连接
+
+### 影子模式真实接线
+
+`maybe_use_decision("帮我订杭州西湖边的酒店")` → source=off（shadow 异步旁路）→ 落盘
+`data/decision_shadow/20261106.jsonl`：`decision.intent=hotel_search`。
+
+### 踩到的两个兼容坑（已修，含回归测试）
+
+1. **base_url 双拼 `/v1`**：TypeSafe SDK 自己拼 `/v1/systemone`，而项目配置的 base_url 惯例带 `/v1`
+   → `/v1/v1/systemone`。修法：构造时剥掉尾部 `/v1`。
+2. **SDK 默认 zstd 压缩**：`Config(compression='zstd')`，body ≥1024B 自动压缩，
+   tokenrhythm 的 nginx 回 400 "Request body size did not match Content-Length"（小 body 不触发，
+   所以单题探针不炸、24 题全炸）。修法：`_config.compression = None`。
+   **注意**：传 `False` 不行——SDK 用 `is not None` 判断，会把它当编码器名报
+   `'bool' object has no attribute 'encode'`。
+3. 测试：`tests/test_decision_jev_backend.py` 8 passed（含上述两项的回归断言）

@@ -559,7 +559,7 @@ from agentscope.rag import (KnowledgeBase, VectorStoreBase, TextParser, WordPars
 | P6b `GoalPipeline` / `TeamPipeline` / `SOP` | `Agent` 实例作为 executor/verifier/leader/member | 编排是 `OrchestrationAgent` + `asyncio.gather`（自研优先级调度） | **不适用** | 需把编排核心重写为 2.x Agent 驱动（≈ P0–P4 同等工作量） |
 | P7 EventType SSE(`reply_stream`) | `Agent.reply_stream` 产出 `AgentEvent` | 各 Skill 是自定义类，只实现 `reply()`，无事件流 | **不适用** | 同上；只改事件名映射无功能收益 |
 | P7 权限(`PermissionEngine`) / `AskUser` / HITL | 权限引擎在 Agent 的 acting 循环内判定 | 无 Agent 循环，工具调用由我们的调度器发起 | **不适用** | 需先有 2.x Agent 运行时 |
-| P7 决策层换 `classifier.JevClassifierModel` | `agentscope[classifier-jev]`(typesafe-sdk) + TypeSafe 兼容端点 | 自研 `POST /v1/decision` 私有协议客户端（含熔断/影子/四档） | ✅ **协议实测兼容，适配器已落地**（`backend="jev"`，默认仍是 custom） | 已实现，仅差真实 key 的线上验证 |
+| P7 决策层换 `classifier.JevClassifierModel` | `agentscope[classifier-jev]`(typesafe-sdk) + TypeSafe 兼容端点 | 自研 `POST /v1/decision` 私有协议客户端（含熔断/影子/四档） | ✅ **已完成：协议兼容 + 适配器 + 24 条金标准双后端等价 + 影子接线**（默认 backend=custom，已切 jev） | — |
 
 ### 为什么这不是"偷懒"
 
@@ -595,4 +595,13 @@ from agentscope.rag import (KnowledgeBase, VectorStoreBase, TextParser, WordPars
 - `DecisionEngine(backend="jev")` / `ALIGO_DECISION_BACKEND=jev`，懒加载，默认 `custom` 零行为变化
 - 测试：`tests/test_decision_jev_backend.py` 7 passed（题面翻译/线格式/拒答/引擎集成/默认值）
 
-**唯一未完成项**：带真实 `sk_tr_` key 的线上端到端（本机 `.env` 里是占位符 `you***`）。
+**线上验证已完成（2026-11-06，真实 key）**：24 条金标准双后端对比——
+  
+| 后端 | is_request | gates | intent | 中位耗时 | P90 |
+|---|---|---|---|---|---|
+| custom（/v1/decision） | 20/24 · 83.3% | 22/24 · 91.7% | 17/18 · 94.4% | 609ms | 1078ms |
+| **jev（/v1/systemone）** | **20/24 · 83.3%** | **22/24 · 91.7%** | **17/18 · 94.4%** | **375ms（-38%）** | **485ms** |
+
+逐条判定一致（同 4 条 MISS）；影子模式经 `maybe_use_decision` 真实接线落盘成功。
+过程中修掉两个兼容问题：① SDK 会在 base_url 后自拼 `/v1`（需剥掉）；② SDK 默认 zstd 压缩大 body，
+网关 nginx 回 400（须 `_config.compression = None`，传 False 会触发 SDK 的 `is not None` 判断 bug）。
