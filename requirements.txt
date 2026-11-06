@@ -4,6 +4,9 @@ setuptools>=69.0.0,<82
 # multi-agent framework（2.0.11：AgentBase/agentscope.init 已删除，统一走 utils.as_compat；mcp>=2.0.0 为其硬依赖）
 agentscope==2.0.11
 
+# 可选：决策层 TypeSafe 后端（仅 ALIGO_DECISION_BACKEND=jev 时需要，默认 custom 不依赖）
+# typesafe-sdk==0.7.5
+
 # HTTP
 requests==2.32.3
 httpx>=0.27.0

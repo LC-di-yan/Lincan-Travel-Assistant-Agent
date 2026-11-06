@@ -100,6 +100,7 @@ python cli.py health
 - `utils/decision_schema.py`：13 类意图 + 6 个能力门控题面；`utils/decision_thresholds.py`：阈值表（`data/decision_thresholds.json` 热覆盖）
 - 影子日志 `data/decision_shadow/*.jsonl`；回放报表 `python tools/replay_shadow.py`
 - 默认 `ALIGO_DECISION_MODE=off`：不配 `NEOHOUSE_API_KEY` 时完全不走决策层
+- 后端可选：`ALIGO_DECISION_BACKEND=custom|jev`（默认 custom=自研 `/v1/decision` 客户端；jev=agentscope `JevClassifierModel` 走 TypeSafe `/v1/systemone`，需 `typesafe-sdk` 与真实 key）
 - 运行状态：`GET /api/health` 的 `decision_layer` 字段（mode / 熔断状态 / last_error）
 - 方案与实测数据：`docs/decision-layer-dev-plan.md`
 
@@ -144,7 +145,7 @@ python cli.py health
 | `.claude/skills/visa-info/data/tree_index/` | 签证知识树索引 |
 | `tests/eval_rag_tree.py` | RAG 检索离线评测（40 题，CI 门禁） |
 | `docs/rag-tree-architecture-dev-plan.md` | RAG 树架构开发方案 |
-| `utils/decision_*.py` | 决策层：schema / types / thresholds / engine / router |
+| `utils/decision_*.py` | 决策层：schema / types / thresholds / engine / router / jev（TypeSafe 后端适配） |
 | `tests/decision_eval/cases.json` | 决策层金标准集（24 条） |
 | `data/decision_shadow/` | 决策层影子日志（jsonl，按日滚动） |
 | `docs/decision-layer-dev-plan.md` | 决策层设计与实现文档 |

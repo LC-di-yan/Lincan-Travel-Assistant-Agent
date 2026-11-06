@@ -102,3 +102,30 @@ P5 Skill→Toolkit/FunctionTool、P6 structured output + Pipeline/SOP、P7 Event
 | 2.0.11（P0–P5 后） | 169 passed / 7 skipped / 0 failed |
 | **2.0.11（P6a 后，当前）** | **175 passed / 7 skipped / 0 failed（354s）** |
 | 门禁 | 0 残留（8 类 1.x 写法） |
+
+## P7 决策层 TypeSafe 后端（2026-11-06）
+
+端点兼容性实测（无鉴权探测，401=存在 / 404=不存在）：
+
+| 路径 | 响应 |
+|---|---|
+| `POST /v1/systemone`（TypeSafe 标准） | 401 UNAUTHORIZED |
+| `POST /v1/decision`（自研客户端） | 401 UNAUTHORIZED |
+| `POST /v1/models`（对照） | 404 NOT_FOUND |
+
+结论：**NeoHorse 端点 TypeSafe 兼容**；载荷 `{state, model, questions}` 与自研逐字段同源，
+题面原语 noul/choice/score 同名，仅 agentscope 分类器层判别字面量为 binary。
+
+落地：
+- `utils/decision_jev.py`：`translate_questions`（noul→BinaryQuestion / choice→ChoiceQuestion）、
+  `to_wire`（BinaryAnswer→noul、ChoiceAnswer→choice+probabilities、RefusalAnswer→ValueError）
+- `DecisionEngine(backend="jev")` / `ALIGO_DECISION_BACKEND=jev`；默认 custom，零行为变化
+- `tests/test_decision_jev_backend.py` 7 passed
+- 全量：**182 passed / 7 skipped / 0 failed**
+
+**未完成**：带真实 `sk_tr_` key 的线上端到端（本机 .env 为占位符）。复现命令：
+```bash
+pip install typesafe-sdk==0.7.5
+ALIGO_DECISION_MODE=shadow ALIGO_DECISION_BACKEND=jev NEOHOUSE_API_KEY=sk_tr_xxx \
+  python tools/bench_decision.py    # 24 条金标准，观察 answers 是否返回 choice/noul
+```

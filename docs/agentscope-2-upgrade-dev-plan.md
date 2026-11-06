@@ -559,7 +559,7 @@ from agentscope.rag import (KnowledgeBase, VectorStoreBase, TextParser, WordPars
 | P6b `GoalPipeline` / `TeamPipeline` / `SOP` | `Agent` 实例作为 executor/verifier/leader/member | 编排是 `OrchestrationAgent` + `asyncio.gather`（自研优先级调度） | **不适用** | 需把编排核心重写为 2.x Agent 驱动（≈ P0–P4 同等工作量） |
 | P7 EventType SSE(`reply_stream`) | `Agent.reply_stream` 产出 `AgentEvent` | 各 Skill 是自定义类，只实现 `reply()`，无事件流 | **不适用** | 同上；只改事件名映射无功能收益 |
 | P7 权限(`PermissionEngine`) / `AskUser` / HITL | 权限引擎在 Agent 的 acting 循环内判定 | 无 Agent 循环，工具调用由我们的调度器发起 | **不适用** | 需先有 2.x Agent 运行时 |
-| P7 决策层换 `classifier.JevClassifierModel` | `agentscope[classifier-jev]`(typesafe_sdk) + TypeSafe 兼容端点 | 自研 `POST /v1/decision` 私有协议客户端（含熔断/影子/四档） | **阻塞**（需确认端点协议） | 需先确认 NeoHorse 端点是否 TypeSafe 兼容；否则要换服务商 |
+| P7 决策层换 `classifier.JevClassifierModel` | `agentscope[classifier-jev]`(typesafe-sdk) + TypeSafe 兼容端点 | 自研 `POST /v1/decision` 私有协议客户端（含熔断/影子/四档） | ✅ **协议实测兼容，适配器已落地**（`backend="jev"`，默认仍是 custom） | 已实现，仅差真实 key 的线上验证 |
 
 ### 为什么这不是"偷懒"
 
@@ -573,3 +573,26 @@ from agentscope.rag import (KnowledgeBase, VectorStoreBase, TextParser, WordPars
 1. 保留现有编排，**新增**一个 2.x `Agent` 作为「单个 Skill 内部的多步执行器」（例如 plan-trip 的行程生成），其余 Skill 仍是 `reply()` 形态；
 2. 决策层先做协议探测：用 `typesafe_sdk` 打一发 NeoHorse 端点，通了再换 `JevClassifierModel`；
 3. 届时再启用 EventType SSE（只在那个 Agent 的流式接口上）。
+
+### P7 决策层：端点兼容性实测（2026-11-06）
+
+用无鉴权请求区分「路径存在(401)」与「路径不存在(404)」：
+
+| 路径 | 响应 | 结论 |
+|---|---|---|
+| `POST https://tokenrhythm.studio/v1/systemone`（TypeSafe SDK 标准） | 401 UNAUTHORIZED | 路径**存在** |
+| `POST https://tokenrhythm.studio/v1/decision`（自研客户端在用） | 401 UNAUTHORIZED | 路径**存在**（别名/旧路径） |
+| `POST https://tokenrhythm.studio/v1/models` | 404 NOT_FOUND | 对照项，确认探测方法有效 |
+
+载荷层面同样同源：TypeSafe SDK 的 `prepare_system_one` 构造 `{"state", "model", "questions"}`，
+与自研 `DecisionEngine.decide()` 的 payload **逐字段一致**；题面原语 `noul/choice/score` 同名。
+唯一差异是 agentscope 分类器层的判别字面量用 `binary`（SDK 层才叫 `Noul`），已在适配器里做映射。
+
+实现（`utils/decision_jev.py`）：
+- `translate_questions`: `noul→BinaryQuestion`、`choice→ChoiceQuestion`（criteria 原样）、`score→ScoreQuestion`
+- `to_wire`: `BinaryAnswer→{"noul": p}`、`ChoiceAnswer→{"choice","probabilities"}`、`ScoreAnswer→{"score"}`、
+  `RefusalAnswer→ValueError`（→ `DecisionUnavailable` → 回退 LLM，比静默默认值安全）
+- `DecisionEngine(backend="jev")` / `ALIGO_DECISION_BACKEND=jev`，懒加载，默认 `custom` 零行为变化
+- 测试：`tests/test_decision_jev_backend.py` 7 passed（题面翻译/线格式/拒答/引擎集成/默认值）
+
+**唯一未完成项**：带真实 `sk_tr_` key 的线上端到端（本机 `.env` 里是占位符 `you***`）。

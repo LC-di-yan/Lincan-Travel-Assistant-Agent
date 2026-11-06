@@ -67,10 +67,13 @@ class DecisionEngine:
         timeout: float = 8.0,
         shadow_dir: str = "",
         circuit: Optional[CircuitBreaker] = None,
+        backend: str = "custom",
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self.backend = backend if backend in ("custom", "jev") else "custom"
+        self._jev_backend = None
         self.mode = mode if mode in MODES else "shadow"
         self.timeout = float(timeout)
         self.shadow_dir = shadow_dir or os.path.join(_PROJECT_ROOT, "data", "decision_shadow")
@@ -95,6 +98,7 @@ class DecisionEngine:
             "base_url": os.environ.get("NEOHOUSE_BASE_URL", "https://tokenrhythm.studio/v1"),
             "model": os.environ.get("NEOHOUSE_MODEL", "NeoHorse-Jev-4B"),
             "timeout": float(os.environ.get("ALIGO_DECISION_TIMEOUT", "8")),
+            "backend": os.environ.get("ALIGO_DECISION_BACKEND", "custom"),
             "shadow_dir": os.environ.get("ALIGO_DECISION_SHADOW_DIR", ""),
         })
 
@@ -112,6 +116,7 @@ class DecisionEngine:
             mode=mode,
             timeout=float(cfg.get("timeout") or 8.0),
             shadow_dir=cfg.get("shadow_dir") or os.path.join(_PROJECT_ROOT, "data", "decision_shadow"),
+            backend=(cfg.get("backend") or "custom").strip().lower(),
         )
 
     # ── 状态 ────────────────────────────────────────────────
@@ -180,7 +185,19 @@ class DecisionEngine:
         payload = {"model": self.model, "state": state, "questions": questions}
 
         try:
-            data = await asyncio.to_thread(self._post_blocking, payload, timeout)
+            if self.backend == "jev":
+                if self._jev_backend is None:
+                    from utils.decision_jev import JevDecisionBackend
+
+                    self._jev_backend = JevDecisionBackend(
+                        api_key=self.api_key,
+                        base_url=self.base_url,
+                        model=self.model,
+                        timeout=self.timeout,
+                    )
+                data = await self._jev_backend.decide(state, questions, timeout=timeout)
+            else:
+                data = await asyncio.to_thread(self._post_blocking, payload, timeout)
         except BaseException as exc:  # noqa: BLE001
             kind = self._classify(exc)
             self.circuit.record_failure()
