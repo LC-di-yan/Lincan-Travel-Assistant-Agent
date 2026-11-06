@@ -1,6 +1,6 @@
 # AgentScope 2.0.11 升级与架构重构开发计划
 
-> 状态：**P0–P4 已完成并验收**（2026-11-06，2.0.11 全量 169 passed / 0 failed）｜P5–P8 待开工 | 版本基线：agentscope==1.0.16 → **2.0.11（已上线主环境）** | 环境：Python 3.12.8
+> 状态：**P0–P6a、P8 已完成并验收**（2026-11-06，2.0.11 全量 175 passed / 0 failed）｜P5 停在做加法式桥接（按用户决定）｜P6b/P7 判定不适用或阻塞（见 §11） | 版本基线：agentscope==1.0.16 → **2.0.11（已上线主环境）** | 环境：Python 3.12.8
 >
 > 一句话结论：**这不是换版本号，是断裂式重设计下的架构重构。** 官方定性 2.0 为 breaking change；本项目对框架的依赖
 > 表面很轻（只用 4 个入口），语义却很重（把 Msg.content 当成 JSON 字符串信箱）。真正危险的不是会报错的删除项，
@@ -221,7 +221,7 @@ Top 冲击文件：
 
 > **P0–P4 = 最小可用升级（5 人日）：完成后系统跑在 2.0.11 且行为与 1.x 对齐。** P5–P7 是架构红利，可按评审结论裁剪。
 
-### P5 Skill → 原生工具运行时（2.5 人日）— 🔶 已完成加法式桥接（typed handler 待做）
+### P5 Skill → 原生工具运行时（2.5 人日）— ✅ 加法式桥接完成（按用户决定停在此，typed handler 不做）
 
 | 项 | 内容 |
 |---|---|
@@ -231,7 +231,7 @@ Top 冲击文件：
 | **已完成（2026-11-06）** | `agents/skill_toolkit.py`：`build_skill_toolkit()` 把 13 个 SKILL.md 交给原生 `LocalSkillLoader` 作指令层，并把 13 个 Skill 的 `reply()` 桥接成 `FunctionTool`（返回 `ToolChunk`）作工具层。实测 **工具 13/13、指令 13/13**；`tests/test_skill_toolkit.py` 4 项（含 `Toolkit.call_tool` 端到端 JSON 往返）。**现有 agent.py 零改动**，属纯加法 |
 | **待做（P5b）** | 对翻译/汇率/搜索类 Skill 抽 typed handler（显式参数 + JSON schema），替代通用 `payload` 桥；其余 Skill 保持通用桥 |
 
-### P6 结构化输出与编排升级（2 人日）— 🔶 P6a 已完成；P6b（Pipeline/SOP）判定为不适用
+### P6 结构化输出与编排升级（2 人日）— ✅ P6a 已完成；P6b（Pipeline/SOP）判定不适用
 
 > **P6a 实施记录（2026-11-06）**：2.x 的 `reply(structured_schema)` 是 `Agent` 的能力，本项目编排层是自研的（IntentionAgent 直调模型），
 > 因此改用同机制的底层实现——**强制单工具调用 + JSON schema**：`as_compat.build_tool_schema / extract_tool_call_json` +
@@ -246,14 +246,14 @@ Top 冲击文件：
 | 任务 | 1. `IntentionAgent` 改 `reply(inputs, structured_schema=IntentDecision)`，`IntentDecision` 复用 `utils/decision_schema.py` 的 13 类意图定义；`json_parser` 降为「端点不支持 tool_choice」兜底。<br>2. `OrchestrationAgent` 保留自研优先级调度，同时把同优先级并行改为可选 `TeamPipeline(leader, members, reset_members)`，**影子对比**后决定去留。<br>3. plan-trip 评估 `SOP/SOPEngine` 与 `GoalPipeline(executor, verifier, verifier_reset_context, max_iters, max_retries)`：用「里程碑 + 逐步校验」替代手写多轮修补。<br>4. `TracingMiddleware`（OTel）替换自研 `[TIMING]` print 埋点；保留 `data/decision_shadow/*.jsonl`。 |
 | 验收 | 24 条金标准 + 40 题 RAG 指标不低于 P0；JSON 解析失败告警下降 ≥ 50% |
 
-### P7 事件流、权限与决策层退役（3 人日）
+### P7 事件流、权限与决策层退役（3 人日）— ⛔ 判定不适用/阻塞（见 §11）
 
 | 项 | 内容 |
 |---|---|
 | 任务 | 1. `server/routes/chat.py` 的 SSE 改由 `reply_stream` + `EventType` 驱动：`TEXT_BLOCK_DELTA→增量文本`、`THINKING_BLOCK_DELTA→thinking 帧`、`TOOL_CALL_START/END→工具卡片`、`TOOL_RESULT_TEXT_DELTA→结果`、`REPLY_END/COMPLETED→done`、`EXCEED_MAX_ITERS/USER_INTERRUPT→错误帧`；`web/src/api/client.ts` **只加不改**（旧事件名保留）。<br>2. 权限门控：`PermissionMode` 默认 `EXPLORE`（只读放行），副作用工具 `ASK` → `REQUIRE_USER_CONFIRM` → 前端确认卡片 → `USER_CONFIRM_RESULT` 回流，配 `ReActConfig(stop_on_reject=True)`。<br>3. 偏好澄清改用原生 `AskUser`（多选）替换自研 `proactive_question`（旧字段保留一版）。<br>4. 决策层：`decision_engine` → `JevClassifierModel`；`decision_router` 内部委托 `ModelRouterMiddleware`；四档语义与熔断保留；`ALIGO_DECISION_MODE=off` 时零调用、不装 `classifier-jev` extras。<br>5. 上下文治理：`ContextConfig` + `compress_context()` + `Offloader`，长行程中间产物落盘。 |
 | 验收 | SSE 帧序列与旧版逐帧 diff（除新增帧）；权限拒绝路径有测试；影子一致率 ≥ 基线；`GET /api/health` 的 `decision_layer` 字段语义不变 |
 
-### P8 灰度、评测与收口（1.5 人日）
+### P8 灰度、评测与收口（1.5 人日）— ✅ 已完成（docs/as2-ab-report.md）
 
 | 项 | 内容 |
 |---|---|
