@@ -129,3 +129,15 @@ pip install typesafe-sdk==0.7.5
 ALIGO_DECISION_MODE=shadow ALIGO_DECISION_BACKEND=jev NEOHOUSE_API_KEY=sk_tr_xxx \
   python tools/bench_decision.py    # 24 条金标准，观察 answers 是否返回 choice/noul
 ```
+
+## 线上模型验证：glm-5.3-flash @ token-api.matvenus.com（2026-11-06）
+
+- `.env` 已配置 `ALIGO_MODEL_NAME=glm-5.3-flash` / `ALIGO_BASE_URL=https://token-api.matvenus.com/v1`（gitignored，不入库）
+- 该凭据是 **OpenAI 兼容 LLM 网关**（/v1/models 200，含 glm-5.3、glm-5.3-flash、kimi-k3.1-pro），
+  **不是** TypeSafe 决策端点：/v1/systemone 与 /v1/decision 均 403 TOKENHUB_ACCESS_DENIED
+- 验证结果：
+  - `build_chat_model` 真实调用 ✅；`verify_llm.py` ✅
+  - **强制工具调用三种模式（auto/required/forced）全部支持** → P6a 结构化输出在新模型上依然成立
+  - 意图识别 LLM 路径端到端 ✅（intents=[itinerary_planning, hotel_search]）
+  - **全量 pytest：182 passed / 7 skipped / 0 failed（390s，含真实 LLM 用例）**
+- 决策层影响：无（默认 mode=off 不走决策层）；若要启用仍需 tokenrhythm.studio 的 `sk_tr_` key
