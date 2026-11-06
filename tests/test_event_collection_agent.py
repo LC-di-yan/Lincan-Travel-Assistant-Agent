@@ -10,8 +10,7 @@ import importlib.util
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from agentscope.message import Msg
-from agentscope.model import OpenAIChatModel
+from utils.as_compat import build_chat_model, mk_msg, msg_json
 from config_agentscope import init_agentscope
 from config import LLM_CONFIG
 
@@ -31,16 +30,15 @@ async def test_event_collection_agent():
     print("初始化 AgentScope...")
     init_agentscope()
 
-    model = OpenAIChatModel(
-        model_name=LLM_CONFIG["model_name"],
-        api_key=LLM_CONFIG["api_key"],
-            stream=False,
-        client_kwargs={"base_url": LLM_CONFIG["base_url"]},
-        generate_kwargs={
+    model = build_chat_model({
+        "model_name": LLM_CONFIG["model_name"],
+        "api_key": LLM_CONFIG["api_key"],
+        "base_url": LLM_CONFIG["base_url"],
+        "generate_kwargs": {
             "temperature": LLM_CONFIG.get("temperature", 0.7),
             "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
         },
-    )
+    }, stream=False)
 
     agent = EventCollectionAgent(
         name="EventCollectionAgent",
@@ -65,11 +63,11 @@ async def test_event_collection_agent():
         print()
 
         try:
-            msg = Msg(name="User", content=query, role="user")
+            msg = mk_msg("User", query, role="user")
             result = await agent.reply(msg)
 
             # 解析JSON结果
-            content = json.loads(result.content) if isinstance(result.content, str) else result.content
+            content = msg_json(result, default=None)
 
             print("【提取结果】")
 

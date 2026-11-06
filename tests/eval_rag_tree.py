@@ -75,15 +75,15 @@ def run(verbose: bool = False, use_llm: bool = False) -> dict:
     if use_llm:
         from config_agentscope import init_agentscope
         from config import LLM_CONFIG
-        from agentscope.model import OpenAIChatModel
+        from utils.as_compat import build_chat_model
         init_agentscope()
-        model = OpenAIChatModel(
-            model_name=LLM_CONFIG["model_name"],
-            api_key=LLM_CONFIG["api_key"],
-            stream=False,
-            client_kwargs={"base_url": LLM_CONFIG["base_url"], "timeout": 60},
-            generate_kwargs={"temperature": 0.2, "max_tokens": 2048},
-        )
+        model = build_chat_model({
+            "model_name": LLM_CONFIG["model_name"],
+            "api_key": LLM_CONFIG["api_key"],
+            "base_url": LLM_CONFIG["base_url"],
+            "client_kwargs": {"timeout": 60},
+            "generate_kwargs": {"temperature": 0.2, "max_tokens": 2048},
+        }, stream=False)
     agent = rag.RAGKnowledgeAgent(name="eval", model=model)
     if not rag._get_tree_store().loaded:
         raise SystemExit("树索引不可用：" + "; ".join(rag._get_tree_store().errors[:3]))

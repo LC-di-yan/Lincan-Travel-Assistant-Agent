@@ -17,8 +17,10 @@ parent_dir = Path(__file__).parent.parent.parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
-from agentscope.message import Msg
-from agentscope.model import OpenAIChatModel
+from agentscope.message import Msg  # 仅类型注解
+
+
+from utils.as_compat import build_chat_model, mk_msg, msg_json
 
 # Import from absolute paths
 import config_agentscope
@@ -63,28 +65,28 @@ async def plan_trip(user_query: str):
     # 初始化 AgentScope
     init_agentscope()
 
-    # 创建模型
-    model = OpenAIChatModel(
-        model_name=LLM_CONFIG["model_name"],
-        api_key=LLM_CONFIG["api_key"],
-            stream=False,
-        client_kwargs={"base_url": LLM_CONFIG["base_url"], "timeout": 60},
-        generate_kwargs={
+    # 创建模型（统一走 as_compat 工厂；1.x/2.x 双版本兼容）
+    model = build_chat_model({
+        "model_name": LLM_CONFIG["model_name"],
+        "api_key": LLM_CONFIG["api_key"],
+        "base_url": LLM_CONFIG["base_url"],
+        "generate_kwargs": {
             "temperature": LLM_CONFIG.get("temperature", 0.7),
             "max_tokens": LLM_CONFIG.get("max_tokens", 8192),
         },
-    )
+        "client_kwargs": {"timeout": 60},
+    })
 
     print("✓ 模型初始化完成")
 
     # 创建用户消息
-    user_msg = Msg(name="user", content=user_query, role="user")
+    user_msg = mk_msg(name="user", content=user_query, role="user")
 
     # 1. 意图识别
     print("\n[步骤 1/3] 正在识别意图...")
     intention_agent = IntentionAgent(name="IntentionAgent", model=model)
     intention_result = await intention_agent.reply(user_msg)
-    intention_data = json.loads(intention_result.content)
+    intention_data = msg_json(intention_result, default={})
 
     print(f"✓ 识别到意图: {', '.join([i['type'] for i in intention_data.get('intents', [])])}")
     print(f"✓ 改写后的查询: {intention_data.get('rewritten_query', user_query)}")
@@ -111,14 +113,14 @@ async def plan_trip(user_query: str):
 
     # 3. 执行协调流程
     print("\n[步骤 3/3] 正在生成行程规划...")
-    orchestration_input = Msg(
+    orchestration_input = mk_msg(
         name="user",
         content=json.dumps(intention_data, ensure_ascii=False),
         role="user"
     )
 
     orchestration_result = await orchestrator.reply(orchestration_input)
-    result_data = json.loads(orchestration_result.content)
+    result_data = msg_json(orchestration_result, default={})
 
     print("✓ 行程规划完成")
 

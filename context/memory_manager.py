@@ -8,6 +8,8 @@ from .long_term_memory import LongTermMemory, PostgresLongTermMemory
 import logging
 import json
 
+from utils.as_compat import as_messages, chat_text, msg_json  # noqa: F401  (msg_json 兜底用)
+
 logger = logging.getLogger(__name__)
 
 
@@ -209,7 +211,9 @@ class MemoryManager:
 请用简洁的语言总结（不超过200字）："""
 
         try:
-            response = await self.llm_model([{"role": "user", "content": summarization_prompt}])
+            response = await self.llm_model(
+                as_messages([{"role": "user", "content": summarization_prompt}])
+            )
 
             def _safe_hasattr(obj, attr):
                 try:
@@ -228,16 +232,25 @@ class MemoryManager:
                     if isinstance(chunk, str):
                         summary = chunk
                     elif _safe_hasattr(chunk, 'content'):
-                        if isinstance(chunk.content, str):
-                            summary = chunk.content
-                        elif isinstance(chunk.content, list):
-                            for item in chunk.content:
-                                if isinstance(item, dict) and item.get('type') == 'text':
-                                    summary = item.get('text', '')
+                        # 2.x content 为块列表，统一经 chat_text 提取；空块保留上一段
+                        try:
+                            summary = chat_text(chunk, fallback=summary) or summary
+                        except (KeyError, AttributeError, TypeError):
+                            pass
             elif _safe_hasattr(response, 'content'):
-                summary = str(response.content)
+                # 1.x content 可能是 str / dict / 块列表：先取纯文本，取不到再按 JSON 序列化保底
+                try:
+                    summary = chat_text(response, fallback="") or ""
+                except (KeyError, AttributeError, TypeError):
+                    summary = ""
+                if not summary.strip():
+                    try:
+                        payload = msg_json(response, default=None)
+                    except (KeyError, AttributeError, TypeError):
+                        payload = None
+                    summary = json.dumps(payload, ensure_ascii=False) if payload is not None else str(response)
             else:
-                summary = str(response)
+                summary = str(response) if isinstance(response, str) else ""
 
             logger.info(f"Generated long-term memory summary ({len(summary)} chars)")
             return summary.strip()

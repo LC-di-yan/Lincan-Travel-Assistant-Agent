@@ -13,13 +13,14 @@
 - 用户询问："我之前说过什么偏好？"
 - 用户询问："我上次去北京是什么时候？"
 """
-from agentscope.agent import AgentBase
+from agents.base import SkillAgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List, Dict
 import json
 import logging
 
 from utils.llm_response import extract_llm_text
+from utils.as_compat import mk_msg, msg_text, as_messages
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ def _unwrap_answer(text: str) -> str:
     return text
 
 
-class MemoryQueryAgent(AgentBase):
+class MemoryQueryAgent(SkillAgentBase):
     """记忆查询智能体 - 基于长期记忆回答用户问题"""
 
     def __init__(
@@ -61,18 +62,15 @@ class MemoryQueryAgent(AgentBase):
 
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         if x is None:
-            return Msg(name=self.name, content=json.dumps({}), role="assistant")
+            return mk_msg(self.name, {})
 
-        # 解析输入
-        if isinstance(x, list):
-            input_content = x[-1].content if x else "{}"
-        else:
-            input_content = x.content
-
+        # 解析输入（经 as_compat 取纯文本，1.x/2.x 均安全）
+        src = x[-1] if isinstance(x, list) and x else None
+        raw = msg_text(src) if src is not None else "{}"
         try:
-            input_data = json.loads(input_content) if isinstance(input_content, str) else input_content
+            input_data = json.loads(raw)
         except json.JSONDecodeError:
-            input_data = {"context": {"rewritten_query": str(input_content)}}
+            input_data = {"context": {"rewritten_query": raw}}
 
         context = input_data.get("context", {})
         user_query = context.get("rewritten_query", "")
@@ -85,11 +83,7 @@ class MemoryQueryAgent(AgentBase):
                         break
 
         if not user_query:
-            return Msg(
-                name=self.name,
-                content=json.dumps({"status": "error", "message": "无法获取用户查询"}),
-                role="assistant"
-            )
+            return mk_msg(self.name, {"status": "error", "message": "无法获取用户查询"})
 
         # 获取长期记忆
         trip_history = []
@@ -141,10 +135,10 @@ class MemoryQueryAgent(AgentBase):
 """
 
         try:
-            response = await self.model([
+            response = await self.model(as_messages([
                 {"role": "system", "content": "你是一个个人记忆助手，帮助用户查询和理解他们的历史记录。"},
                 {"role": "user", "content": prompt}
-            ])
+            ]))
 
             answer = extract_llm_text(response, fallback="无法生成回答")
             if not answer:
@@ -164,22 +158,18 @@ class MemoryQueryAgent(AgentBase):
                 }
             }
 
-            return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+            return mk_msg(self.name, result)
 
         except Exception as e:
             logger.error(f"Memory query failed: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
 
-            return Msg(
-                name=self.name,
-                content=json.dumps({
+            return mk_msg(self.name, {
                     "status": "error",
                     "message": f"记忆查询失败: {str(e)}",
                     "query": user_query
-                }),
-                role="assistant"
-            )
+                })
 
     def _format_trip_history(self, trip_history: List[Dict]) -> str:
         """格式化旅行历史"""

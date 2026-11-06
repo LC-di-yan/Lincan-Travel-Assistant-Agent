@@ -5,8 +5,20 @@ Usage: python tests/test_cli_qa.py
 """
 import sys
 import asyncio
+import io
 import json
 from io import StringIO
+
+# 修复 Windows 终端 GBK 编码问题（✓ 等字符 GBK 无法编码）。
+# 注意：必须用 reconfigure 而不是新建 TextIOWrapper —— 后者会在 GC 时关闭底层 buffer，
+# 把 pytest 的 capture 缓冲区一起关掉（症状：collection 阶段 ValueError: I/O operation on closed file）。
+if sys.platform == "win32":
+    try:
+        enc = (getattr(sys.stdout, "encoding", "") or "").lower()
+        if enc not in ("utf-8", "utf8"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError, io.UnsupportedOperation):
+        pass  # pytest capture 等非文件流不支持 reconfigure，忽略即可
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict
@@ -58,28 +70,26 @@ async def main():
 
     from config import LLM_CONFIG
     from config_agentscope import init_agentscope
-    from agentscope.model import OpenAIChatModel
+    from utils.as_compat import build_chat_model, mk_msg, msg_json
     from context.memory_manager import MemoryManager
     from agents.intention_agent import IntentionAgent
     from agents.orchestration_agent import OrchestrationAgent
     from agents.lazy_agent_registry import LazyAgentRegistry
     # Removed manual imports of sub-agents as they are now dynamically loaded
-    from agentscope.message import Msg
 
     # 初始化 AgentScope
     init_agentscope()
 
     # 初始化模型
-    model = OpenAIChatModel(
-        model_name=LLM_CONFIG["model_name"],
-        api_key=LLM_CONFIG["api_key"],
-            stream=False,
-        client_kwargs={"base_url": LLM_CONFIG["base_url"]},
-        generate_kwargs={
+    model = build_chat_model({
+        "model_name": LLM_CONFIG["model_name"],
+        "api_key": LLM_CONFIG["api_key"],
+        "base_url": LLM_CONFIG["base_url"],
+        "generate_kwargs": {
             "temperature": LLM_CONFIG.get("temperature", 0.7),
             "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
         },
-    )
+    }, stream=False)
 
     # 初始化记忆管理器
     memory_manager = MemoryManager(
@@ -121,14 +131,14 @@ async def main():
 
         try:
             # 1. 意图识别
-            context_messages = [Msg(name="user", content=question, role="user")]
+            context_messages = [mk_msg("user", question, role="user")]
             intention_result = await intention_agent.reply(context_messages)
 
             # 2. 编排执行
             orchestration_result = await orchestrator.reply(intention_result)
 
             # 3. 解析结果并用 CLI 同一套逻辑打印（捕获为字符串）
-            result_data = json.loads(orchestration_result.content)
+            result_data = msg_json(orchestration_result, default=None)
             duration = (datetime.now() - start).total_seconds()
             answer = capture_display_results(result_data)
 

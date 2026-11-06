@@ -2,7 +2,7 @@
 费用记录智能体
 职责：解析自然语言费用记录、查询汇总、删除费用
 """
-from agentscope.agent import AgentBase
+from agents.base import SkillAgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List
 import json
@@ -10,6 +10,7 @@ import logging
 from datetime import date
 
 from utils.llm_response import extract_llm_json
+from utils.as_compat import mk_msg, msg_text, as_messages
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ def _is_pg(memory_manager) -> bool:
     return isinstance(memory_manager.long_term, PostgresLongTermMemory)
 
 
-class ExpenseTrackerAgent(AgentBase):
+class ExpenseTrackerAgent(SkillAgentBase):
     """费用记录智能体"""
 
     def __init__(self, name: str = "ExpenseTrackerAgent", model=None, memory_manager=None, **kwargs):
@@ -34,20 +35,18 @@ class ExpenseTrackerAgent(AgentBase):
 
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         if x is None:
-            return Msg(name=self.name, content=json.dumps({"error": "No input"}), role="assistant")
+            return mk_msg(self.name, {"error": "No input"})
 
-        content = x.content if not isinstance(x, list) else x[-1].content
+        src = x[-1] if isinstance(x, list) else x
+        raw = msg_text(src)
         fast_expense = None
-        if isinstance(content, str):
-            try:
-                data = json.loads(content)
-                context = data.get("context", {})
-                user_query = context.get("rewritten_query", "") or str(data)
-                fast_expense = data.get("fast_expense")
-            except json.JSONDecodeError:
-                user_query = content
-        else:
-            user_query = str(content)
+        try:
+            data = json.loads(raw)
+            context = data.get("context", {})
+            user_query = context.get("rewritten_query", "") or str(data)
+            fast_expense = data.get("fast_expense")
+        except json.JSONDecodeError:
+            user_query = raw
 
         # 获取已有费用记录
         is_pg = _is_pg(self.memory_manager)
@@ -69,7 +68,7 @@ class ExpenseTrackerAgent(AgentBase):
                 },
             }
             result = await self._execute_action(result, existing_expenses, is_pg)
-            return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+            return mk_msg(self.name, result)
 
         today = date.today().isoformat()
         expenses_str = json.dumps(existing_expenses[-20:], ensure_ascii=False, indent=2)
@@ -102,7 +101,7 @@ class ExpenseTrackerAgent(AgentBase):
 """
 
         try:
-            response = await self.model([{"role": "user", "content": prompt}])
+            response = await self.model(as_messages([{"role": "user", "content": prompt}]))
             result = extract_llm_json(response)
         except Exception as e:
             logger.error(f"Expense parsing failed: {e}")
@@ -110,7 +109,7 @@ class ExpenseTrackerAgent(AgentBase):
 
         result = await self._execute_action(result, existing_expenses, is_pg)
 
-        return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+        return mk_msg(self.name, result)
 
     async def _execute_action(self, parsed: dict, existing: list, is_pg: bool) -> dict:
         """执行费用操作"""

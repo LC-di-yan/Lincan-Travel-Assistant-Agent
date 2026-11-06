@@ -12,7 +12,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from agents.intention_agent import IntentionAgent
-from agentscope.message import Msg
+from utils.as_compat import mk_msg, msg_json, msg_text
 
 
 class FakeModel:
@@ -57,13 +57,13 @@ def agent_factory():
 
 class TestIntentionAgentRetry:
     async def _call(self, agent, query="hello"):
-        msg = Msg(name="User", content=query, role="user")
+        msg = mk_msg("User", query, role="user")
         return await agent.reply(msg)
 
     def test_valid_response_parsed(self, agent_factory):
         agent = agent_factory([_make_response('{"intents": [{"type": "event_collection"}]}')])
         result = asyncio.run(self._call(agent))
-        data = json.loads(result.content)
+        data = msg_json(result, default={})
         assert data["intents"][0]["type"] == "event_collection"
         assert agent.model.call_count == 1
 
@@ -73,7 +73,7 @@ class TestIntentionAgentRetry:
             _make_response('{"intents": [{"type": "itinerary_planning"}]}'),
         ])
         result = asyncio.run(self._call(agent))
-        data = json.loads(result.content)
+        data = msg_json(result, default={})
         assert data["intents"][0]["type"] == "itinerary_planning"
         assert agent.model.call_count == 2
 
@@ -83,7 +83,7 @@ class TestIntentionAgentRetry:
             _make_response("still not json"),
         ])
         result = asyncio.run(self._call(agent))
-        data = json.loads(result.content)
+        data = msg_json(result, default={})
         assert data["intents"][0]["type"] == "information_query"
         # 2026-10-20：兜底话术不再回显模型原文，只给一句概括
         assert "默认策略" in data["reasoning"]
@@ -96,7 +96,7 @@ class TestIntentionAgentRetry:
             _make_response('{"intents": [{"type": "memory_query"}]}'),
         ])
         result = asyncio.run(self._call(agent))
-        data = json.loads(result.content)
+        data = msg_json(result, default={})
         assert data["intents"][0]["type"] == "memory_query"
         assert agent.model.call_count == 2
 
@@ -106,7 +106,7 @@ class TestIntentionAgentRetry:
             RuntimeError("boom again"),
         ])
         result = asyncio.run(self._call(agent))
-        data = json.loads(result.content)
+        data = msg_json(result, default={})
         assert data["intents"][0]["type"] == "information_query"
         # 2026-10-20：侧栏 REASONING 会原样展示，异常原文不再进来
         assert "默认策略" in data["reasoning"]
@@ -117,4 +117,4 @@ class TestIntentionAgentRetry:
     def test_empty_input_returns_empty_json(self, agent_factory):
         agent = agent_factory([])
         result = asyncio.run(agent.reply(None))
-        assert result.content == "{}"
+        assert msg_text(result) == "{}"

@@ -1,9 +1,11 @@
 """
 行程规划智能体
 """
-from agentscope.agent import AgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List, Dict, Any
+
+from agents.base import SkillAgentBase
+from utils.as_compat import mk_msg, msg_text, as_messages
 import json
 import logging
 
@@ -15,7 +17,7 @@ from cache.decorators import cached
 logger = logging.getLogger(__name__)
 
 
-class ItineraryPlanningAgent(AgentBase):
+class ItineraryPlanningAgent(SkillAgentBase):
     """
     行程规划智能体（主协调）
     职责：协调事项收集、路线规划、酒店规划等多个子任务
@@ -33,10 +35,10 @@ class ItineraryPlanningAgent(AgentBase):
     @cached("itinerary", ttl=3600)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         if x is None:
-            return Msg(name=self.name, content={}, role="assistant")
+            return mk_msg(self.name, {})
 
-        # 解析输入内容
-        content = x.content if not isinstance(x, list) else x[-1].content
+        # 解析输入内容（msg_text 收敛 1.x str / 2.x 块列表）
+        content = msg_text(x[-1] if isinstance(x, list) else x)
 
         # 初始化变量
         user_query = ""
@@ -56,7 +58,7 @@ class ItineraryPlanningAgent(AgentBase):
                 user_query = content
         elif isinstance(content, dict):
             context_info = content
-            user_query = content.get("rewritten_query", str(content))
+            user_query = content.get("rewritten_query", "")
             user_preferences = content.get("user_preferences", {})
 
         # 整合所有可用信息
@@ -155,7 +157,7 @@ class ItineraryPlanningAgent(AgentBase):
             # 调用模型 - 使用消息列表格式
             # 关闭「思考」：本任务按固定 schema 输出 JSON，思考 token 占输出量 30~50%，
             # 实测 2.7s → 0.9s；上游不支持该参数时自动回退。
-            _msgs = [{"role": "user", "content": prompt}]
+            _msgs = as_messages([{"role": "user", "content": prompt}])
             try:
                 response = await self.model(
                     _msgs, max_tokens=budget,
@@ -249,4 +251,4 @@ class ItineraryPlanningAgent(AgentBase):
             }
 
         # 返回JSON字符串格式
-        return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+        return mk_msg(self.name, json.dumps(result, ensure_ascii=False))

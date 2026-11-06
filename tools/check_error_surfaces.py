@@ -29,12 +29,12 @@ def leaks(text: str) -> bool:
 
 
 async def check_intention() -> bool:
-    from agentscope.message import Msg
     from agents.intention_agent import IntentionAgent
+    from utils.as_compat import mk_msg, msg_json
 
     agent = IntentionAgent(name="IntentionAgent", model=DeniedModel())
-    msg = await agent.reply(Msg(name="user", content="我住酒店喜欢汉庭", role="user"))
-    data = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+    msg = await agent.reply(mk_msg("user", "我住酒店喜欢汉庭", role="user"))
+    data = msg_json(msg, default={})
     reasoning = str(data.get("reasoning", ""))
     print("reasoning :", reasoning)
     ok = (not leaks(reasoning)) and "默认策略" in reasoning

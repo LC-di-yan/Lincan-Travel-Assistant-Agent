@@ -13,8 +13,9 @@
 - 输入：用户query（自然语言）
 - 输出：推理过程生成（包含reasoning+原因） + 多意图识别（原因） + 智能Query改写 + 构建结构化决策
 """
-from agentscope.agent import AgentBase
-from agentscope.message import Msg
+from agents.base import SkillAgentBase
+from agentscope.message import Msg  # 仅作类型注解；构造一律走 utils.as_compat.mk_msg
+from utils.as_compat import mk_msg, msg_text, as_messages
 from typing import Optional, Union, List
 import asyncio
 import json
@@ -40,12 +41,12 @@ def _intention_cache_key(x) -> str:
     if isinstance(x, list):
         return json.dumps(
             [
-                {"role": getattr(m, "role", ""), "content": getattr(m, "content", "")[:200]}
+                {"role": getattr(m, "role", ""), "content": msg_text(m)[:200]}
                 for m in x
             ],
             ensure_ascii=False,
         )
-    return x.content if hasattr(x, "content") else str(x)
+    return msg_text(x) if hasattr(x, "content") else str(x)
 
 
 # ── 快速路由规则 ──────────────────────────────────────────
@@ -969,7 +970,7 @@ def _fast_match(query: str, dialogue_history: list = None) -> Optional[dict]:
     return None
 
 
-class IntentionAgent(AgentBase):
+class IntentionAgent(SkillAgentBase):
     """意图识别智能体（IntentionRecognitionAgent）"""
 
     def __init__(self, name: str = "IntentionRecognitionAgent", model=None, **kwargs):
@@ -989,27 +990,28 @@ class IntentionAgent(AgentBase):
         4. 构建结构化决策
         """
         if x is None:
-            return Msg(name=self.name, content=json.dumps({}), role="assistant")
+            return mk_msg(self.name, {})
 
         # 获取用户查询
         if isinstance(x, list):
-            user_query = x[-1].content if x else ""
+            user_query = msg_text(x[-1]) if x else ""
             self.conversation_history = []
             for msg in x[:-1]:
                 if hasattr(msg, 'content') and hasattr(msg, 'role'):
                     if msg.role == "system":
-                        summary = msg.content[:500] if len(msg.content) > 500 else msg.content
+                        summary = msg_text(msg)[:500]
                         self.conversation_history.append(f"[系统记忆]\n{summary}")
                     else:
                         role_name = "用户" if msg.role == "user" else "助手"
                         # 助手消息放宽到 1500 字（存的是自然语言摘要，需要完整保留上下文）
                         max_len = 1500 if msg.role == "assistant" else 300
-                        content = msg.content[:max_len] if len(msg.content) > max_len else msg.content
-                        if len(msg.content) > max_len:
+                        text = msg_text(msg)
+                        content = text[:max_len]
+                        if len(text) > max_len:
                             content += "..."
                         self.conversation_history.append(f"{role_name}: {content}")
         else:
-            user_query = x.content
+            user_query = msg_text(x)
 
         # ── 快速路径：规则匹配跳过 LLM ──
         # 提取纯对话历史（不含系统记忆），用于判断是否为追问
@@ -1029,7 +1031,7 @@ class IntentionAgent(AgentBase):
                 _msg = f"[TIMING] Elliptical resolved in {(_time.monotonic() - _t0) * 1000:.0f}ms, query: {user_query[:50]}"
                 logger.info(_msg)
                 print(_msg, flush=True)
-                return Msg(name=self.name, content=json.dumps(_elliptical, ensure_ascii=False), role="assistant")
+                return mk_msg(self.name, _elliptical)
 
         fast = _fast_match(user_query, dialogue_history=_dialogue)
 
@@ -1050,7 +1052,7 @@ class IntentionAgent(AgentBase):
             print(_msg, flush=True)
             if _decision is not None:
                 _decision.log_outcome("decision" if _decision.source == "decision" else "fast", fast)
-            return Msg(name=self.name, content=json.dumps(fast, ensure_ascii=False), role="assistant")
+            return mk_msg(self.name, fast)
         _msg = f"[TIMING] Fast route miss in {_t_fast:.0f}ms, falling back to LLM"
         logger.info(_msg)
         print(_msg, flush=True)
@@ -1254,7 +1256,7 @@ P2（依赖P1结果）: itinerary_planning
         _t_llm_start = _time.monotonic()
         for attempt in range(1, max_attempts + 1):
             try:
-                response = await self.model(messages, max_tokens=SCENARIO_TOKENS["intention"])
+                response = await self.model(as_messages(messages), max_tokens=SCENARIO_TOKENS["intention"])
                 _t_llm = (_time.monotonic() - _t_llm_start) * 1000
                 _msg = f"[TIMING] LLM call took {_t_llm:.0f}ms (attempt {attempt}/{max_attempts})"
                 logger.info(_msg)
@@ -1342,4 +1344,4 @@ P2（依赖P1结果）: itinerary_planning
             _decision.log_outcome("llm", result)
 
         # 将结果转换为JSON字符串，因为Msg的content必须是字符串
-        return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+        return mk_msg(self.name, result)

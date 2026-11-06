@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+from utils.as_compat import as_messages
 from utils.llm_response import extract_json_object, extract_llm_text
 
 logger = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ class Answerer:
         import asyncio
         try:
             resp = await asyncio.wait_for(
-                self.model([{"role": "system", "content": system or self.system}, {"role": "user", "content": prompt}]),
+                self.model(as_messages([{"role": "system", "content": system or self.system}, {"role": "user", "content": prompt}])),
                 timeout=self.timeout,
             )
             return extract_llm_text(resp, "")

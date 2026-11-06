@@ -94,17 +94,19 @@ async def run_health_check(
         return False, "AgentScope not installed"
 
     try:
-        model = OpenAIChatModel(
-            model_name=model_name,
-            api_key=api_key,
-            stream=False,
-            client_kwargs={"base_url": base_url, "timeout": timeout_sec},
-            generate_kwargs={
+        from utils.as_compat import as_messages, build_chat_model
+
+        model = build_chat_model({
+            "model_name": model_name,
+            "api_key": api_key,
+            "base_url": base_url,
+            "generate_kwargs": {
                 "temperature": 0,
                 "max_tokens": 5,
             },
-        )
-        messages = [{"role": "user", "content": "1"}]
+            "client_kwargs": {"timeout": timeout_sec},
+        })
+        messages = as_messages([{ "role": "user", "content": "1" }])
         response = await model(messages)
         text = extract_llm_text(response)
         if text is not None and len(str(text)) >= 0:

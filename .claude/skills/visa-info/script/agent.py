@@ -14,15 +14,8 @@ from typing import Dict, List, Optional, Union
 
 from agentscope.message import Msg
 
-try:  # requirements 锁定 agentscope==1.0.16；2.x 兜底保证本技能可独立运行/测试
-    from agentscope.agent import AgentBase
-except ImportError:  # pragma: no cover
-    class AgentBase:
-        def __init__(self):
-            pass
-
-        async def __call__(self, x):
-            return await self.reply(x)
+from agents.base import SkillAgentBase
+from utils.as_compat import mk_msg, msg_text
 
 from cache.decorators import cached
 from rag_core.tree_store import TreeStore
@@ -58,15 +51,7 @@ def _get_bm25() -> BM25Fallback:
     return _bm25
 
 
-def _mk_msg(name: str, content: str, role: str = "assistant"):
-    """跨版本构造 Msg：1.x 收字符串，2.x（pydantic）要求块列表。"""
-    try:
-        return Msg(name=name, content=content, role=role)
-    except Exception:  # pragma: no cover
-        return Msg(name=name, content=[{"type": "text", "text": content}], role=role)
-
-
-class VisaInfoAgent(AgentBase):
+class VisaInfoAgent(SkillAgentBase):
     """签证信息智能体（树导航版）"""
 
     def __init__(self, name: str = "VisaInfoAgent", model=None, top_k: int = 4, **kwargs):
@@ -137,17 +122,12 @@ class VisaInfoAgent(AgentBase):
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         """签证问答主流程（对外契约与旧版一致）"""
         if x is None:
-            return _mk_msg(self.name, json.dumps({}))
+            return mk_msg(self.name, json.dumps({}))
 
-        content = x[-1].content if isinstance(x, list) else x.content
-        if isinstance(content, list):  # agentscope 2.x 块列表
-            content = "\n".join(
-                b.get("text", "") if isinstance(b, dict) else getattr(b, "text", "")
-                for b in content if b)
-        user_query = content
-        if isinstance(content, str) and content.strip().startswith("{"):
+        user_query = msg_text(x[-1] if isinstance(x, list) else x)
+        if user_query.strip().startswith("{"):
             try:
-                data = json.loads(content)
+                data = json.loads(user_query)
                 if isinstance(data, dict):
                     ctx = data.get("context")
                     if isinstance(ctx, dict) and ctx.get("rewritten_query"):
@@ -159,7 +139,7 @@ class VisaInfoAgent(AgentBase):
 
         docs = await self.retrieve(user_query)
         if not docs:
-            return _mk_msg(self.name, json.dumps({
+            return mk_msg(self.name, json.dumps({
                 "status": "no_knowledge", "query": user_query,
                 "answer": NO_KNOWLEDGE_HINT, "retrieved_documents": []}, ensure_ascii=False))
 
@@ -203,7 +183,7 @@ class VisaInfoAgent(AgentBase):
                 for d in docs
             ],
         }
-        return _mk_msg(self.name, json.dumps(result, ensure_ascii=False))
+        return mk_msg(self.name, json.dumps(result, ensure_ascii=False))
 
     def search_knowledge(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
         """兼容旧同步检索入口。"""

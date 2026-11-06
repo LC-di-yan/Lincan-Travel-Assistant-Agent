@@ -27,8 +27,7 @@ import importlib.util
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from agentscope.message import Msg
-from agentscope.model import OpenAIChatModel
+from utils.as_compat import build_chat_model, mk_msg, msg_json
 from config_agentscope import init_agentscope
 from config import LLM_CONFIG
 
@@ -59,16 +58,15 @@ async def test_information_query_agent():
     print()
 
     # 创建模型
-    model = OpenAIChatModel(
-        model_name=LLM_CONFIG["model_name"],
-        api_key=LLM_CONFIG["api_key"],
-        client_kwargs={"base_url": LLM_CONFIG["base_url"]},
-        generate_kwargs={
+    model = build_chat_model({
+        "model_name": LLM_CONFIG["model_name"],
+        "api_key": LLM_CONFIG["api_key"],
+        "base_url": LLM_CONFIG["base_url"],
+        "generate_kwargs": {
             "temperature": LLM_CONFIG.get("temperature", 0.7),
             "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
         },
-        stream=False,
-    )
+    }, stream=False)
 
     # 创建智能体
     agent = InformationQueryAgent(
@@ -123,13 +121,13 @@ async def test_information_query_agent():
         start_time = time.time()
         try:
             # 创建消息
-            user_msg = Msg(name="User", content=test_case['query'], role="user")
+            user_msg = mk_msg("User", test_case['query'], role="user")
 
             # 调用智能体
             result = await agent.reply(user_msg)
 
             # 解析结果
-            result_data = json.loads(result.content)
+            result_data = msg_json(result, default=None)
 
             elapsed = time.time() - start_time
             total_time += elapsed

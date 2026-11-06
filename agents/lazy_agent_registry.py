@@ -4,6 +4,7 @@
 懒加载智能体注册器
 基于 .claude/skills 目录结构的插件化加载机制
 """
+import asyncio
 import os
 import sys
 import json
@@ -12,7 +13,7 @@ import inspect
 from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
-from agentscope.agent import AgentBase
+from agents.base import SkillAgentBase
 
 logger = logging.getLogger(__name__)
 
@@ -224,12 +225,15 @@ class LazyAgentRegistry:
             # 2. 查找 Agent 类
             agent_class = None
             for name, obj in inspect.getmembers(module):
-                if inspect.isclass(obj) and issubclass(obj, AgentBase) and obj is not AgentBase:
+                if not inspect.isclass(obj) or obj is SkillAgentBase:
+                    continue
+                # 兼容两种形态：SkillAgentBase 子类；或自带 async reply 的鸭型类
+                if issubclass(obj, SkillAgentBase) or asyncio.iscoroutinefunction(getattr(obj, "reply", None)):
                     agent_class = obj
                     break
 
             if not agent_class:
-                raise ValueError(f"No AgentBase subclass found in {script_path}")
+                raise ValueError(f"No SkillAgentBase subclass found in {script_path}")
 
             # 3. 实例化
             init_params = {

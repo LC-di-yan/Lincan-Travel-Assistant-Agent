@@ -1,8 +1,8 @@
 # base (milvus_lite depends on pkg_resources, requires setuptools<82)
 setuptools>=69.0.0,<82
 
-# multi-agent framework
-agentscope==1.0.16
+# multi-agent framework（2.0.11：AgentBase/agentscope.init 已删除，统一走 utils.as_compat；mcp>=2.0.0 为其硬依赖）
+agentscope==2.0.11
 
 # HTTP
 requests==2.32.3

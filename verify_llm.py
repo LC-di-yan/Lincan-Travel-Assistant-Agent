@@ -13,6 +13,7 @@ import sys
 from config import LLM_CONFIG, LLM_FALLBACKS, LLM_PROBE_ON_STARTUP
 from utils.llm_failover import build_chat_model
 from utils.llm_errors import describe
+from utils.as_compat import as_messages
 
 
 def _mask(key: str) -> str:
@@ -45,7 +46,7 @@ async def main() -> int:
     print("\n── 真实请求 ────────────────────────────────────────")
     try:
         resp = await model(
-            [{"role": "user", "content": "只输出 JSON：{\"city\":\"上海\",\"days\":3}"}],
+            as_messages([{"role": "user", "content": "只输出 JSON：{\"city\":\"上海\",\"days\":3}"}]),
             max_tokens=200,
         )
     except Exception as exc:  # noqa: BLE001

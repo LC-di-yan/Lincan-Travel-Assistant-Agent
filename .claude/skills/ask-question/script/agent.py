@@ -19,23 +19,8 @@ from typing import Dict, List, Optional, Union
 
 from agentscope.message import Msg  # Msg 在 1.x/2.x 均存在
 
-try:  # requirements 锁定 agentscope==1.0.16；2.x 移除了 AgentBase，兜底让本技能可独立运行与测试
-    from agentscope.agent import AgentBase
-except ImportError:  # pragma: no cover
-    class AgentBase:  # 最小基类：沿用 1.x 的调用约定（__call__ -> await reply）
-        def __init__(self):
-            pass
-
-        async def __call__(self, x):
-            return await self.reply(x)
-
-
-def _mk_msg(name: str, content: str, role: str = "assistant"):
-    """跨版本构造 Msg：1.x 收字符串，2.x（pydantic）要求 content 为块列表。"""
-    try:
-        return Msg(name=name, content=content, role=role)
-    except Exception:  # pragma: no cover - agentscope 2.x
-        return Msg(name=name, content=[{"type": "text", "text": content}], role=role)
+from agents.base import SkillAgentBase
+from utils.as_compat import mk_msg, msg_text
 
 from cache.decorators import cached
 
@@ -140,7 +125,7 @@ def _hits_to_docs(hits) -> List[Dict]:
     return out
 
 
-class RAGKnowledgeAgent(AgentBase):
+class RAGKnowledgeAgent(SkillAgentBase):
     """RAG 知识库智能体（树导航版）"""
 
     def __init__(
@@ -262,9 +247,9 @@ class RAGKnowledgeAgent(AgentBase):
         if not self.initialized:
             return self._err("RAG Agent not initialized")
         if x is None:
-            return _mk_msg(self.name, json.dumps({}))
+            return mk_msg(self.name, json.dumps({}))
 
-        content = x[-1].content if isinstance(x, list) else x.content
+        content = msg_text(x[-1] if isinstance(x, list) else x)
         user_query = self._extract_query(content)
 
         # 0) 清单类问题 → 直接列文档
@@ -317,7 +302,7 @@ class RAGKnowledgeAgent(AgentBase):
             ],
             "retrieval": nav_meta,
         }
-        return _mk_msg(self.name, json.dumps(result, ensure_ascii=False))
+        return mk_msg(self.name, json.dumps(result, ensure_ascii=False))
 
     # ── 兼容旧接口 ──────────────────────────────────────────
     def search_knowledge(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
@@ -384,13 +369,6 @@ class RAGKnowledgeAgent(AgentBase):
         return out
 
     def _extract_query(self, content) -> str:
-        if isinstance(content, list):  # agentscope 2.x：content 为块列表
-            parts = []
-            for b in content:
-                t = b.get("text", "") if isinstance(b, dict) else getattr(b, "text", "")
-                if t:
-                    parts.append(t)
-            content = "\n".join(parts)
         if isinstance(content, str) and content.strip().startswith("{"):
             try:
                 data = json.loads(content)
@@ -402,7 +380,7 @@ class RAGKnowledgeAgent(AgentBase):
                         return data["rewritten_query"]
             except Exception:  # noqa: BLE001
                 pass
-        return content if isinstance(content, str) else str(content)
+        return content
 
     def _document_list_reply(self, query: str) -> Msg:
         docs = list_documents()
@@ -411,13 +389,13 @@ class RAGKnowledgeAgent(AgentBase):
             lines.append(f"{i}. {d['title']}（{d['file']}，约 {d['chars'] // 1000}k 字）")
         result = {"status": "document_list", "query": query, "answer": "\n".join(lines),
                   "documents": docs, "proactive_question": "需要我帮你查具体条款吗？"}
-        return _mk_msg(self.name, json.dumps(result, ensure_ascii=False))
+        return mk_msg(self.name, json.dumps(result, ensure_ascii=False))
 
     def _no_knowledge(self, query: str) -> Msg:
         result = {"status": "no_knowledge", "query": query,
                   "answer": "抱歉，我在知识库中没有找到相关信息。", "retrieved_documents": []}
-        return _mk_msg(self.name, json.dumps(result, ensure_ascii=False))
+        return mk_msg(self.name, json.dumps(result, ensure_ascii=False))
 
     def _err(self, message: str) -> Msg:
-        return Msg(name=self.name, content=json.dumps(
-            {"status": "error", "message": message}, ensure_ascii=False), role="assistant")
+        return mk_msg(self.name, json.dumps(
+            {"status": "error", "message": message}, ensure_ascii=False))

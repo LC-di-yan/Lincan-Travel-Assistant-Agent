@@ -233,13 +233,14 @@ def _llm_polish(doc: dict) -> None:
         from utils.llm_response import extract_llm_text, extract_json_object
 
         async def run():
-            from agentscope.model import OpenAIChatModel
-            model = OpenAIChatModel(
-                model_name=LLM_CONFIG["model_name"],
-                api_key=LLM_CONFIG["api_key"],
-                client_kwargs={"base_url": LLM_CONFIG["base_url"]},
-                generate_kwargs={"temperature": 0.2, "max_tokens": 1200},
-            )
+            from utils.as_compat import as_messages, build_chat_model
+
+            model = build_chat_model({
+                "model_name": LLM_CONFIG["model_name"],
+                "api_key": LLM_CONFIG["api_key"],
+                "base_url": LLM_CONFIG["base_url"],
+                "generate_kwargs": {"temperature": 0.2, "max_tokens": 1200},
+            })
             nodes = []
             for h1 in doc["tree"]:
                 nodes.append(h1)
@@ -254,7 +255,7 @@ def _llm_polish(doc: dict) -> None:
                 "重点保留关键数字与限定条件。输出JSON：{\"summaries\": [{\"id\": \"...\", \"summary\": \"...\"}]}\n\n"
                 f"文档：{doc['title']}\n{outline(nodes, '目录')}"
             )
-            resp = await model([{"role": "user", "content": prompt}])
+            resp = await model(as_messages([{"role": "user", "content": prompt}]))
             data = extract_json_object(extract_llm_text(resp, ""))
             if not data:
                 return

@@ -29,8 +29,7 @@ if sys.platform == "win32":
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
-from agentscope.message import Msg
-from agentscope.model import OpenAIChatModel
+from utils.as_compat import build_chat_model, mk_msg, msg_json
 from config_agentscope import init_agentscope
 from config import LLM_CONFIG, AMAP_CONFIG
 
@@ -74,11 +73,11 @@ async def test_single(agent, query: str, label: str = ""):
     print_sep(f"Query: {query}  [{label}]")
     start = time.time()
 
-    msg = Msg(name="user", content=query, role="user")
+    msg = mk_msg("user", query, role="user")
     result = await agent.reply(msg)
 
     elapsed = (time.time() - start) * 1000
-    data = json.loads(result.content) if isinstance(result.content, str) else result.content
+    data = msg_json(result, default=None)
 
     print(f"  Time: {elapsed:.0f}ms")
     print(f"  Type: {data.get('query_type', '?')}")
@@ -124,13 +123,16 @@ async def main():
     init_agentscope()
 
     print("  Creating model...")
-    model = OpenAIChatModel(
-        model_name=LLM_CONFIG["model_name"],
-        api_key=LLM_CONFIG["api_key"],
-        client_kwargs={"base_url": LLM_CONFIG["base_url"], "timeout": 60},
-        temperature=0.3,
-        max_tokens=LLM_CONFIG.get("max_tokens", 2000),
-    )
+    model = build_chat_model({
+        "model_name": LLM_CONFIG["model_name"],
+        "api_key": LLM_CONFIG["api_key"],
+        "base_url": LLM_CONFIG["base_url"],
+        "client_kwargs": {"timeout": 60},
+        "generate_kwargs": {
+            "temperature": 0.3,
+            "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
+        },
+    })
 
     agent = PlaceSearchAgent(name="PlaceSearchAgent", model=model)
     print("  Agent ready.")

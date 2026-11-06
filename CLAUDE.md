@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-多智能体旅行规划系统，基于 AgentScope 框架 + 小米 MiMo 大模型，采用 Plan-and-Execute 架构。
+多智能体旅行规划系统，基于 AgentScope 2.0.11 框架 + 小米 MiMo 大模型，采用 Plan-and-Execute 架构。
 
 - CLI 入口：`cli.py`（Rich 终端 UI）
 - Web 入口：`server/app.py`（FastAPI） + `web/`（React 19 + Vite）
@@ -111,7 +111,8 @@ python cli.py health
 
 ## 关键约定
 
-- 所有子 Agent 的 `reply()` 为 async，需 await
+- **AgentScope 1.x 写法禁令**（CI 门禁 `tools/check_as2_gate.py` 强制）：业务代码禁止 `from agentscope.agent import AgentBase`（2.x 已删）、`agentscope.init()`（已删）、`Msg(content=<裸str>)`、`json.loads(x.content)`、`str(content)`、`.content[...]` 切片、`model([...dict...])`——一律走 `utils/as_compat.py`：`mk_msg / msg_text / msg_json / as_messages / chat_text / build_chat_model / setup`
+- 所有子 Agent 继承 `agents/base.py::SkillAgentBase`（取代已删除的 AgentBase），`reply()` 为 async，需 await
 - Agent 使用 `model=model` 传入已创建的 OpenAIChatModel 实例
 - Skill 通过 `LazyAgentRegistry` 动态发现，首次调用时加载
 - LLM 输出 JSON 解析有 6 种降级策略（`utils/json_parser.py`）
@@ -122,6 +123,8 @@ python cli.py health
 
 | 路径 | 说明 |
 |------|------|
+| `agents/base.py` | SkillAgentBase（全项目唯一 Agent 基类） |
+| `utils/as_compat.py` | AgentScope 1.x/2.x 适配层（消息文本通道唯一出口） |
 | `agents/intention_agent.py` | 意图识别 |
 | `agents/orchestration_agent.py` | 协调调度 |
 | `agents/lazy_agent_registry.py` | 插件发现与懒加载 |
@@ -145,3 +148,6 @@ python cli.py health
 | `tests/decision_eval/cases.json` | 决策层金标准集（24 条） |
 | `data/decision_shadow/` | 决策层影子日志（jsonl，按日滚动） |
 | `docs/decision-layer-dev-plan.md` | 决策层设计与实现文档 |
+| `docs/agentscope-2-upgrade-dev-plan.md` | AgentScope 2.0.11 升级与架构重构开发计划（含实测 API 速查与门禁方案） |
+| `docs/agentscope-2-baseline.md` | 升级基线与双版本验证记录 |
+| `experiments/as211_probe*.py` / `impact_audit.py` / `hazard_scan.py` | 升级计划的实证脚本：wheel API 探测 / 冲击面审计 / 静默点扫描 |

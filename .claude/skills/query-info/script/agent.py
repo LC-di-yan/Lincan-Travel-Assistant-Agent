@@ -6,7 +6,7 @@
 - 天气：和风天气 QWeather（需 API Key，.env 中配置 QWEATHER_API_KEY）
 - 搜索：ddgs（Dux Distributed Global Search，可选 bing/duckduckgo 等，需安装：pip install ddgs）
 """
-from agentscope.agent import AgentBase
+from agents.base import SkillAgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List, Dict, Any
 import asyncio
@@ -15,6 +15,7 @@ import logging
 import re
 
 from utils.llm_response import extract_llm_text
+from utils.as_compat import mk_msg, msg_text, as_messages
 from cache.decorators import cached
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ def _is_suspicious_url(url: str) -> bool:
         return False
 
 
-class InformationQueryAgent(AgentBase):
+class InformationQueryAgent(SkillAgentBase):
     """
     信息查询智能体（真实检索版）
 
@@ -91,20 +92,17 @@ class InformationQueryAgent(AgentBase):
     @cached("query_info", ttl=900)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         if x is None:
-            return Msg(name=self.name, content=json.dumps({"query_success": False}), role="assistant")
+            return mk_msg(self.name, {"query_success": False})
 
-        # 解析输入
-        content = x.content if not isinstance(x, list) else x[-1].content
+        # 解析输入（统一经 msg_text 取文本；content 恒为 str）
+        content = msg_text(x) if not isinstance(x, list) else msg_text(x[-1])
 
-        if isinstance(content, str):
-            try:
-                data = json.loads(content)
-                context = data.get("context", {})
-                user_query = context.get("rewritten_query", "") or content
-            except json.JSONDecodeError:
-                user_query = content
-        else:
-            user_query = str(content)
+        try:
+            data = json.loads(content)
+            context = data.get("context", {})
+            user_query = context.get("rewritten_query", "") or content
+        except json.JSONDecodeError:
+            user_query = content
 
         # 能力/身份类问题：直接作答，不要把整句话丢去做网络搜索
         # （原行为会把「你能帮我做什么」当搜索词，搜回无关站点）
@@ -124,7 +122,7 @@ class InformationQueryAgent(AgentBase):
                     "sources": [],
                 },
             }
-            return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+            return mk_msg(self.name, result)
 
         # 天气类问题优先走和风天气 API，失败则降级到网络搜索
         if self._is_weather_query(user_query):
@@ -132,7 +130,7 @@ class InformationQueryAgent(AgentBase):
             try:
                 result = await self._weather_query(user_query)
                 self._add_proactive_question(result, user_query)
-                return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+                return mk_msg(self.name, result)
             except Exception as e:
                 logger.warning(f"QWeather failed, falling back to search: {e}")
                 city = self._extract_city_from_query(user_query)
@@ -141,7 +139,7 @@ class InformationQueryAgent(AgentBase):
                     result = await self._web_search(search_query)
                     result["query_type"] = "天气查询"
                     self._add_proactive_question(result, user_query)
-                    return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+                    return mk_msg(self.name, result)
                 except Exception as e2:
                     logger.warning(f"Weather search fallback also failed: {e2}")
                     result = None
@@ -161,7 +159,7 @@ class InformationQueryAgent(AgentBase):
                     "results": {"error": str(e)},
                 }
 
-        return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+        return mk_msg(self.name, result)
 
     def _add_proactive_question(self, result: Dict[str, Any], user_query: str) -> None:
         """根据查询类型和内容生成主动反问"""
@@ -678,7 +676,7 @@ class InformationQueryAgent(AgentBase):
 """
 
         try:
-            response = await self.model([{"role": "user", "content": prompt}])
+            response = await self.model(as_messages([{"role": "user", "content": prompt}]))
             text = extract_llm_text(response, fallback="无法生成摘要")
             return text.strip() if text else "无法生成摘要"
         except Exception as e:

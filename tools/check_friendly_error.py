@@ -40,11 +40,11 @@ class DeniedModel:
 
 
 async def main() -> int:
-    from agentscope.message import Msg
+    from utils.as_compat import mk_msg, msg_json
 
     agent = ItineraryPlanningAgent(name="ItineraryPlanningAgent", model=DeniedModel())
-    msg = await agent.reply(Msg(name="Orchestrator", content=PAYLOAD, role="user"))
-    result = json.loads(msg.content)
+    msg = await agent.reply(mk_msg("Orchestrator", PAYLOAD, role="user"))
+    result = msg_json(msg, default={})
 
     err = result.get("error", "")
     print("error      :", err)

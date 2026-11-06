@@ -102,24 +102,24 @@ class FailoverChatModel:
     def _model(self, index: int):
         model = self._models.get(index)
         if model is None:
-            from agentscope.model import OpenAIChatModel
+            from utils.as_compat import build_chat_model
 
             ch = self._channels[index]
-            model = OpenAIChatModel(
-                model_name=ch["model_name"],
-                api_key=ch["api_key"],
-                stream=self._stream,
-                client_kwargs={
-                    "base_url": ch["base_url"],
+            model = build_chat_model({
+                "model_name": ch["model_name"],
+                "api_key": ch["api_key"],
+                "base_url": ch["base_url"],
+                "generate_kwargs": {
+                    "temperature": self._temperature,
+                    "max_tokens": self._max_tokens,
+                },
+                "client_kwargs": {
                     "timeout": float(self._timeout),
                     # SDK 默认会自己重试 2 次（隐形增加 2 倍耗时），重试交给通道链
                     "max_retries": 1,
                 },
-                generate_kwargs={
-                    "temperature": self._temperature,
-                    "max_tokens": self._max_tokens,
-                },
-            )
+                "max_retries": 0,
+            }, stream=self._stream)
             self._models[index] = model
         return model
 
@@ -228,22 +228,22 @@ def build_chat_model(
 
     if len(channels) == 1:
         # 无备用通道：行为与改动前完全一致，降低回归风险
-        from agentscope.model import OpenAIChatModel
+        from utils.as_compat import build_chat_model as _compat_build
 
-        return OpenAIChatModel(
-            model_name=llm_config["model_name"],
-            api_key=llm_config["api_key"],
-            stream=False,
-            client_kwargs={
-                "base_url": llm_config["base_url"],
-                "timeout": float(timeout),
-                "max_retries": 1,
-            },
-            generate_kwargs={
+        return _compat_build({
+            "model_name": llm_config["model_name"],
+            "api_key": llm_config["api_key"],
+            "base_url": llm_config["base_url"],
+            "generate_kwargs": {
                 "temperature": llm_config.get("temperature", 0.7),
                 "max_tokens": llm_config.get("max_tokens", 2000),
             },
-        )
+            "client_kwargs": {
+                "timeout": float(timeout),
+                "max_retries": 1,
+            },
+            "max_retries": 0,
+        })
 
     logger.info(
         "LLM 通道链：%s",

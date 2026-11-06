@@ -13,8 +13,9 @@
 - Sequential (顺序执行): 按优先级依次执行，前一个的输出作为后一个的输入
 - Parallel (并行执行): 同时执行多个智能体（暂不实现）
 """
-from agentscope.agent import AgentBase
-from agentscope.message import Msg
+from agents.base import SkillAgentBase
+from agentscope.message import Msg  # 仅作类型注解；构造一律走 utils.as_compat.mk_msg
+from utils.as_compat import mk_msg, msg_text, msg_json
 from typing import Optional, Union, List, Dict, Any
 import json
 import logging
@@ -31,13 +32,13 @@ def _is_pg(memory_manager) -> bool:
     return isinstance(memory_manager.long_term, PostgresLongTermMemory)
 
 
-class OrchestrationAgent(AgentBase):
+class OrchestrationAgent(SkillAgentBase):
     """协调器智能体 - 调度和协调多个子智能体"""
 
     def __init__(
         self,
         name: str = "OrchestrationAgent",
-        agent_registry: Dict[str, AgentBase] = None,
+        agent_registry: Dict[str, SkillAgentBase] = None,
         memory_manager = None,
         result_queue: asyncio.Queue = None,
         **kwargs
@@ -48,7 +49,7 @@ class OrchestrationAgent(AgentBase):
         self.memory_manager = memory_manager
         self.result_queue = result_queue
 
-    def register_agent(self, agent_name: str, agent: AgentBase):
+    def register_agent(self, agent_name: str, agent: SkillAgentBase):
         """注册子智能体"""
         self.agent_registry[agent_name] = agent
         logger.info(f"Registered agent: {agent_name}")
@@ -70,40 +71,28 @@ class OrchestrationAgent(AgentBase):
             Msg: 执行结果
         """
         if x is None:
-            return Msg(
-                name=self.name,
-                content=json.dumps({"error": "No input provided"}),
-                role="assistant"
-            )
+            return mk_msg(self.name, {"error": "No input provided"})
 
         # 解析输入
         if isinstance(x, list):
-            intention_output = x[-1].content if x else "{}"
+            intention_output = msg_text(x[-1]) if x else "{}"
         else:
-            intention_output = x.content
+            intention_output = msg_text(x)
 
         # 解析意图识别结果
         try:
             intention_data = json.loads(intention_output) if isinstance(intention_output, str) else intention_output
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse intention output: {e}")
-            return Msg(
-                name=self.name,
-                content=json.dumps({"error": "Invalid intention format"}),
-                role="assistant"
-            )
+            return mk_msg(self.name, {"error": "Invalid intention format"})
 
         # 获取智能体调度计划
         agent_schedule = intention_data.get("agent_schedule", [])
         if not agent_schedule:
-            return Msg(
-                name=self.name,
-                content=json.dumps({
-                    "status": "no_agents",
-                    "message": "没有需要调度的智能体"
-                }),
-                role="assistant"
-            )
+            return mk_msg(self.name, {
+                "status": "no_agents",
+                "message": "没有需要调度的智能体"
+            })
 
         # 按优先级排序
         sorted_schedule = sorted(agent_schedule, key=lambda x: x.get("priority", 999))
@@ -144,11 +133,7 @@ class OrchestrationAgent(AgentBase):
         if self.memory_manager:
             await self._update_memory(intention_data, results)
 
-        return Msg(
-            name=self.name,
-            content=json.dumps(final_result, ensure_ascii=False),
-            role="assistant"
-        )
+        return mk_msg(self.name, final_result)
 
     async def _prepare_context(self, intention_data: Dict[str, Any]) -> Dict[str, Any]:
         """准备上下文信息，供子智能体使用"""
@@ -340,11 +325,7 @@ class OrchestrationAgent(AgentBase):
         if "fast_currency" in context:
             input_data["fast_currency"] = context["fast_currency"]
 
-        input_msg = Msg(
-            name="Orchestrator",
-            content=json.dumps(input_data, ensure_ascii=False),
-            role="user"
-        )
+        input_msg = mk_msg("Orchestrator", input_data, role="user")
 
         try:
             # 调用智能体
@@ -357,13 +338,7 @@ class OrchestrationAgent(AgentBase):
             print(_msg, flush=True)
 
             # 解析响应
-            if isinstance(response.content, str):
-                try:
-                    result = json.loads(response.content)
-                except json.JSONDecodeError:
-                    result = {"output": response.content}
-            else:
-                result = response.content
+            result = msg_json(response, default={"output": msg_text(response)})
 
             # 检查 result 中是否有 error 字段
             if isinstance(result, dict) and "error" in result:

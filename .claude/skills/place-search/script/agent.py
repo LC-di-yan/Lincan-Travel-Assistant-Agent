@@ -6,7 +6,7 @@
 - AMAP_API_KEY 需在 .env 中配置
 - 无需额外 pip 依赖（使用 subprocess + curl）
 """
-from agentscope.agent import AgentBase
+from agents.base import SkillAgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List, Dict, Any
 import asyncio
@@ -17,6 +17,7 @@ import subprocess
 from urllib.parse import quote
 
 from utils.skill_loader import SkillLoader
+from utils.as_compat import mk_msg, msg_text
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ _NON_SCENIC_KEYWORDS = [
 ]
 
 
-class PlaceSearchAgent(AgentBase):
+class PlaceSearchAgent(SkillAgentBase):
     """
     地点搜索智能体（酒店/餐厅/景点）
 
@@ -130,24 +131,16 @@ class PlaceSearchAgent(AgentBase):
 
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         if x is None:
-            return Msg(
-                name=self.name,
-                content=json.dumps({"query_success": False, "results": {"message": "输入为空"}}),
-                role="assistant",
-            )
+            return mk_msg(self.name, {"query_success": False, "results": {"message": "输入为空"}})
 
-        content = x.content if not isinstance(x, list) else x[-1].content
+        content = msg_text(x) if not isinstance(x, list) else msg_text(x[-1])
 
-        if isinstance(content, str):
-            try:
-                data = json.loads(content)
-                context = data.get("context", {})
-                user_query = context.get("rewritten_query", "") or content
-            except json.JSONDecodeError:
-                user_query = content
-                context = {}
-        else:
-            user_query = str(content)
+        try:
+            data = json.loads(content)
+            context = data.get("context", {})
+            user_query = context.get("rewritten_query", "") or content
+        except json.JSONDecodeError:
+            user_query = content
             context = {}
 
         # 优先使用 orchestrator 传入的 agent_name 决定搜索类型
@@ -182,15 +175,11 @@ class PlaceSearchAgent(AgentBase):
                     "景点搜索": "未识别到城市，请说明具体城市，如：北京有哪些好玩的？",
                     "酒店搜索": "未识别到城市，请说明具体城市，如：北京有哪些酒店？",
                 }
-                return Msg(
-                    name=self.name,
-                    content=json.dumps({
-                        "query_type": query_type,
-                        "query_success": False,
-                        "results": {"message": hints[query_type]},
-                    }, ensure_ascii=False),
-                    role="assistant",
-                )
+                return mk_msg(self.name, {
+                    "query_type": query_type,
+                    "query_success": False,
+                    "results": {"message": hints[query_type]},
+                })
 
             if is_restaurant:
                 params = self._extract_food_params(user_query, city)
@@ -204,22 +193,14 @@ class PlaceSearchAgent(AgentBase):
 
             self._add_proactive_question(result, city, is_restaurant, is_scenic)
 
-            return Msg(
-                name=self.name,
-                content=json.dumps(result, ensure_ascii=False),
-                role="assistant",
-            )
+            return mk_msg(self.name, result)
         except Exception as e:
             logger.error(f"{query_type} failed: {e}")
-            return Msg(
-                name=self.name,
-                content=json.dumps({
-                    "query_type": query_type,
-                    "query_success": False,
-                    "results": {"message": f"搜索失败: {str(e)}"},
-                }, ensure_ascii=False),
-                role="assistant",
-            )
+            return mk_msg(self.name, {
+                "query_type": query_type,
+                "query_success": False,
+                "results": {"message": f"搜索失败: {str(e)}"},
+            })
 
     def _add_proactive_question(self, result: Dict, city: str, is_restaurant: bool = False, is_scenic: bool = False) -> None:
         if result.get("query_success"):

@@ -9,7 +9,7 @@
 - 经停站：列车经过的所有站点
 - 中转换乘：两地之间的换乘方案
 """
-from agentscope.agent import AgentBase
+from agents.base import SkillAgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List, Dict, Any
 import json
@@ -20,6 +20,7 @@ import os
 from datetime import datetime, timedelta
 
 from cache.decorators import cached
+from utils.as_compat import mk_msg, msg_text
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ def _set_cached(key: str, result: Any):
     _query_cache[key] = (result, time.time())
 
 
-class TrainTicketAgent(AgentBase):
+class TrainTicketAgent(SkillAgentBase):
     """火车票查询智能体"""
 
     def __init__(self, name: str = "TrainTicketAgent", model=None, **kwargs):
@@ -185,25 +186,21 @@ class TrainTicketAgent(AgentBase):
         print(f"[TRAIN-TICKET] reply() called", flush=True)
         if x is None:
             print(f"[TRAIN-TICKET] x is None", flush=True)
-            return Msg(name=self.name, content=json.dumps({"error": "No input"}), role="assistant")
+            return mk_msg(self.name, {"error": "No input"})
 
-        # 解析输入
-        content = x.content if not isinstance(x, list) else x[-1].content
-        print(f"[TRAIN-TICKET] content type: {type(content)}, length: {len(str(content))}", flush=True)
-        if isinstance(content, str):
-            try:
-                data = json.loads(content)
-                context = data.get("context", {})
-                user_query = context.get("rewritten_query", "") or content
-                fast_params = data.get("fast_train_ticket")
-                print(f"[TRAIN-TICKET] parsed - user_query: {user_query}, fast_params: {fast_params}", flush=True)
-            except json.JSONDecodeError:
-                user_query = content
-                fast_params = None
-                print(f"[TRAIN-TICKET] JSON parse failed, using raw content", flush=True)
-        else:
-            user_query = str(content)
+        # 解析输入（统一经 msg_text 取文本；content 恒为 str）
+        content = msg_text(x) if not isinstance(x, list) else msg_text(x[-1])
+        print(f"[TRAIN-TICKET] input_text length: {len(content)}", flush=True)
+        try:
+            data = json.loads(content)
+            context = data.get("context", {})
+            user_query = context.get("rewritten_query", "") or content
+            fast_params = data.get("fast_train_ticket")
+            print(f"[TRAIN-TICKET] parsed - user_query: {user_query}, fast_params: {fast_params}", flush=True)
+        except json.JSONDecodeError:
+            user_query = content
             fast_params = None
+            print(f"[TRAIN-TICKET] JSON parse failed, using raw content", flush=True)
 
         # 分析查询意图
         query_type = self._detect_query_type(user_query)
@@ -232,7 +229,7 @@ class TrainTicketAgent(AgentBase):
 
         final_content = json.dumps(result, ensure_ascii=False)
         print(f"[TRAIN-TICKET] returning content length: {len(final_content)}", flush=True)
-        return Msg(name=self.name, content=final_content, role="assistant")
+        return mk_msg(self.name, final_content)
 
     def _detect_query_type(self, query: str) -> str:
         """检测查询类型"""

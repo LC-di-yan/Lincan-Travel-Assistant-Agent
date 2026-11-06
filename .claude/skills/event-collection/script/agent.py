@@ -6,9 +6,11 @@
 - 提取出发地、目的地、时间、返程地等基础信息
 - 识别缺失信息并提示
 """
-from agentscope.agent import AgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List
+
+from agents.base import SkillAgentBase
+from utils.as_compat import mk_msg, msg_text, as_messages
 import json
 import logging
 
@@ -30,7 +32,7 @@ _FIELD_ZH_MAP = {
 }
 
 
-class EventCollectionAgent(AgentBase):
+class EventCollectionAgent(SkillAgentBase):
     """事项收集智能体"""
 
     def __init__(self, name: str = "EventCollectionAgent", model=None, **kwargs):
@@ -41,10 +43,10 @@ class EventCollectionAgent(AgentBase):
     @cached("event_collection", ttl=1800)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         if x is None:
-            return Msg(name=self.name, content={}, role="assistant")
+            return mk_msg(self.name, {})
 
-        # 解析输入内容
-        content = x.content if not isinstance(x, list) else x[-1].content
+        # 解析输入内容（msg_text 收敛 1.x str / 2.x 块列表）
+        content = msg_text(x[-1] if isinstance(x, list) else x)
 
         # 如果content是JSON字符串，解析它
         if isinstance(content, str):
@@ -57,7 +59,7 @@ class EventCollectionAgent(AgentBase):
                 user_query = content
                 user_preferences = {}
         else:
-            user_query = str(content)
+            user_query = content
             user_preferences = {}
 
         # 构建用户背景信息
@@ -135,7 +137,7 @@ class EventCollectionAgent(AgentBase):
 """
 
         try:
-            response = await self.model([{"role": "user", "content": prompt}], max_tokens=SCENARIO_TOKENS["event_collection"])
+            response = await self.model(as_messages([{"role": "user", "content": prompt}]), max_tokens=SCENARIO_TOKENS["event_collection"])
             result = extract_llm_json(response)
             # 兜底：将 missing_info 中的英文字段名转为中文
             if isinstance(result, dict) and "missing_info" in result:
@@ -151,4 +153,4 @@ class EventCollectionAgent(AgentBase):
             }
 
         # 返回JSON字符串格式
-        return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+        return mk_msg(self.name, json.dumps(result, ensure_ascii=False))

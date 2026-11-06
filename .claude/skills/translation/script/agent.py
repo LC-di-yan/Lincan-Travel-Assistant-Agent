@@ -3,7 +3,7 @@
 职责：语言翻译，支持多语言互译
 API: MyMemory (免费，无需 key)
 """
-from agentscope.agent import AgentBase
+from agents.base import SkillAgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List
 import json
@@ -12,6 +12,7 @@ import requests
 from urllib.parse import quote
 
 from utils.llm_response import extract_llm_json
+from utils.as_compat import mk_msg, msg_text, as_messages
 from cache.decorators import cached
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ LANG_NAMES = {
 API_BASE = "https://api.mymemory.translated.net/get"
 
 
-class TranslationAgent(AgentBase):
+class TranslationAgent(SkillAgentBase):
     """翻译智能体"""
 
     def __init__(self, name: str = "TranslationAgent", model=None, **kwargs):
@@ -53,18 +54,16 @@ class TranslationAgent(AgentBase):
     @cached("translation", ttl=86400)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         if x is None:
-            return Msg(name=self.name, content=json.dumps({"error": "No input"}), role="assistant")
+            return mk_msg(self.name, {"error": "No input"})
 
-        content = x.content if not isinstance(x, list) else x[-1].content
-        if isinstance(content, str):
-            try:
-                data = json.loads(content)
-                context = data.get("context", {})
-                user_query = context.get("rewritten_query", "") or str(data)
-            except json.JSONDecodeError:
-                user_query = content
-        else:
-            user_query = str(content)
+        src = x[-1] if isinstance(x, list) else x
+        raw = msg_text(src)
+        try:
+            data = json.loads(raw)
+            context = data.get("context", {})
+            user_query = context.get("rewritten_query", "") or str(data)
+        except json.JSONDecodeError:
+            user_query = raw
 
         # Use LLM to parse translation intent
         prompt = f"""你是翻译助手，请从用户输入中提取翻译信息。
@@ -86,24 +85,24 @@ class TranslationAgent(AgentBase):
 只输出JSON，不要其他文字。"""
 
         try:
-            response = await self.model([{"role": "user", "content": prompt}])
+            response = await self.model(as_messages([{"role": "user", "content": prompt}]))
             parsed = extract_llm_json(response)
         except Exception as e:
             logger.error(f"Translation parsing failed: {e}")
-            return Msg(name=self.name, content=json.dumps({
+            return mk_msg(self.name, {
                 "action": "error",
                 "answer": f"无法理解翻译请求: {str(e)}"
-            }, ensure_ascii=False), role="assistant")
+            })
 
         text = parsed.get("text_to_translate", "")
         source_lang = parsed.get("source_lang", "auto")
         target_lang = parsed.get("target_lang", "en")
 
         if not text:
-            return Msg(name=self.name, content=json.dumps({
+            return mk_msg(self.name, {
                 "action": "error",
                 "answer": "未识别到需要翻译的文本"
-            }, ensure_ascii=False), role="assistant")
+            })
 
         # Call MyMemory API
         try:
@@ -112,7 +111,7 @@ class TranslationAgent(AgentBase):
             logger.error(f"Translation API failed: {e}")
             result = {"action": "error", "answer": f"翻译失败: {str(e)}"}
 
-        return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+        return mk_msg(self.name, result)
 
     def _translate(self, text: str, source_lang: str, target_lang: str) -> dict:
         """调用 MyMemory API 翻译"""

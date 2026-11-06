@@ -34,8 +34,9 @@ from rich.text import Text
 import json
 
 # 导入系统组件
-from agentscope.model import OpenAIChatModel
+from agentscope.model import OpenAIChatModel  # TODO(P3): 统一改走 utils.as_compat.build_chat_model
 from config_agentscope import init_agentscope
+from utils.as_compat import mk_msg, msg_text, msg_json
 from config import LLM_CONFIG, LLM_FALLBACKS, SCENARIO_TOKENS, SYSTEM_CONFIG, RESILIENCE_CONFIG
 from context.memory_manager import MemoryManager
 from context.long_term_memory import PostgresLongTermMemory
@@ -177,16 +178,16 @@ class AligoCLI:
             recent_context = self.memory_manager.short_term.get_recent_context(n_turns=5)
             context_messages = []
             if long_term_summary:
-                context_messages.append(Msg(name="system", content=long_term_summary, role="system"))
+                context_messages.append(mk_msg("system", long_term_summary, role="system"))
 
             # 注入当前会话焦点提示，帮助意图识别消解"附近"等指代
             focus_hint = self.focus_state.build_focus_hint()
             if focus_hint:
-                context_messages.append(Msg(name="system", content=focus_hint, role="system"))
+                context_messages.append(mk_msg("system", focus_hint, role="system"))
 
             for msg in recent_context:
-                context_messages.append(Msg(name=msg["role"], content=msg["content"], role=msg["role"]))
-            context_messages.append(Msg(name="user", content=user_input, role="user"))
+                context_messages.append(mk_msg(msg["role"], msg["content"], role=msg["role"]))
+            context_messages.append(mk_msg("user", user_input, role="user"))
 
             intention_result = None
             try:
@@ -205,9 +206,8 @@ class AligoCLI:
                     self.circuit_breaker.record_failure()
                 raise
 
-            try:
-                intention_data = json.loads(intention_result.content)
-            except json.JSONDecodeError:
+            intention_data = msg_json(intention_result, default=None)
+            if intention_data is None:
                 self.console.print("❌ 无法理解您的需求，请重新描述", style="bold red")
                 return
 
@@ -218,11 +218,7 @@ class AligoCLI:
             "last_search_city": self.focus_state.last_search_city,
             "current_trip_destination": self.focus_state.current_trip_destination,
         }
-        intention_result = Msg(
-            name="IntentionAgent",
-            content=json.dumps(intention_data, ensure_ascii=False),
-            role="assistant",
-        )
+        intention_result = mk_msg("IntentionAgent", intention_data)
 
         intents = intention_data.get("intents", [])
         if intents:
@@ -289,10 +285,7 @@ class AligoCLI:
             self.console.print(f"❌ 执行失败: {orchestration_error}", style="red")
             return
 
-        try:
-            result_data = json.loads(orchestration_result.content)
-        except (json.JSONDecodeError, AttributeError):
-            result_data = {"error": "解析结果失败"}
+        result_data = msg_json(orchestration_result, default={"error": "解析结果失败"})
 
         elapsed = time.time() - start_time
         self.console.print(f"\n[dim]完成 ({elapsed:.1f}s)[/dim]")

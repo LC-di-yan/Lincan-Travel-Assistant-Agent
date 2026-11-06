@@ -35,8 +35,7 @@ except ImportError as e:
     print("=" * 70)
     sys.exit(1)
 
-from agentscope.message import Msg
-from agentscope.model import OpenAIChatModel
+from utils.as_compat import build_chat_model, mk_msg, msg_json
 from config_agentscope import init_agentscope
 from agents.intention_agent import IntentionAgent
 from config import LLM_CONFIG
@@ -58,18 +57,15 @@ async def test_intention_agent():
     # 创建模型配置
     print("创建模型...")
     try:
-        model = OpenAIChatModel(
-            model_name=LLM_CONFIG["model_name"],
-            api_key=LLM_CONFIG["api_key"],
-            stream=False,
-            client_kwargs={
-                "base_url": LLM_CONFIG["base_url"],
-            },
-            generate_kwargs={
+        model = build_chat_model({
+            "model_name": LLM_CONFIG["model_name"],
+            "api_key": LLM_CONFIG["api_key"],
+            "base_url": LLM_CONFIG["base_url"],
+            "generate_kwargs": {
                 "temperature": LLM_CONFIG.get("temperature", 0.7),
                 "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
             },
-        )
+        }, stream=False)
         print(f"✓ 模型创建成功")
     except Exception as e:
         print(f"❌ 模型创建失败: {e}")
@@ -120,13 +116,13 @@ async def test_intention_agent():
 
         try:
             # 创建消息
-            user_msg = Msg(name="User", content=test_case['query'], role="user")
+            user_msg = mk_msg("User", test_case['query'], role="user")
 
             # 调用意图识别 (async)
             result = await agent(user_msg)
 
             # 解析JSON结果
-            result_data = json.loads(result.content)
+            result_data = msg_json(result, default=None)
 
             # 显示结果
             display_result(result_data)

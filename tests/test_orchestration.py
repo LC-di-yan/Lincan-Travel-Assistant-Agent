@@ -12,8 +12,7 @@ import json
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from agentscope.model import OpenAIChatModel
-from agentscope.message import Msg
+from utils.as_compat import build_chat_model, mk_msg, msg_text
 from config_agentscope import init_agentscope
 from config import LLM_CONFIG
 from context.memory_manager import MemoryManager
@@ -37,16 +36,15 @@ async def test_orchestration():
     init_agentscope()
 
     # 初始化模型
-    model = OpenAIChatModel(
-        model_name=LLM_CONFIG["model_name"],
-        api_key=LLM_CONFIG["api_key"],
-            stream=False,
-        client_kwargs={"base_url": LLM_CONFIG["base_url"]},
-        generate_kwargs={
+    model = build_chat_model({
+        "model_name": LLM_CONFIG["model_name"],
+        "api_key": LLM_CONFIG["api_key"],
+        "base_url": LLM_CONFIG["base_url"],
+        "generate_kwargs": {
             "temperature": LLM_CONFIG.get("temperature", 0.7),
             "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
         },
-    )
+    }, stream=False)
     print("[OK] 模型加载成功")
 
     # 初始化记忆管理器
@@ -87,11 +85,11 @@ async def test_orchestration():
 
     # 意图识别
     print("步骤 1: 意图识别")
-    intention_msg = Msg(name="user", content=user_query, role="user")
+    intention_msg = mk_msg("user", user_query, role="user")
     intention_result = await intention_agent.reply(intention_msg)
 
     try:
-        intention_data = json.loads(intention_result.content)
+        intention_data = json.loads(msg_text(intention_result))
         print(f"[OK] 识别意图: {[i['type'] for i in intention_data.get('intents', [])]}")
         print(f"[OK] 提取实体: {intention_data.get('key_entities', {})}")
         print(f"[OK] 调度计划: {len(intention_data.get('agent_schedule', []))} 个智能体")
@@ -105,7 +103,7 @@ async def test_orchestration():
     orchestration_result = await orchestrator.reply(intention_result)
 
     try:
-        result_data = json.loads(orchestration_result.content)
+        result_data = json.loads(msg_text(orchestration_result))
         print(f"[OK] 执行状态: {result_data.get('status')}")
         print(f"[OK] 执行智能体数: {result_data.get('agents_executed')}")
         print()
@@ -130,11 +128,11 @@ async def test_orchestration():
     print()
 
     # 意图识别
-    intention_msg = Msg(name="user", content=user_query, role="user")
+    intention_msg = mk_msg("user", user_query, role="user")
     intention_result = await intention_agent.reply(intention_msg)
 
     try:
-        intention_data = json.loads(intention_result.content)
+        intention_data = json.loads(msg_text(intention_result))
         print(f"[OK] 识别意图: {[i['type'] for i in intention_data.get('intents', [])]}")
         print()
     except json.JSONDecodeError:
@@ -145,7 +143,7 @@ async def test_orchestration():
     orchestration_result = await orchestrator.reply(intention_result)
 
     try:
-        result_data = json.loads(orchestration_result.content)
+        result_data = json.loads(msg_text(orchestration_result))
         print(f"[OK] 执行状态: {result_data.get('status')}")
         print(f"[OK] 执行智能体数: {result_data.get('agents_executed')}")
         print()

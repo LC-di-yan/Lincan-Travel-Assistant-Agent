@@ -14,8 +14,7 @@ sys.path.insert(0, str(project_root))
 
 import asyncio
 from context.memory_manager import MemoryManager
-from agentscope import init as init_agentscope
-from agentscope.model import OpenAIChatModel
+from utils.as_compat import build_chat_model, setup
 import logging
 
 # 配置日志（只显示WARNING及以上）
@@ -38,23 +37,22 @@ def print_section(title):
 async def test_memory_system():
     """测试记忆系统"""
 
-    # 初始化AgentScope（禁用日志）
-    init_agentscope(logging_level="ERROR")
+    # 初始化AgentScope（禁用日志）；as_compat.setup 在 1.x/2.x 下等价转发
+    setup(logging_level="ERROR")
 
     # 初始化LLM模型
     import warnings
     warnings.filterwarnings("ignore")
 
-    model = OpenAIChatModel(
-        model_name=LLM_CONFIG["model_name"],
-        api_key=LLM_CONFIG["api_key"],
-            stream=False,
-        client_kwargs={"base_url": LLM_CONFIG["base_url"]},
-        generate_kwargs={
+    model = build_chat_model({
+        "model_name": LLM_CONFIG["model_name"],
+        "api_key": LLM_CONFIG["api_key"],
+        "base_url": LLM_CONFIG["base_url"],
+        "generate_kwargs": {
             "temperature": LLM_CONFIG.get("temperature", 0.7),
             "max_tokens": LLM_CONFIG.get("max_tokens", 2000),
         },
-    )
+    }, stream=False)
     print("✓ LLM模型初始化完成")
 
     # 初始化记忆管理器

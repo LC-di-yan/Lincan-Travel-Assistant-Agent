@@ -1,7 +1,7 @@
 """决策层与 IntentionAgent 的接线测试（不联网、不需要真实 LLM）。
 
-背景：项目 pin 的 agentscope==1.0.16 提供 AgentBase，而本机装的是 2.0.8（没有该类），
-所以这里在导入 intention_agent 之前注入最小 stub，让接线逻辑可被单独验证。
+背景：原实现曾因 2.x 缺少 agentscope.agent.AgentBase 而注入最小 stub；
+现项目统一使用 agents.base.SkillAgentBase，stub 已整体移除。
 
 覆盖：
     - assist：正则命中酒店，但决策层判为闲聊/非请求 → 否决 → 走 LLM
@@ -17,29 +17,8 @@ import types
 
 import pytest
 
-# ── agentscope stub（仅当真实版本缺 AgentBase 时）────────────────
-try:
-    from agentscope.agent import AgentBase as _AB  # noqa: F401
-except Exception:  # noqa: BLE001
-    _as = types.ModuleType("agentscope")
-    _agent = types.ModuleType("agentscope.agent")
-    _msg = types.ModuleType("agentscope.message")
-
-    class AgentBase:  # noqa: D401
-        def __init__(self, *a, **k):
-            pass
-
-    class Msg:
-        def __init__(self, name="", content="", role="assistant", **k):
-            self.name, self.content, self.role = name, content, role
-
-    _agent.AgentBase = AgentBase
-    _msg.Msg = Msg
-    _as.agent, _as.message = _agent, _msg
-    sys.modules.update({"agentscope": _as, "agentscope.agent": _agent, "agentscope.message": _msg})
-
 from agents.intention_agent import IntentionAgent  # noqa: E402
-from agentscope.message import Msg  # noqa: E402
+from utils.as_compat import mk_msg, msg_json  # noqa: E402
 from utils import decision_router as dr  # noqa: E402
 from utils.decision_engine import DecisionEngine  # noqa: E402
 from utils.decision_types import RouteDecision  # noqa: E402
@@ -77,7 +56,7 @@ LLM_JSON = json.dumps({
 
 
 def _user(text: str):
-    return [Msg(name="user", content=text, role="user")]
+    return [mk_msg("user", text, role="user")]
 
 
 @pytest.fixture(autouse=True)
@@ -100,7 +79,7 @@ async def test_assist_vetoes_hotel_hit_and_falls_back_to_llm(monkeypatch):
     agent = IntentionAgent(model=fake_model)
     out = await agent.reply(_user("帮我推荐北京酒店"))
 
-    payload = json.loads(out.content)
+    payload = msg_json(out)
     assert payload["agent_schedule"][0]["agent_name"] == "information_query"   # 走了 LLM
     kinds = [r.kind for r in engine.logged]
     assert "decision" in kinds and "outcome" in kinds
@@ -121,7 +100,7 @@ async def test_shadow_mode_returns_fast_result_unchanged(monkeypatch):
     agent = IntentionAgent(model=fake_model)
     out = await agent.reply(_user("帮我推荐北京酒店"))
 
-    payload = json.loads(out.content)
+    payload = msg_json(out)
     assert payload["agent_schedule"][0]["agent_name"] == "hotel_search"
     assert called["llm"] is False
     await asyncio.sleep(0)      # 让 shadow 任务完成
@@ -143,7 +122,7 @@ async def test_primary_rescues_translation_without_calling_llm(monkeypatch):
     agent = IntentionAgent(model=boom)
     out = await agent.reply(_user("把这句话翻译成俄语"))
 
-    payload = json.loads(out.content)
+    payload = msg_json(out)
     assert payload["agent_schedule"][0]["agent_name"] == "translation"
     assert payload["intents"][0]["confidence"] == pytest.approx(0.95)
 
@@ -156,4 +135,4 @@ async def test_off_mode_keeps_everything_untouched(monkeypatch):
 
     agent = IntentionAgent(model=fake_model)
     out = await agent.reply(_user("帮我推荐北京酒店"))
-    assert json.loads(out.content)["agent_schedule"][0]["agent_name"] == "hotel_search"
+    assert msg_json(out)["agent_schedule"][0]["agent_name"] == "hotel_search"

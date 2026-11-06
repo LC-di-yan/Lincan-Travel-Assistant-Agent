@@ -5,7 +5,7 @@ API: frankfurter.app (免费，无需 key)
 
 优化：fast_currency 快速路径 + regex 兜底，避免 LLM 调用。
 """
-from agentscope.agent import AgentBase
+from agents.base import SkillAgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List
 import json
@@ -15,6 +15,7 @@ import requests
 import time as _time
 
 from utils.llm_response import extract_llm_json
+from utils.as_compat import mk_msg, msg_text, as_messages
 from cache.decorators import cached
 
 logger = logging.getLogger(__name__)
@@ -68,7 +69,7 @@ def _parse_currency_regex(query: str) -> Optional[dict]:
     return None
 
 
-class CurrencyConverterAgent(AgentBase):
+class CurrencyConverterAgent(SkillAgentBase):
     """汇率转换智能体"""
 
     def __init__(self, name: str = "CurrencyConverterAgent", model=None, **kwargs):
@@ -79,21 +80,18 @@ class CurrencyConverterAgent(AgentBase):
     @cached("currency", ttl=3600)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         if x is None:
-            return Msg(name=self.name, content=json.dumps({"error": "No input"}), role="assistant")
+            return mk_msg(self.name, {"error": "No input"})
 
-        content = x.content if not isinstance(x, list) else x[-1].content
-        if isinstance(content, str):
-            try:
-                data = json.loads(content)
-                context = data.get("context", {})
-                fast_currency = data.get("fast_currency")
-                user_query = context.get("rewritten_query", "") or str(data)
-            except json.JSONDecodeError:
-                user_query = content
-                fast_currency = None
-        else:
-            user_query = str(content)
-            fast_currency = None
+        src = x[-1] if isinstance(x, list) else x
+        raw = msg_text(src)
+        fast_currency = None
+        try:
+            data = json.loads(raw)
+            context = data.get("context", {})
+            fast_currency = data.get("fast_currency")
+            user_query = context.get("rewritten_query", "") or str(data)
+        except json.JSONDecodeError:
+            user_query = raw
 
         # ── 快速路径1: IntentionAgent 已提取 ──
         if fast_currency:
@@ -139,17 +137,17 @@ class CurrencyConverterAgent(AgentBase):
 
             try:
                 _t0 = _time.monotonic()
-                response = await self.model([{"role": "user", "content": prompt}])
+                response = await self.model(as_messages([{"role": "user", "content": prompt}]))
                 parsed = extract_llm_json(response)
                 _msg = f"[TIMING] Currency LLM parsing took {(_time.monotonic() - _t0) * 1000:.0f}ms"
                 logger.info(_msg)
                 print(_msg, flush=True)
             except Exception as e:
                 logger.error(f"Currency parsing failed: {e}")
-                return Msg(name=self.name, content=json.dumps({
+                return mk_msg(self.name, {
                     "action": "error",
                     "answer": f"无法理解汇率查询请求: {str(e)}"
-                }, ensure_ascii=False), role="assistant")
+                })
 
             from_curr = parsed.get("from_currency", "USD").upper()
             to_curr = parsed.get("to_currency", "CNY").upper()
@@ -162,7 +160,7 @@ class CurrencyConverterAgent(AgentBase):
             logger.error(f"Rate fetch failed: {e}")
             result = {"action": "error", "answer": f"汇率查询失败: {str(e)}"}
 
-        return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+        return mk_msg(self.name, result)
 
     def _fetch_rate(self, from_curr: str, to_curr: str, amount: float) -> dict:
         """调用 frankfurter.app 获取汇率"""

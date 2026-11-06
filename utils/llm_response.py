@@ -1,10 +1,16 @@
+# -*- coding: utf-8 -*-
 """
 LLM 响应提取工具
-统一提取 ChatResponse / dict 中的文本内容
+统一提取 ChatResponse / dict 中的文本内容。
+
+2.0 升级后本模块只是 utils/as_compat.chat_text 的薄委托（升级计划 §4.P1-4），
+保留原函数名与语义：.text 优先 → .content → thinking-only 返回 fallback。
 """
 import json
 import logging
 from typing import Any, Optional
+
+from utils.as_compat import chat_text
 from utils.json_parser import robust_json_parse
 
 logger = logging.getLogger(__name__)
@@ -23,46 +29,10 @@ def extract_llm_text(response: Any, fallback: str = "") -> str:
     从 LLM 响应中提取纯文本（非流式，直接取 .text / .content）。
 
     兼容：
-    - response.text / response.content（ChatResponse / dict）
+    - response.text / response.content（ChatResponse / dict / Msg）
     - 空列表、空字符串、thinking-only 响应 → 返回 fallback
     """
-    if response is None:
-        return fallback
-
-    try:
-        if _safe_hasattr(response, 'text'):
-            t = response.text
-            if t and t.strip():
-                return t
-            # .text 为空，尝试 .content
-        if _safe_hasattr(response, 'content'):
-            c = response.content
-            if isinstance(c, str):
-                return c if c.strip() else fallback
-            if isinstance(c, list):
-                # 过滤 thinking 块，只取 text 块
-                parts = []
-                for item in c:
-                    if isinstance(item, dict) and item.get('type') == 'text':
-                        t = item.get('text', '')
-                        if t and t.strip():
-                            parts.append(t)
-                if parts:
-                    return ''.join(parts)
-                # MiMo 有时只返回 thinking 块不返回 text 块
-                return fallback
-            if c is None:
-                return fallback
-            return str(c)
-        if isinstance(response, dict):
-            c = response.get('content') or response.get('text', '')
-            if isinstance(c, str) and c.strip():
-                return c
-            return fallback
-        s = str(response)
-        return s if s.strip() and s != 'None' else fallback
-    except Exception:
-        return fallback
+    return chat_text(response, fallback=fallback)
 
 
 def strip_markdown_fences(text: str) -> str:

@@ -14,8 +14,9 @@ from context.session_focus_state import SessionFocusState
 from utils.circuit_breaker import CircuitOpenError
 from utils.llm_resilience import retry_with_backoff
 from utils.json_parser import robust_json_parse
+from utils.as_compat import mk_msg, msg_json
 from config import RESILIENCE_CONFIG
-from agentscope.message import Msg
+from agentscope.message import Msg  # 仅作类型注解
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -276,16 +277,16 @@ async def chat(request: ChatRequest):
 
             context_messages = []
             if session.long_term_summary:
-                context_messages.append(Msg(name="system", content=session.long_term_summary, role="system"))
+                context_messages.append(mk_msg("system", session.long_term_summary, role="system"))
 
             # 注入当前会话焦点提示（如焦点城市），帮助意图识别消解"附近"等指代
             focus_hint = session.focus_state.build_focus_hint()
             if focus_hint:
-                context_messages.append(Msg(name="system", content=focus_hint, role="system"))
+                context_messages.append(mk_msg("system", focus_hint, role="system"))
 
             for msg in recent_context:
-                context_messages.append(Msg(name=msg["role"], content=msg["content"], role=msg["role"]))
-            context_messages.append(Msg(name="user", content=request.message, role="user"))
+                context_messages.append(mk_msg(msg["role"], msg["content"], role=msg["role"]))
+            context_messages.append(mk_msg("user", request.message, role="user"))
             _t_context = (_time.monotonic() - _t0) * 1000
             print(f"[TIMING] Context preparation took {_t_context:.0f}ms", flush=True)
 
@@ -298,15 +299,15 @@ async def chat(request: ChatRequest):
                     if prefs.get("home_location"):
                         pref_parts.append(f"home_location: {prefs['home_location']}")
                     if pref_parts:
-                        context_messages.insert(0, Msg(name="system",
-                            content="[用户偏好] " + "; ".join(pref_parts), role="system"))
+                        context_messages.insert(0, mk_msg("system",
+                        "[用户偏好] " + "; ".join(pref_parts), role="system"))
             except Exception:
                 pass
 
             if merged_intention_data is not None:
                 # 追问合并后直接使用回填数据，跳过 LLM 意图识别
                 intention_data = merged_intention_data
-                intention_result = Msg(name="IntentionAgent", content=json.dumps(intention_data, ensure_ascii=False), role="assistant")
+                intention_result = mk_msg("IntentionAgent", intention_data)
                 print(f"[TIMING] Intention agent SKIPPED (merged data), schedule={[a['agent_name'] for a in merged_intention_data.get('agent_schedule', [])]}", flush=True)
             else:
                 try:
@@ -330,9 +331,9 @@ async def chat(request: ChatRequest):
                     yield _sse("error", {"message": f"意图识别失败：{friendly(e)}"})
                     return
 
-                intention_data = robust_json_parse(
-                    getattr(intention_result, "content", ""),
-                    fallback={"intents": [], "error": "parse_failed"},
+                intention_data = msg_json(
+                    intention_result,
+                    default={"intents": [], "error": "parse_failed"},
                 )
             if "error" in intention_data:
                 yield _sse("error", {"message": "无法理解您的需求，请重新描述"})
@@ -387,11 +388,7 @@ async def chat(request: ChatRequest):
                 "last_search_city": session.focus_state.last_search_city,
                 "current_trip_destination": session.focus_state.current_trip_destination,
             }
-            intention_result = Msg(
-                name="IntentionAgent",
-                content=json.dumps(intention_data, ensure_ascii=False),
-                role="assistant",
-            )
+            intention_result = mk_msg("IntentionAgent", intention_data)
 
             await session.memory_manager.add_message_async("user", request.message)
             session.messages_since_summary += 1
@@ -456,9 +453,9 @@ async def chat(request: ChatRequest):
                 yield _sse("error", {"message": friendly(orchestration_error)})
                 return
 
-            result_data = robust_json_parse(
-                getattr(orchestration_result, "content", ""),
-                fallback={"results": [], "error": "parse_failed"},
+            result_data = msg_json(
+                orchestration_result,
+                default={"results": [], "error": "parse_failed"},
             )
 
             # 记住本轮的列表型结果（车票/酒店/餐厅/景点），供后续「列出来」展开
