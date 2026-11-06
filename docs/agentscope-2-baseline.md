@@ -75,3 +75,10 @@
 ## 后续阶段（升级计划 P5-P8，未开工）
 
 P5 Skill→Toolkit/FunctionTool、P6 structured output + Pipeline/SOP、P7 EventType SSE + 权限 + 决策层换 JevClassifierModel、P8 灰度双跑。
+## P5（Skill ↔ Toolkit，加法式）验证
+
+- `agents/skill_toolkit.py` + `tests/test_skill_toolkit.py`（4 passed）
+- 原生 `LocalSkillLoader(.claude/skills, scan_subdir=True)` → **13/13 SKILL.md 原样加载**（frontmatter 的 name/description 正好匹配 2.x `Skill(name, description, dir, markdown)`）
+- 经真实 `LazyAgentRegistry` 装载：**工具 13/13、指令 13/13**
+- `Toolkit.call_tool` 端到端：ToolCallBlock(type="tool_call", input=JSON字符串) → ToolChunk → 最终 ToolResponse，文本为 Skill 的 JSON
+- 结论：**skill 思路没有放弃**；2.x 的 Skill 是"纯指令包"（官方模板原文 "Skills are NOT tools"），本项目 Skill 是"指令+执行"合一，桥接层负责把后者投影到前者之上

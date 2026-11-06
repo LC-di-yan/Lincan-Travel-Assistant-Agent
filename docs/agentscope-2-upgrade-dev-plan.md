@@ -221,13 +221,15 @@ Top 冲击文件：
 
 > **P0–P4 = 最小可用升级（5 人日）：完成后系统跑在 2.0.11 且行为与 1.x 对齐。** P5–P7 是架构红利，可按评审结论裁剪。
 
-### P5 Skill → 原生工具运行时（2.5 人日）
+### P5 Skill → 原生工具运行时（2.5 人日）— 🔶 已完成加法式桥接（typed handler 待做）
 
 | 项 | 内容 |
 |---|---|
 | 任务 | 1. 每个 Skill 拆两层：`script/handlers.py`（纯业务函数，零框架依赖）+ `script/agent.py`（薄壳，只做 Msg ↔ handler 转换）。<br>2. handler 用 `FunctionTool(func, name, description, input_schema, is_read_only=..., is_concurrency_safe=...)` 注册进 `Toolkit(tools=[...], skills_or_loaders=[LocalSkillLoader(skills_root, scan_subdir=True)])`。<br>3. `data/plugin_config.json` 启停改为 `ToolGroup` 过滤，保留热加载与 `/api/memory` 插件管理契约。<br>4. 待实测 Q1：原生 SKILL.md frontmatter 与 `utils/skill_loader.py` 字段差异（§9）。<br>5. 每个 handler 补 1 个纯函数用例（脱离 Msg）。 |
 | 验收 | skill_loader 测试绿；10 个 Skill 经 Toolkit 链跑通；意图→工具映射与 `tests/test_orchestration.py` 一致 |
 | 收益 | 并发调度交给框架、只读工具自动豁免权限、SKILL.md 与官方格式对齐（可从 hub 装第三方 skill） |
+| **已完成（2026-11-06）** | `agents/skill_toolkit.py`：`build_skill_toolkit()` 把 13 个 SKILL.md 交给原生 `LocalSkillLoader` 作指令层，并把 13 个 Skill 的 `reply()` 桥接成 `FunctionTool`（返回 `ToolChunk`）作工具层。实测 **工具 13/13、指令 13/13**；`tests/test_skill_toolkit.py` 4 项（含 `Toolkit.call_tool` 端到端 JSON 往返）。**现有 agent.py 零改动**，属纯加法 |
+| **待做（P5b）** | 对翻译/汇率/搜索类 Skill 抽 typed handler（显式参数 + JSON schema），替代通用 `payload` 桥；其余 Skill 保持通用桥 |
 
 ### P6 结构化输出与编排升级（2 人日）
 
