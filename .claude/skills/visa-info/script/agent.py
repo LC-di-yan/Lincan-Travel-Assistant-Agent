@@ -1,295 +1,226 @@
-"""
-签证信息智能体 VisaInfoAgent
-职责：基于向量数据库的签证知识检索与问答
+# -*- coding: utf-8 -*-
+"""签证信息智能体 VisaInfoAgent（树导航版，2026-11 迁移）。
 
-复用 RAG 管线（Milvus Lite + sentence-transformers），独立 collection。
+与 ask-question 共用 rag_core（树索引 + 推理导航 + BM25 兜底 + 数字校验），
+差异只在知识库目录（data/documents → data/tree_index）与生成 prompt。
+旧向量实现已删除（原 Milvus Lite + bge，见 docs/rag-tree-architecture-dev-plan.md）。
 """
-from agentscope.agent import AgentBase
-from agentscope.message import Msg
-from typing import Optional, Union, List, Dict
+from __future__ import annotations
+
 import json
 import logging
-import os
-import hashlib
 from pathlib import Path
+from typing import Dict, List, Optional, Union
 
-from utils.llm_response import extract_llm_text
+from agentscope.message import Msg
+
+try:  # requirements 锁定 agentscope==1.0.16；2.x 兜底保证本技能可独立运行/测试
+    from agentscope.agent import AgentBase
+except ImportError:  # pragma: no cover
+    class AgentBase:
+        def __init__(self):
+            pass
+
+        async def __call__(self, x):
+            return await self.reply(x)
+
 from cache.decorators import cached
-
-# gRPC keepalive
-_GRPC_KEEPALIVE_MS = '600000'
-os.environ['GRPC_KEEPALIVE_TIME_MS'] = _GRPC_KEEPALIVE_MS
-os.environ['GRPC_KEEPALIVE_TIMEOUT_MS'] = '20000'
-os.environ['GRPC_KEEPALIVE_PERMIT_WITHOUT_CALLS'] = '0'
-os.environ['GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS'] = _GRPC_KEEPALIVE_MS
-os.environ['GRPC_HTTP2_MIN_PING_INTERVAL_WITHOUT_DATA_MS'] = _GRPC_KEEPALIVE_MS
+from rag_core.tree_store import TreeStore
+from rag_core.navigator import Navigator
+from rag_core.bm25_fallback import BM25Fallback
+from rag_core.answerer import Answerer
 
 logger = logging.getLogger(__name__)
 
-try:
-    from pymilvus import MilvusClient
-    from sentence_transformers import SentenceTransformer
-    DEPENDENCIES_AVAILABLE = True
-except ImportError as e:
-    logger.warning(f"RAG dependencies not available: {e}")
-    DEPENDENCIES_AVAILABLE = False
+_SKILL_DIR = Path(__file__).resolve().parent.parent
+_DOC_DIR = _SKILL_DIR / "data" / "documents"
+_INDEX_DIR = _SKILL_DIR / "data" / "tree_index"
 
-# Embedding model singleton cache
-_EMBEDDING_MODEL_CACHE: Dict[str, 'SentenceTransformer'] = {}
+_store: Optional[TreeStore] = None
+_bm25: Optional[BM25Fallback] = None
 
-def _get_embedding_model(model_path: str) -> 'SentenceTransformer':
-    if model_path not in _EMBEDDING_MODEL_CACHE:
-        logger.info(f"Loading embedding model: {model_path}")
-        _EMBEDDING_MODEL_CACHE[model_path] = SentenceTransformer(model_path, local_files_only=True)
-    return _EMBEDDING_MODEL_CACHE[model_path]
+PROMPT_SYSTEM = "你是签证政策顾问，简洁回答。"
+NO_KNOWLEDGE_HINT = "抱歉，签证知识库中没有找到相关信息。建议查阅目的地国家的大使馆官网获取最新签证政策。"
 
-# Result cache
-_VISA_CACHE: Dict[str, Dict] = {}
-_CACHE_MAX_SIZE = 50
+
+def _get_store() -> TreeStore:
+    global _store
+    if _store is None:
+        _store = TreeStore(index_dir=_INDEX_DIR, documents_dir=_DOC_DIR)
+        _store.load()
+    return _store
+
+
+def _get_bm25() -> BM25Fallback:
+    global _bm25
+    if _bm25 is None:
+        _bm25 = BM25Fallback(_get_store())
+    return _bm25
+
+
+def _mk_msg(name: str, content: str, role: str = "assistant"):
+    """跨版本构造 Msg：1.x 收字符串，2.x（pydantic）要求块列表。"""
+    try:
+        return Msg(name=name, content=content, role=role)
+    except Exception:  # pragma: no cover
+        return Msg(name=name, content=[{"type": "text", "text": content}], role=role)
 
 
 class VisaInfoAgent(AgentBase):
-    """签证信息智能体"""
+    """签证信息智能体（树导航版）"""
 
-    def __init__(
-        self,
-        name: str = "VisaInfoAgent",
-        model=None,
-        collection_name: str = "visa_knowledge",
-        top_k: int = 3,
-        **kwargs
-    ):
+    def __init__(self, name: str = "VisaInfoAgent", model=None, top_k: int = 4, **kwargs):
         super().__init__()
         self.name = name
         self.model = model
-        self.collection_name = collection_name
         self.top_k = top_k
-
-        if not DEPENDENCIES_AVAILABLE:
-            logger.error("RAG dependencies not installed")
-            self.initialized = False
-            return
-
-        # Load embedding model
-        try:
-            from config import RAG_CONFIG
-            embedding_model = RAG_CONFIG.get("embedding_model", "BAAI/bge-small-zh-v1.5")
-        except Exception:
-            embedding_model = "BAAI/bge-small-zh-v1.5"
-
-        model_path = Path(embedding_model).expanduser()
-        if not model_path.is_absolute():
-            model_path = Path.cwd() / model_path
-        if model_path.exists():
-            model_path_or_id = str(model_path.resolve())
-        else:
-            model_path_or_id = "BAAI/bge-small-zh-v1.5"
-
-        self.embedding_model = _get_embedding_model(model_path_or_id)
-        self.embedding_dim = self.embedding_model.get_sentence_embedding_dimension()
-
-        # Init Milvus Lite
-        milvus_db_dir = Path.home() / ".aligo" / "milvus_data"
-        milvus_db_dir.mkdir(parents=True, exist_ok=True)
-        milvus_db_path = str(milvus_db_dir / "milvus_lite.db")
-
-        self.milvus_client = MilvusClient(milvus_db_path)
-        self._milvus_db_path = milvus_db_path
-
-        if self.milvus_client.has_collection(collection_name):
-            logger.info(f"Loaded existing visa collection: {collection_name}")
-            try:
-                self.milvus_client.load_collection(collection_name)
-            except Exception:
-                pass
-        else:
-            logger.info(f"Creating new visa collection: {collection_name}")
-            self.milvus_client.create_collection(
-                collection_name=collection_name,
-                dimension=self.embedding_dim,
-                metric_type="COSINE",
-                auto_id=False,
-            )
-
         self.initialized = True
-        logger.info("VisaInfoAgent initialized successfully")
+        logger.info("VisaInfoAgent（树导航版）初始化完成")
 
-    def add_documents(self, documents: List[Dict[str, str]]) -> Dict:
-        """添加签证文档到知识库"""
-        if not self.initialized:
-            return {"status": "error", "message": "Agent not initialized"}
-
-        try:
-            stats = self.milvus_client.get_collection_stats(self.collection_name)
-            current_count = stats.get("row_count", 0)
-
-            data_to_insert = []
-            for i, doc in enumerate(documents):
-                doc_id = current_count + i + 1
-                content = doc['content']
-                metadata = doc.get('metadata', {})
-                embedding = self.embedding_model.encode(content).tolist()
-                data_to_insert.append({
-                    "id": doc_id,
-                    "vector": embedding,
-                    "content": content,
-                    "metadata": json.dumps(metadata, ensure_ascii=False)
-                })
-
-            self.milvus_client.insert(
-                collection_name=self.collection_name,
-                data=data_to_insert
-            )
-
-            stats = self.milvus_client.get_collection_stats(self.collection_name)
-            return {
-                "status": "success",
-                "added_count": len(documents),
-                "total_count": stats.get("row_count", 0)
-            }
-        except Exception as e:
-            logger.error(f"Error adding visa documents: {e}")
-            return {"status": "error", "message": str(e)}
-
-    def search_knowledge(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
-        """检索签证知识库"""
-        if not self.initialized:
+    async def retrieve(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
+        """导航 ∪ BM25 → 统一打分 → 祖先去冗余 → top_k。"""
+        k = top_k or self.top_k
+        store = _get_store()
+        if not store.loaded:
             return []
-
+        merged: Dict[tuple, Dict] = {}
+        meta = {"mode": "nav", "calls": 0, "degraded": False, "nav_hits": 0, "bm25_hits": 0}
+        nav = Navigator(store, model=self.model)
         try:
-            k = top_k or self.top_k
-            query_embedding = self.embedding_model.encode(query).tolist()
+            res = await nav.navigate(query)
+            meta.update(calls=res.llm_calls, degraded=res.degraded, ms=res.elapsed_ms)
+            for h in res.hits:
+                text = store.node_text(h.doc_id, h.node_id)
+                node = store.docs[h.doc_id].find(h.node_id)
+                if text:
+                    merged[(h.doc_id, h.node_id)] = {
+                        "doc_id": h.doc_id, "node_id": h.node_id,
+                        "file": store.docs[h.doc_id].source_file,
+                        "path": h.path, "text": text,
+                        "lines": node.line_range if node else None,
+                    }
+            meta["nav_hits"] = len(merged)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("签证树导航异常：%s", exc)
 
-            results = self.milvus_client.search(
-                collection_name=self.collection_name,
-                data=[query_embedding],
-                limit=k,
-                output_fields=["id", "content", "metadata"]
-            )
+        for r in _get_bm25().search(query, top_k=max(4, k + 2)):
+            node = store.docs[r["doc_id"]].find(r["node_id"])
+            merged.setdefault((r["doc_id"], r["node_id"]), {
+                "doc_id": r["doc_id"], "node_id": r["node_id"],
+                "file": store.docs[r["doc_id"]].source_file,
+                "path": r["path"], "text": r["text"],
+                "lines": node.line_range if node else None,
+                "score": r["score"],
+            })
 
-            retrieved_docs = []
-            if results and len(results) > 0:
-                for hit in results[0]:
-                    metadata_str = hit.get("entity", {}).get("metadata", "{}")
-                    try:
-                        metadata = json.loads(metadata_str)
-                    except Exception:
-                        metadata = {}
+        scores = _get_bm25().scores_for(query, list(merged))
+        top_score = max(scores.values()) if scores else 0.0
+        nav_keys = {k for k in merged if "score" not in merged[k]}
+        for key, d in merged.items():
+            base = scores.get(key, 0.0)
+            norm = (base / top_score) if top_score > 0 else 0.0
+            d["score"] = round(norm + (0.6 if key in nav_keys else 0.0), 4)
 
-                    retrieved_docs.append({
-                        'id': hit.get("entity", {}).get("id", ""),
-                        'content': hit.get("entity", {}).get("content", ""),
-                        'metadata': metadata,
-                        'distance': hit.get("distance", 0.0)
-                    })
+        def _has_ancestor(key) -> bool:
+            doc_id, node_id = key
+            parts = node_id.split("#")
+            return any((doc_id, "#".join(parts[:i])) in merged for i in range(1, len(parts)))
 
-            return retrieved_docs
-        except Exception as e:
-            logger.error(f"Error searching visa knowledge: {e}")
-            return []
+        docs = [d for k, d in merged.items() if not _has_ancestor(k)] or list(merged.values())
+        docs.sort(key=lambda d: -float(d["score"]))
+        meta["bm25_hits"] = len(merged) - meta["nav_hits"]
+        meta["ancestor_pruned"] = len(merged) - len(docs)
+        self._last_retrieval = meta
+        return docs[:k]
 
     @cached("visa_info", ttl=21600)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
-        """签证问答主流程"""
-        if not self.initialized:
-            return Msg(name=self.name, content=json.dumps({
-                "status": "error",
-                "message": "VisaInfoAgent not initialized"
-            }), role="assistant")
-
+        """签证问答主流程（对外契约与旧版一致）"""
         if x is None:
-            return Msg(name=self.name, content=json.dumps({}), role="assistant")
+            return _mk_msg(self.name, json.dumps({}))
 
-        # Extract query
-        if isinstance(x, list):
-            content = x[-1].content if x else ""
-        else:
-            content = x.content
-
+        content = x[-1].content if isinstance(x, list) else x.content
+        if isinstance(content, list):  # agentscope 2.x 块列表
+            content = "\n".join(
+                b.get("text", "") if isinstance(b, dict) else getattr(b, "text", "")
+                for b in content if b)
         user_query = content
-        if isinstance(content, str) and content.strip().startswith('{'):
+        if isinstance(content, str) and content.strip().startswith("{"):
             try:
                 data = json.loads(content)
-                if "context" in data and isinstance(data["context"], dict):
-                    user_query = data["context"].get("rewritten_query", "") or content
-                elif "rewritten_query" in data:
-                    user_query = data.get("rewritten_query", "") or content
-            except Exception:
+                if isinstance(data, dict):
+                    ctx = data.get("context")
+                    if isinstance(ctx, dict) and ctx.get("rewritten_query"):
+                        user_query = ctx["rewritten_query"]
+                    elif data.get("rewritten_query"):
+                        user_query = data["rewritten_query"]
+            except Exception:  # noqa: BLE001
                 pass
 
-        # Check cache
-        cache_key = hashlib.md5(user_query.encode()).hexdigest()
-        if cache_key in _VISA_CACHE:
-            cached = _VISA_CACHE[cache_key]
-            return Msg(name=self.name, content=json.dumps(cached, ensure_ascii=False), role="assistant")
+        docs = await self.retrieve(user_query)
+        if not docs:
+            return _mk_msg(self.name, json.dumps({
+                "status": "no_knowledge", "query": user_query,
+                "answer": NO_KNOWLEDGE_HINT, "retrieved_documents": []}, ensure_ascii=False))
 
-        # Search
-        retrieved_docs = self.search_knowledge(user_query)
-
-        if not retrieved_docs:
-            result = {
-                "status": "no_knowledge",
-                "query": user_query,
-                "answer": "抱歉，签证知识库中没有找到相关信息。建议查阅目的地国家的大使馆官网获取最新签证政策。",
-                "retrieved_documents": []
-            }
-            return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
-
-        # Build context
-        knowledge_context = "\n\n".join([
-            f"【签证信息{i+1}】\n{doc['content']}"
-            for i, doc in enumerate(retrieved_docs)
-        ])
-
+        num_check, answer, proactive = "skipped", "", ""
+        cited = docs
         if self.model:
-            prompt = f"""基于以下签证知识库信息回答用户问题，简洁准确，不超过500字。
-
-【问题】{user_query}
-
-【签证知识库】
-{knowledge_context}
-
-【约束】
-1. 只基于知识库信息回答，没有就直接说"签证知识库中没有找到相关信息"
-2. 不要编造答案
-3. 提醒用户签证政策可能随时变化，建议出行前确认最新信息
-4. 额外输出"proactive_question"字段：用"需要我帮你..."开头自然延伸一句反问（25字内），如不需要则设为""
-"""
-
-            try:
-                messages = [
-                    {"role": "system", "content": "你是签证咨询专家，简洁回答。提醒用户政策可能变化。"},
-                    {"role": "user", "content": prompt}
-                ]
-                response = await self.model(messages)
-                answer = extract_llm_text(response, fallback="无法生成答案")
-                if not answer:
-                    answer = "无法生成答案"
-            except Exception as e:
-                logger.error(f"Error generating visa answer: {e}")
-                answer = f"签证知识库中找到相关信息，但生成答案时出错：{str(e)}"
+            ans = Answerer(model=self.model, skill_instruction=(
+                "你是签证政策顾问。签证政策可能变化，回答末尾提醒用户出行前确认最新信息。"),
+                system=PROMPT_SYSTEM)
+            res = await ans.generate(user_query, docs)
+            answer, proactive, num_check = res.answer, res.proactive_question, res.number_check
+            if res.used_ids:
+                cited = [d for d in docs if d["node_id"] in res.used_ids] or docs
+            if not answer:
+                answer = "签证知识库中找到了相关条款，但生成答案时出错，请稍后重试。"
         else:
-            answer = "以下是签证知识库中的相关信息：\n\n" + knowledge_context
+            answer = "以下是签证知识库中的相关条款：\n\n" + "\n\n".join(
+                f"【{d['path']}】\n{d['text']}" for d in docs)
+
+        seen, sources = set(), []
+        for d in cited:
+            key = (d["file"], d["path"])
+            if key in seen:
+                continue
+            seen.add(key)
+            sources.append({"file": d["file"], "title": d["path"].split("｜")[0], "path": d["path"]})
+        cite = "、".join(f"《{s['path']}》" for s in sources[:3])
+        if cite and cite not in answer:
+            answer = answer.rstrip() + f"\n\n依据：{cite}"
 
         result = {
             "status": "success",
             "query": user_query,
             "answer": answer,
-            "proactive_question": "需要我帮你了解其他国家的签证政策吗？",
+            "proactive_question": proactive,
+            "number_check": num_check,
+            "sources": sources,
             "retrieved_documents": [
-                {
-                    "content": doc['content'][:200] + "..." if len(doc['content']) > 200 else doc['content'],
-                    "metadata": doc['metadata']
-                }
-                for doc in retrieved_docs
-            ]
+                {"content": d["text"][:200] + ("..." if len(d["text"]) > 200 else ""),
+                 "metadata": {"parent_doc": d["file"], "title": d["path"], "path": d["path"]}}
+                for d in docs
+            ],
         }
+        return _mk_msg(self.name, json.dumps(result, ensure_ascii=False))
 
-        # Cache
-        if len(_VISA_CACHE) >= _CACHE_MAX_SIZE:
-            keys_to_remove = list(_VISA_CACHE.keys())[:_CACHE_MAX_SIZE // 2]
-            for k in keys_to_remove:
-                del _VISA_CACHE[k]
-        _VISA_CACHE[cache_key] = result
+    def search_knowledge(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
+        """兼容旧同步检索入口。"""
+        return [
+            {"id": r["node_id"], "content": r["text"],
+             "metadata": {"title": r["path"]}, "distance": round(1.0 - min(r["score"], 1.0), 4)}
+            for r in _get_bm25().search(query, top_k=top_k or self.top_k)
+        ]
 
-        return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+    def get_stats(self) -> Dict:
+        st = _get_store().stats()
+        return {"status": "success", "collection_name": "visa_tree_index",
+                "total_documents": st["documents"], "nodes": st["nodes"],
+                "knowledge_base_path": st["index_dir"]}
+
+    def close(self):
+        pass
+
+    def __del__(self):
+        pass

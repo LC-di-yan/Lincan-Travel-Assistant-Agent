@@ -59,11 +59,15 @@ SYSTEM_CONFIG = {
     "timeout": 60,
 }
 
-# RAG 知识库：嵌入模型
-# 首次运行时会自动从 HuggingFace 下载 BAAI/bge-small-zh-v1.5 (~90MB)
-# 如需使用本地模型，将路径改为本地目录即可
+# RAG 知识库配置（树索引后端，2026-11）
+# 共享实现在 rag_core/；ask-question 与 visa-info 共用
 RAG_CONFIG = {
-    "embedding_model": os.environ.get("ALIGO_EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5"),
+    "backend": os.environ.get("ALIGO_RAG_BACKEND", "tree"),
+    "nav_max_llm_calls": int(os.environ.get("ALIGO_RAG_NAV_CALLS", "1")),   # 实测 2 跳无增益，默认 1
+    "nav_use_llm": os.environ.get("ALIGO_RAG_NAV_USE_LLM", "1") not in ("0", "false", "False"),
+    "nav_confidence_floor": float(os.environ.get("ALIGO_RAG_NAV_FLOOR", "0.6")),
+    "nav_timeout_sec": float(os.environ.get("ALIGO_RAG_NAV_TIMEOUT", "12")),
+    "top_k": int(os.environ.get("ALIGO_RAG_TOP_K", "4")),
 }
 
 # TTS Configuration（小米 MiMo，独立于 LLM 的阿里云 MAAS）
@@ -102,6 +106,21 @@ CACHE_DEFAULT_TTL = int(os.environ.get("ALIGO_CACHE_TTL", "3600"))
 AMAP_CONFIG = {
     "api_key": os.environ.get("AMAP_API_KEY", ""),
     "base_url": "https://restapi.amap.com/v3",
+}
+
+# 决策层（NeoHorse-Jev-4B 结构化决策模型）
+# 走独立端点 POST /v1/decision（非 OpenAI 协议），详见 docs/decision-layer-dev-plan.md
+# mode: off（默认，零影响）| shadow（只记影子日志）| assist（可否决误命中）| primary（高置信直通）
+# 引擎实现：utils/decision_engine.py；接线：utils/decision_router.py
+DECISION_CONFIG = {
+    "mode": os.environ.get("ALIGO_DECISION_MODE", "off"),
+    "api_key": os.environ.get("NEOHOUSE_API_KEY", ""),
+    "base_url": os.environ.get("NEOHOUSE_BASE_URL", "https://tokenrhythm.studio/v1"),
+    "model": os.environ.get("NEOHOUSE_MODEL", "NeoHorse-Jev-4B"),
+    "timeout": float(os.environ.get("ALIGO_DECISION_TIMEOUT", "8")),
+    "shadow_dir": os.environ.get("ALIGO_DECISION_SHADOW_DIR", ""),
+    "cache_ttl": float(os.environ.get("ALIGO_DECISION_CACHE_TTL", "300")),
+    "thresholds_path": os.environ.get("ALIGO_DECISION_THRESHOLDS", "data/decision_thresholds.json"),
 }
 
 # 连接与可用性：重试、熔断、健康检查

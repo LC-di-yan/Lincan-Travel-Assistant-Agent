@@ -1,82 +1,62 @@
 ---
 name: ask-question
-description: Use this skill when the user asks questions about travel policies, reimbursement, booking guides, city information, or any travel-related questions. Triggers when user asks "XX标准是多少", "如何XX", "XX怎么办", or any question format. This skill uses RAGKnowledgeAgent to retrieve answers from the knowledge base.
+description: Use this skill when the user asks questions about travel policies, reimbursement, booking guides, city information, or any travel-related questions. This skill uses RAGKnowledgeAgent (tree-index navigation backend) to retrieve answers from the knowledge base.
 ---
 
-# Ask Travel Question (RAG 知识库问答)
+# Ask Travel Question (RAG 知识库问答 · 树导航版)
 
-回答用户关于差旅政策、报销、预订、城市指南等的问题，使用 **RAGKnowledgeAgent** 从本地知识库检索并生成答案。
+回答用户关于差旅政策、报销、预订、城市指南等问题。检索底座为「文档树索引 + 推理导航 + BM25 词面兜底」
+（2026-11 架构升级，详见 docs/rag-tree-architecture-dev-plan.md）。
 
-## When to Use
+## 检索流水线
 
-- 用户问「XX标准是多少」「如何报销」「航班延误怎么办」等
-- 需要基于企业/项目知识文档回答时
+1. 树导航：规则直通（标题/关键词命中）→ LLM 逐层下钻（≤2 次）定位条款节点；
+2. BM25 兜底：导航失败/低置信时词面检索；两路合并统一打分重排，取 top4；
+3. 生成：节点原文直接进 prompt；金额/比例逐字校验（不符自动修复一次，仍不符则标注提醒）；
+4. 引用：输出「文档｜章节｜小节」路径，可点对点核对到源 txt。
 
 ## Agent
 
-- **RAGKnowledgeAgent** (`agents/rag_knowledge_agent.py`)
-- 所有子 Agent 均使用 **model 对象**（非 model_config_name），需先创建 `OpenAIChatModel`
-- **异步**：`reply()` 为 `async`，需 `await`
+- **RAGKnowledgeAgent**（.claude/skills/ask-question/script/agent.py）
+- 使用 **model 对象**（需先创建 OpenAIChatModel），**reply() 为 async**
 
-## 初始化与调用
+## 返回格式（content JSON）
 
-```python
-import asyncio
-from agentscope.message import Msg
-from agentscope.model import OpenAIChatModel
-from config_agentscope import init_agentscope
-from config import LLM_CONFIG
-from agents.rag_knowledge_agent import RAGKnowledgeAgent
-import json
+- status: success / no_knowledge / document_list
+- answer: 自然语言答案（末尾带「依据：《文档｜章节｜小节》」）
+- proactive_question: 追问（可为空）
+- number_check: passed / repaired / failed（数字逐字校验结果）
+- sources: [{file, title, path, lines}] —— path+lines 可定位到源文件原文
+- retrieved_documents: 命中条款摘要（content ≤200 字 + metadata）
+- retrieval: {mode, calls, degraded, nav_hits, bm25_hits} 检索链路埋点
 
-async def ask_question(user_query: str):
-    init_agentscope()
-    model = OpenAIChatModel(
-        model_name=LLM_CONFIG["model_name"],
-        api_key=LLM_CONFIG["api_key"],
-        client_kwargs={"base_url": LLM_CONFIG["base_url"], "timeout": 60},
-        temperature=LLM_CONFIG.get("temperature", 0.7),
-        max_tokens=LLM_CONFIG.get("max_tokens", 2000),
-    )
-    # 嵌入模型路径从 config.RAG_CONFIG 读取，默认 data/models/bge-small-zh-v1.5
-    rag_agent = RAGKnowledgeAgent(
-        name="RAGKnowledgeAgent",
-        model=model,
-        knowledge_base_path="./data/rag_knowledge",
-        collection_name="business_travel_knowledge",
-        top_k=3,
-    )
-    if not getattr(rag_agent, "initialized", True):
-        return {"error": "RAG 未初始化，请先运行 python scripts/init_knowledge_base.py"}
-    user_msg = Msg(name="user", content=user_query, role="user")
-    result = await rag_agent.reply(user_msg)
-    return json.loads(result.content) if isinstance(result.content, str) else result.content
+## 知识库维护
 
-# 使用
-data = asyncio.run(ask_question("北京的住宿标准是多少？"))
-# data: {"status": "success"|"no_knowledge", "answer": "...", "retrieved_documents": [...], "query": "..."}
+- 源文档：data/documents/*.txt（唯一事实源，共 8 篇）
+- 树索引：data/tree_index/*.json（构建产物，可 git diff）；源文档变更后重建：
+
+```bash
+python .claude/skills/ask-question/script/tree_builder.py
 ```
 
-## 返回格式
+- 加载时若源文件 hash 不一致会自动标记 stale 并拒绝使用（不会返回过期答案）
 
-- `status`: `"success"` 或 `"no_knowledge"`
-- `answer`: 自然语言答案
-- `retrieved_documents`: 列表，每项含 `content`, `metadata`
-- `query`: 用户问题
+## 调试
 
-## 知识库
+```bash
+python scripts/rag_query.py "杭州住宿费上限是多少" --top-k 6 --full
+```
 
-- 路径：`data/rag_knowledge/`（Milvus Lite）
-- 源文档：`data/documents/`，共 8 类（差旅标准、报销、预订、FAQ、紧急处理、平台指南、城市指南、环保）
-- 首次使用前需执行：`python scripts/init_knowledge_base.py`
+打印与线上一致的检索结果（得分/章节路径/行号/原文），用于排查「为什么答错」。
 
+## 评测
+
+```bash
+python tests/eval_rag_tree.py    # 40 题离线检索评测（无 LLM 最坏情况，CI 门禁）
+```
 
 ## 回答生成指南
 
-【回答要求】
-1. 必须严格基于知识库中的信息进行回答，严禁编造。
-2. 如果检索到的知识库信息与问题无关，或者信息不足以回答问题，请直接回答“知识库中没有相关信息”。
-3. 回答要准确、简洁、有条理。
-4. 如果有多个相关信息，可以分点说明。
-
-请直接给出答案。
+1. 必须严格基于知识原文回答，严禁编造；
+2. 金额、比例、天数必须逐字摘自原文（生成后由代码校验）；
+3. 知识原文不足以回答时，直接说「知识库中没有相关信息」。

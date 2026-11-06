@@ -1,0 +1,466 @@
+{
+  "schema_version": 1,
+  "doc_id": "01_travel_standards",
+  "source_file": "C:\\Users\\86134\\Desktop\\Lincan-Travel-Assistant-Agent-main\\.claude\\skills\\ask-question\\data\\documents\\01_travel_standards.txt",
+  "source_sha256": "8e658ac9f149d21258490cded50095574ae6e8d67c9c337c0217dd2b0d2ac4cc",
+  "title": "阿里商旅差旅标准和规定",
+  "summary": "差旅申请流程、交通标准、住宿标准、餐饮标准、其他费用标准、差旅补贴、特殊情况处理、违规处理、环保倡议、附则",
+  "keywords": [
+    "出差",
+    "标准",
+    "审批",
+    "报销",
+    "申请",
+    "差旅",
+    "特殊",
+    "酒店",
+    "住宿",
+    "选择",
+    "费用",
+    "经济舱",
+    "需要",
+    "超过"
+  ],
+  "tree": [
+    {
+      "id": "01#h1-1",
+      "title": "一、差旅申请流程",
+      "summary": "申请提交要求、审批流程、审批时效",
+      "line_range": [
+        3,
+        20
+      ],
+      "children": [
+        {
+          "id": "01#h1-1#h2-1",
+          "title": "1. 申请提交要求",
+          "summary": "3个工作日",
+          "line_range": [
+            5,
+            9
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-1#h2-2",
+          "title": "2. 审批流程",
+          "summary": "10天",
+          "line_range": [
+            10,
+            15
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-1#h2-3",
+          "title": "3. 审批时效",
+          "summary": "1个工作日；3个工作日",
+          "line_range": [
+            16,
+            20
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "01#h1-2",
+      "title": "二、交通标准",
+      "summary": "高铁/动车标准、飞机标准、出租车/网约车、租车标准",
+      "line_range": [
+        21,
+        43
+      ],
+      "children": [
+        {
+          "id": "01#h1-2#h2-1",
+          "title": "1. 高铁/动车标准",
+          "summary": "允许预订：二等座及以下",
+          "line_range": [
+            23,
+            27
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-2#h2-2",
+          "title": "2. 飞机标准",
+          "summary": "4小时；1.85米",
+          "line_range": [
+            28,
+            33
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-2#h2-3",
+          "title": "3. 出租车/网约车",
+          "summary": "允许使用场景：机场/火车站接送、业务拜访、携带重要物品",
+          "line_range": [
+            34,
+            38
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-2#h2-4",
+          "title": "4. 租车标准",
+          "summary": "多地出差或偏远地区可申请租车",
+          "line_range": [
+            39,
+            43
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "01#h1-3",
+      "title": "三、住宿标准",
+      "summary": "一线城市住宿标准、二线城市住宿标准、三线及以下城市住宿标准、特殊地区标准、住宿要求",
+      "line_range": [
+        44,
+        71
+      ],
+      "children": [
+        {
+          "id": "01#h1-3#h2-1",
+          "title": "1. 一线城市住宿标准",
+          "summary": "500元；9折",
+          "line_range": [
+            46,
+            51
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-3#h2-2",
+          "title": "2. 二线城市住宿标准",
+          "summary": "400元",
+          "line_range": [
+            52,
+            56
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-3#h2-3",
+          "title": "3. 三线及以下城市住宿标准",
+          "summary": "300元",
+          "line_range": [
+            57,
+            60
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-3#h2-4",
+          "title": "4. 特殊地区标准",
+          "summary": "20%",
+          "line_range": [
+            61,
+            65
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-3#h2-5",
+          "title": "5. 住宿要求",
+          "summary": "必须选择正规酒店，具有营业执照和卫生许可证",
+          "line_range": [
+            66,
+            71
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "01#h1-4",
+      "title": "四、餐饮标准",
+      "summary": "早餐、午餐和晚餐、业务招待、特殊餐饮",
+      "line_range": [
+        72,
+        91
+      ],
+      "children": [
+        {
+          "id": "01#h1-4#h2-1",
+          "title": "1. 早餐",
+          "summary": "30元",
+          "line_range": [
+            74,
+            77
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-4#h2-2",
+          "title": "2. 午餐和晚餐",
+          "summary": "100元",
+          "line_range": [
+            78,
+            82
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-4#h2-3",
+          "title": "3. 业务招待",
+          "summary": "500元",
+          "line_range": [
+            83,
+            87
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-4#h2-4",
+          "title": "4. 特殊餐饮",
+          "summary": "清真、素食等特殊饮食需求：可根据实际情况选择，标准同上",
+          "line_range": [
+            88,
+            91
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "01#h1-5",
+      "title": "五、其他费用标准",
+      "summary": "通讯费用、签证费用、保险费用、行李费用、停车费",
+      "line_range": [
+        92,
+        113
+      ],
+      "children": [
+        {
+          "id": "01#h1-5#h2-1",
+          "title": "1. 通讯费用",
+          "summary": "出差期间产生的业务相关通讯费可报销",
+          "line_range": [
+            94,
+            97
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-5#h2-2",
+          "title": "2. 签证费用",
+          "summary": "因公出国签证费：全额报销",
+          "line_range": [
+            98,
+            101
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-5#h2-3",
+          "title": "3. 保险费用",
+          "summary": "公司为出差员工统一购买差旅意外险",
+          "line_range": [
+            102,
+            105
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-5#h2-4",
+          "title": "4. 行李费用",
+          "summary": "托运行李费：经济舱免费额度内不产生费用",
+          "line_range": [
+            106,
+            109
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-5#h2-5",
+          "title": "5. 停车费",
+          "summary": "机场停车费：不予报销（应使用公共交通或出租车）",
+          "line_range": [
+            110,
+            113
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "01#h1-6",
+      "title": "六、差旅补贴",
+      "summary": "出差补贴、加班补贴",
+      "line_range": [
+        114,
+        123
+      ],
+      "children": [
+        {
+          "id": "01#h1-6#h2-1",
+          "title": "1. 出差补贴",
+          "summary": "国内出差：无额外补贴",
+          "line_range": [
+            116,
+            119
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-6#h2-2",
+          "title": "2. 加班补贴",
+          "summary": "周末或节假日出差：可申请调休",
+          "line_range": [
+            120,
+            123
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "01#h1-7",
+      "title": "七、特殊情况处理",
+      "summary": "超标准情况、行程变更、提前或延后",
+      "line_range": [
+        124,
+        138
+      ],
+      "children": [
+        {
+          "id": "01#h1-7#h2-1",
+          "title": "1. 超标准情况",
+          "summary": "30%",
+          "line_range": [
+            126,
+            130
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-7#h2-2",
+          "title": "2. 行程变更",
+          "summary": "3天",
+          "line_range": [
+            131,
+            134
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-7#h2-3",
+          "title": "3. 提前或延后",
+          "summary": "提前一天出发或延后一天返回：需在申请中说明，额外产生的住宿费用需自理",
+          "line_range": [
+            135,
+            138
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "01#h1-8",
+      "title": "八、违规处理",
+      "summary": "违规行为、处理措施",
+      "line_range": [
+        139,
+        151
+      ],
+      "children": [
+        {
+          "id": "01#h1-8#h2-1",
+          "title": "1. 违规行为",
+          "summary": "未经审批擅自出差",
+          "line_range": [
+            141,
+            146
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-8#h2-2",
+          "title": "2. 处理措施",
+          "summary": "首次违规：批评教育，不予报销违规部分",
+          "line_range": [
+            147,
+            151
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "01#h1-9",
+      "title": "九、环保倡议",
+      "summary": "绿色出行、绿色住宿",
+      "line_range": [
+        152,
+        163
+      ],
+      "children": [
+        {
+          "id": "01#h1-9#h2-1",
+          "title": "1. 绿色出行",
+          "summary": "300公里",
+          "line_range": [
+            154,
+            158
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-9#h2-2",
+          "title": "2. 绿色住宿",
+          "summary": "选择有环保认证的酒店",
+          "line_range": [
+            159,
+            163
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "01#h1-10",
+      "title": "十、附则",
+      "summary": "标准更新、解释权、生效日期",
+      "line_range": [
+        164,
+        177
+      ],
+      "children": [
+        {
+          "id": "01#h1-10#h2-1",
+          "title": "1. 标准更新",
+          "summary": "本标准根据公司实际情况和市场价格变化定期更新",
+          "line_range": [
+            166,
+            169
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-10#h2-2",
+          "title": "2. 解释权",
+          "summary": "本标准由人力资源部和财务部共同解释",
+          "line_range": [
+            170,
+            173
+          ],
+          "children": []
+        },
+        {
+          "id": "01#h1-10#h2-3",
+          "title": "3. 生效日期",
+          "summary": "本标准自2024年1月1日起生效",
+          "line_range": [
+            174,
+            177
+          ],
+          "children": []
+        }
+      ]
+    }
+  ]
+}

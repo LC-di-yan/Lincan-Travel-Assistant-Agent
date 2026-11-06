@@ -63,15 +63,6 @@ async def lifespan(app: FastAPI):
     if redis_pool:
         logger.info("Redis cache initialized")
 
-    # 启动：预加载 RAG Embedding 模型（避免首次请求时加载导致进程崩溃）
-    try:
-        from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer("BAAI/bge-small-zh-v1.5", local_files_only=True)
-        _dim = _model.get_sentence_embedding_dimension()
-        logger.info(f"RAG embedding model pre-loaded (dim={_dim})")
-    except Exception as _e:
-        logger.warning(f"RAG embedding model pre-load failed: {_e}")
-
     # 启动：模型通道探活
     # 2026-10-20 事故：主通道被上游回收（403 AccessDenied.Unpurchased），
     # 因为没有启动自检，直到用户提问才暴露。这里开机就打一行结论。
@@ -94,6 +85,27 @@ async def lifespan(app: FastAPI):
                 logger.error("[LLM] 所有通道均不可用，行程规划等需要模型的步骤会失败")
     except Exception as _e:
         logger.warning(f"LLM channel probe skipped: {_e}")
+
+    # 启动：决策层探活（NeoHorse-Jev-4B）
+    # 只在 mode != off 时发一次极小的决策请求；失败只降级，不影响启动。
+    try:
+        from config import DECISION_CONFIG
+        from utils import decision_engine as _de
+
+        _eng = _de.DecisionEngine.from_config(DECISION_CONFIG)
+        _de.reset_engine(_eng)
+        if _eng is not None:
+            _probe = await _eng.route("ping")
+            if _probe is None:
+                logger.warning("[DECISION] 决策层不可用：%s（自动降级到 LLM/规则）", _eng.last_error)
+            else:
+                logger.info("[DECISION] 决策层就绪：mode=%s model=%s intent=%s %.0fms",
+                            _eng.mode, _eng.model, _probe.intent, _probe.latency_ms)
+        else:
+            logger.info("[DECISION] 决策层未启用（ALIGO_DECISION_MODE=%s）",
+                        DECISION_CONFIG.get("mode", "off"))
+    except Exception as _e:
+        logger.warning(f"decision layer probe skipped: {_e}")
 
     yield
 

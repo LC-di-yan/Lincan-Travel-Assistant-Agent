@@ -5,9 +5,6 @@
 基于 **AgentScope 多智能体框架 + FastAPI + React 19** 的差旅规划系统：意图识别 → 优先级并行调度 → 10 个技能智能体 → 两层记忆 → SSE 流式回显。
 模型层做了**多通道路由与故障转移**，单个模型服务挂掉不会让整站瘫痪。
 
-🔗 **在线展示页**：<https://lc-di-yan.github.io/Lincan-Travel-Assistant-Agent/>（含完整截图、能力矩阵与架构说明）
-
-
 <p>
 <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white">
 <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white">
@@ -31,8 +28,6 @@
 | 偏好记忆（说一次就记住，下次规划自动用上） | 记账 + 汇率（一句话完成，侧栏实时汇总） |
 |---|---|
 | ![偏好](docs/screenshots/06-preference.png) | ![记账与汇率](docs/screenshots/07-expense-currency.png) |
-
-> 想看完整交互？[`docs/showcase.html`](docs/showcase.html) 是一个可离线打开的产品展示页（含全部截图、能力矩阵与架构说明）。
 
 ---
 
@@ -61,7 +56,7 @@
 | 费用记账 | 一句话记账，分类/币种/日期，侧栏汇总 | <0.1 s |
 | 汇率换算 | 实时汇率，多币种 | 3.7–4.4 s |
 | 翻译 | 中英日韩等，术语保持 | 2.4–3.8 s |
-| 知识库问答 | 8 份差旅制度文档（标准/报销/预订/FAQ…），回答末尾标注「依据」；问「有哪些知识库」直接列清单 | 4.4–7.5 s |
+| 知识库问答 | 8 份差旅制度文档（标准/报销/预订/FAQ…），树索引定位条款，回答末尾标注「依据《文档｜章节｜小节》」；问「有哪些知识库」直接列清单 | 4.4–7.5 s |
 
 还有两个容易被忽略的细节：
 
@@ -93,10 +88,10 @@
                      │
                      ├─ MemoryManager ── 短期(10 轮) + 长期(JSON / PostgreSQL)
                      ├─ FailoverChatModel ── 主 / 备 / 兜底通道 + 总超时预算
-                     └─ 存储：JSON/SQLite · Milvus Lite · Redis(可选)
+                     └─ 存储：JSON/SQLite · Redis(可选)
 ```
 
-**技术栈**：Python 3.12 · FastAPI · AgentScope 1.0.16 · Sentence-Transformers · Milvus Lite · React 19 + Vite + TypeScript + Zustand + Tailwind。
+**技术栈**：Python 3.12 · FastAPI · AgentScope 1.0.16 · 树索引 RAG（jieba + rank-bm25） · React 19 + Vite + TypeScript + Zustand + Tailwind。
 
 目录速览：
 
@@ -135,15 +130,18 @@ python -m uvicorn server.app:app --host 0.0.0.0 --port 3003
 # 打开 http://127.0.0.1:3003
 ```
 
-Windows 下也可以用现成脚本：`.\start-demo.ps1` 启动、`.\stop-demo.ps1` 停止。
+**知识库**：RAG 问答使用「文档树索引」，仓库内已带好构建产物，开箱即用（无需向量库、无需下载模型）。
 
-**知识库（可选）**：首次使用 RAG 问答需要构建向量库
+源文档改动后重建索引（差旅 + 签证一起）：
 
 ```bash
-python .claude/skills/ask-question/script/init_knowledge_base.py
+python scripts/build_rag_index.py          # 全部重建
+python scripts/build_rag_index.py --ask    # 只重建差旅知识库
+python tests/eval_rag_tree.py              # 40 题检索自检（离线，无需 Key）
+python scripts/rag_query.py "杭州住宿费上限是多少"   # 调试一条问题的检索结果
 ```
 
-首次加载 embedding 模型会从 HuggingFace 下载约 90MB；国内可在 `.env` 里配 `HF_ENDPOINT=https://hf-mirror.com`。
+架构与运维细节见 [docs/rag-tree-architecture-dev-plan.md](docs/rag-tree-architecture-dev-plan.md)。
 
 ---
 
@@ -184,8 +182,8 @@ python tools/scan_secrets.py     # 扫描 sk- / QC- / token / 口令，输出脱
 ## 测试
 
 ```bash
-# 单元 + 集成（建议先停服务：Milvus Lite 数据目录是进程独占锁）
-python -m pytest -q                                  # 75 passed / 6 skipped
+# 单元 + 集成（无向量库，不需要先停服务；少数用例需要 ALIGO_API_KEY）
+python -m pytest -q                                  # 149 passed / 7 failed(缺 Key) / 7 skipped
 
 # 前端-后端契约（需服务运行中）
 python -m pytest tests/test_web_contracts.py -q      # 4 passed / 2 skipped（TTS 需 mock 上游）
@@ -220,9 +218,7 @@ python verify_llm.py
 ## 文档
 
 - [设计文档与开发指南](docs/DEVELOPER_GUIDE.md)（原 README，含子智能体详解与 CLI 用法）
-- [演示脚本](docs/DEMO_SCRIPT.md)（8 分钟逐幕台词 + 故障预案 + HR 问答）
 - [变更记录](docs/CHANGELOG.md)（2026-10 的故障复盘与修复）
-- [产品展示页](docs/showcase.html)（可离线打开）
 - 其它设计与方案：`docs/` 目录
 
 ---

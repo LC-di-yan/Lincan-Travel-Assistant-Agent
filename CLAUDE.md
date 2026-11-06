@@ -29,8 +29,15 @@ pytest                            # 全部测试
 pytest tests/test_intention_agent.py  # 单模块
 python tests/test_cli_qa.py       # 端到端集成
 
-# 知识库初始化
-python .claude/skills/ask-question/script/init_knowledge_base.py
+# 决策层（NeoHorse-Jev-4B）：影子回放 / 金标准集 / 接线测试
+python tools/replay_shadow.py                     # 影子一致率、路径分布、冲突数
+python tools/bench_decision.py                    # 24 条金标准集（需 NEOHOUSE_API_KEY）
+pytest tests/test_decision_engine.py tests/test_decision_integration.py -q
+
+# 知识库（树索引）重建：源文档变更后运行；检索评测 / 单题调试
+python scripts/build_rag_index.py
+python tests/eval_rag_tree.py
+python scripts/rag_query.py "杭州住宿费上限是多少"   # 看这条问题会检索到什么
 
 # 健康检查
 python cli.py health
@@ -54,7 +61,7 @@ python cli.py health
 | itinerary_planning | plan-trip | 行程规划 |
 | memory_query | memory-query | 查询历史记忆 |
 | preference | preference | 偏好管理（追加/覆盖） |
-| rag_knowledge | ask-question | RAG 知识库问答 |
+| rag_knowledge | ask-question | RAG 知识库问答（树索引+推理导航，2026-11） |
 | information_query | query-info | 天气/网络搜索 |
 | event_collection | event-collection | 行程要素提取 |
 | hotel_search | place-search | 酒店/民宿搜索（高德POI） |
@@ -69,7 +76,7 @@ python cli.py health
 | expense-tracker | 费用记录与汇总 |
 | currency-converter | 汇率查询（frankfurter.app） |
 | translation | 多语言翻译（MyMemory API） |
-| visa-info | 签证政策查询（RAG） |
+| visa-info | 签证政策查询（树导航版，2026-11） |
 | train-ticket | 火车票查询（12306） |
 
 ### 记忆系统
@@ -86,10 +93,20 @@ python cli.py health
 - `web/src/api/client.ts`：SSE 客户端 + REST helper
 - `web/src/store/chatStore.ts`：Zustand 状态管理
 
+### 决策层（NeoHorse-Jev-4B，2026-11）
+
+- `utils/decision_engine.py`：`POST /v1/decision` 客户端（非 OpenAI 协议），失败即降级；含熔断与 5 分钟决策缓存
+- `utils/decision_router.py`：与 `IntentionAgent` 的唯一接线点，四档 `off/shadow/assist/primary`
+- `utils/decision_schema.py`：13 类意图 + 6 个能力门控题面；`utils/decision_thresholds.py`：阈值表（`data/decision_thresholds.json` 热覆盖）
+- 影子日志 `data/decision_shadow/*.jsonl`；回放报表 `python tools/replay_shadow.py`
+- 默认 `ALIGO_DECISION_MODE=off`：不配 `NEOHOUSE_API_KEY` 时完全不走决策层
+- 运行状态：`GET /api/health` 的 `decision_layer` 字段（mode / 熔断状态 / last_error）
+- 方案与实测数据：`docs/decision-layer-dev-plan.md`
+
 ## 配置
 
-- `config.py`：LLM / RAG / 稳定性 配置
-- `.env`：环境变量（`ALIGO_API_KEY`, `ALIGO_MODEL_NAME`, `ALIGO_BASE_URL`）
+- `config.py`：LLM / RAG / 决策层 / 稳定性 配置
+- `.env`：环境变量（`ALIGO_API_KEY`, `ALIGO_MODEL_NAME`, `ALIGO_BASE_URL`；决策层 `NEOHOUSE_API_KEY`, `ALIGO_DECISION_MODE`）
 - `data/plugin_config.json`：插件启用/禁用
 
 ## 关键约定
@@ -99,6 +116,7 @@ python cli.py health
 - Skill 通过 `LazyAgentRegistry` 动态发现，首次调用时加载
 - LLM 输出 JSON 解析有 6 种降级策略（`utils/json_parser.py`）
 - 熔断器连续失败 5 次后暂停，60 秒后半开恢复（`utils/circuit_breaker.py`）
+- 决策层是**增强项**：`maybe_use_decision()` 的任何异常都必须降级到 LLM/规则，不得影响主链路
 
 ## 目录速查
 
@@ -117,4 +135,13 @@ python cli.py health
 | `tests/` | 测试套件（12 个文件） |
 | `.claude/skills/` | 10 个 Skill 插件 |
 | `data/memory/` | 用户长期记忆 JSON |
-| `data/models/` | Embedding 模型缓存（首次运行自动下载） |
+| `data/models/` | （已弃用：树后端无需 embedding，可删除） |
+| `rag_core/` | 共享 RAG 核：tree_store / tree_builder / navigator / bm25_fallback / answerer |
+| `.claude/skills/ask-question/data/tree_index/` | 差旅知识树索引（tree_builder.py 产物） |
+| `.claude/skills/visa-info/data/tree_index/` | 签证知识树索引 |
+| `tests/eval_rag_tree.py` | RAG 检索离线评测（40 题，CI 门禁） |
+| `docs/rag-tree-architecture-dev-plan.md` | RAG 树架构开发方案 |
+| `utils/decision_*.py` | 决策层：schema / types / thresholds / engine / router |
+| `tests/decision_eval/cases.json` | 决策层金标准集（24 条） |
+| `data/decision_shadow/` | 决策层影子日志（jsonl，按日滚动） |
+| `docs/decision-layer-dev-plan.md` | 决策层设计与实现文档 |

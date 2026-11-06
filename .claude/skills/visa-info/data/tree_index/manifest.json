@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-11-06T15:03:38",
+  "docs": [
+    {
+      "doc_id": "01_japan_visa",
+      "title": "【日本签证政策】",
+      "summary": "签证类型、申请材料（单次）、办理时间、注意事项",
+      "keywords": [
+        "签证",
+        "复印件",
+        "年收入",
+        "单次",
+        "4.5",
+        "20",
+        "多次",
+        "以上",
+        "停留",
+        "办理",
+        "有效期",
+        "工作日",
+        "每次",
+        "五年"
+      ],
+      "source_file": "C:\\Users\\86134\\Desktop\\Lincan-Travel-Assistant-Agent-main\\.claude\\skills\\visa-info\\data\\documents\\01_japan_visa.txt",
+      "source_sha256": "a41aabc4e538292e9e0950e8cfe11cc83b1e21e4c51e6e02ed3e716e074d409e",
+      "nodes": 18
+    },
+    {
+      "doc_id": "02_thailand_visa",
+      "title": "【泰国签证政策】",
+      "summary": "免签政策、落地签证（如需停留超过30天）、旅游签证（长期停留）、入境要求、注意事项",
+      "keywords": [
+        "签证",
+        "停留",
+        "泰铢",
+        "免签",
+        "护照",
+        "入境",
+        "有效期",
+        "30",
+        "60",
+        "泰国",
+        "回程",
+        "旅游",
+        "出示",
+        "机票"
+      ],
+      "source_file": "C:\\Users\\86134\\Desktop\\Lincan-Travel-Assistant-Agent-main\\.claude\\skills\\visa-info\\data\\documents\\02_thailand_visa.txt",
+      "source_sha256": "fae4044157cfd442700320bd90109573b184f3188d2d7b3aea3cb6335fca87b4",
+      "nodes": 20
+    },
+    {
+      "doc_id": "03_singapore_visa",
+      "title": "【新加坡签证政策】",
+      "summary": "签证要求、签证类型、申请材料、办理方式、96小时过境免签、注意事项",
+      "keywords": [
+        "签证",
+        "免签",
+        "30",
+        "96",
+        "新加坡",
+        "停留",
+        "复印件",
+        "有效期",
+        "入境签证",
+        "申请",
+        "Visa",
+        "预订单",
+        "出签",
+        "300"
+      ],
+      "source_file": "C:\\Users\\86134\\Desktop\\Lincan-Travel-Assistant-Agent-main\\.claude\\skills\\visa-info\\data\\documents\\03_singapore_visa.txt",
+      "source_sha256": "4e8e46f813cb7181a1e166ea0f8ddd65cc45df40291942a287ab6400240ed78f",
+      "nodes": 28
+    },
+    {
+      "doc_id": "04_visa_free_countries",
+      "title": "【中国护照免签/落地签国家和地区】",
+      "summary": "互免签证国家（持普通护照）、单方面免签国家、落地签国家（部分热门）、电子签证国家、重要提示",
+      "keywords": [
+        "免签",
+        "30",
+        "落地",
+        "签证",
+        "90",
+        "电子",
+        "护照",
+        "国家",
+        "口岸",
+        "出行",
+        "服务网",
+        "最新",
+        "互免",
+        "60"
+      ],
+      "source_file": "C:\\Users\\86134\\Desktop\\Lincan-Travel-Assistant-Agent-main\\.claude\\skills\\visa-info\\data\\documents\\04_visa_free_countries.txt",
+      "source_sha256": "d8fdc8a7a8a555117e52a7744b4fcd295ae33e83749727057243e60c252f9a9c",
+      "nodes": 44
+    }
+  ]
+}

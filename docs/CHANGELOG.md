@@ -3,6 +3,22 @@
 > 这里记录 2026-10 这一轮集中排障与加固的过程与结论，方便回溯「为什么代码长这样」。
 > 所有时间均为 Asia/Shanghai。
 
+## 2026-11-06 · RAG 架构升级：向量检索 → 树索引 + 推理导航
+
+- **动机**：政策问答吃「条款精确 + 可溯源」，600 字切块把标题与数字切散，纯向量对 
+  「500元/晚」「30个自然日」这类词面反而弱；Milvus + bge 还带来 ~2s 冷启动与 90MB 模型。
+- **做法**：
+  - 新增 `rag_core/`（tree_builder / tree_store / navigator / bm25_fallback / answerer），ask-question 与 visa-info 共用；
+  - 索引 = 按文档自带标题解析的两级树，节点存 line_range + 摘要，正文回源切片；
+  - 检索 = 规则直通 + BM25 兜底 + LLM 下钻（≤2 次），合并去冗余后取 top4；
+  - 生成 = 原文进 prompt + 「数字+单位」逐字校验（不符自动修复一次）；
+  - 引用从「文件级」升级为「文档｜章节｜小节 + 行号」。
+- **删除**：`init_knowledge_base.py`、`agent_legacy.py`、pymilvus + sentence-transformers 依赖、
+  `server/app.py` 的 embedding 预加载。
+- **验证**：40 题离线评测 Hit@4 = 0.975 / Hit@3 = 0.90 / MRR 0.727；
+  RAG 相关测试 23 passed；全量 149 passed / 7 failed（全部为缺 `ALIGO_API_KEY`）/ 7 skipped。
+- **环境**：按 requirements 安装 `agentscope==1.0.16`（此前本机 2.0.8 导致全项目 import 失败）。
+- **文档**：`docs/rag-tree-architecture-dev-plan.md`（方案+运维）、`docs/rag-upgrade-research-2026.md`（选型）。
 ## 2026-10-20 00:44 · 模型鉴权失效（401）
 
 - **现象**：页面提示「意图识别出错，使用默认策略」，搜索成功但摘要生成失败。
@@ -87,7 +103,7 @@
 - `tools/bench_*.py` 去掉硬编码 key，改为从 `.env` 读取；
 - 新增 `tools/scan_secrets.py`，提交前统一扫描；
 - 补齐 `.gitignore`：`.env.*`、`*.bak-*`、`private/`、`.pytest_cache/`；
-- 新增 `docs/screenshots/`（7 张真实界面图）、`docs/showcase.html`（可离线展示页）。
+- 新增 `docs/screenshots/`（7 张真实界面图）。
 
 ## 2026-10-21 22:50 · 「明早的高铁」被查成了今天，结果「暂无余票」
 
@@ -147,5 +163,4 @@
     「有哪些知识库」返回 8 份文档清单。
 - **备注**：知识库原文在 `.claude/skills/ask-question/data/documents/`，
   若「500 元/晚」不符合贵司实际标准，改 `01_travel_standards.txt` 后重跑
-  `python .claude/skills/ask-question/script/init_knowledge_base.py` 即可生效。
-
+  `python scripts/build_rag_index.py` 即可生效（2026-11 起为树索引，旧向量命令已移除）。

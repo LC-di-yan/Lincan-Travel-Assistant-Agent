@@ -1,77 +1,53 @@
+# -*- coding: utf-8 -*-
+"""RAG 知识库智能体 —— 树索引 + 推理导航版（2026-11 架构升级，M3 已清理旧实现）。
+
+检索底座：documents/*.txt → tree_index/*.json（层级树）→ LLM 导航定位节点 → 原文进 prompt。
+共享实现在项目根 rag_core/ 包；ALIGO_RAG_BACKEND 仅保留配置兼容（legacy 已移除）。
+
+对外契约（tests/test_rag_documents.py 锁定，勿改）：
+- reply(x: Msg) -> Msg，content 为 JSON：status / query / answer / proactive_question /
+  sources / retrieved_documents；status ∈ success / no_knowledge / document_list
+- 模块级：list_documents() / _LIST_DOC_PATTERN / _POLICY_HINT / _collect_sources()
 """
-RAG知识库智能体 RAGKnowledgeAgent
-职责：基于向量数据库的知识检索与问答
+from __future__ import annotations
 
-核心功能：
-1. 知识库构建：将商旅相关文档向量化并存储到Milvus Lite
-2. 语义检索：根据用户查询检索最相关的知识片段
-3. 知识问答：结合检索到的知识和LLM生成准确答案
-4. 知识管理：支持添加、更新、删除知识库内容
-
-技术栈：
-- Milvus Lite: 轻量级向量数据库（本地存储）
-- sentence-transformers: 文本向量化模型
-- LLM: 用户配置的豆包模型用于生成答案
-
-安装：
-pip install milvus sentence-transformers
-"""
-from agentscope.agent import AgentBase
-from agentscope.message import Msg
-from typing import Optional, Union, List, Dict
 import json
 import logging
-import os
 import re
-import hashlib
 from pathlib import Path
+from typing import Dict, List, Optional, Union
 
-from utils.llm_response import extract_llm_text, extract_json_object
+from agentscope.message import Msg  # Msg 在 1.x/2.x 均存在
+
+try:  # requirements 锁定 agentscope==1.0.16；2.x 移除了 AgentBase，兜底让本技能可独立运行与测试
+    from agentscope.agent import AgentBase
+except ImportError:  # pragma: no cover
+    class AgentBase:  # 最小基类：沿用 1.x 的调用约定（__call__ -> await reply）
+        def __init__(self):
+            pass
+
+        async def __call__(self, x):
+            return await self.reply(x)
+
+
+def _mk_msg(name: str, content: str, role: str = "assistant"):
+    """跨版本构造 Msg：1.x 收字符串，2.x（pydantic）要求 content 为块列表。"""
+    try:
+        return Msg(name=name, content=content, role=role)
+    except Exception:  # pragma: no cover - agentscope 2.x
+        return Msg(name=name, content=[{"type": "text", "text": content}], role=role)
+
 from cache.decorators import cached
-
-# gRPC keepalive - 使用更保守的配置避免 GOAWAY 警告
-_GRPC_KEEPALIVE_MS = '600000'  # 10分钟
-os.environ['GRPC_KEEPALIVE_TIME_MS'] = _GRPC_KEEPALIVE_MS
-os.environ['GRPC_KEEPALIVE_TIMEOUT_MS'] = '20000'
-os.environ['GRPC_KEEPALIVE_PERMIT_WITHOUT_CALLS'] = '0'
-os.environ['GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS'] = _GRPC_KEEPALIVE_MS
-os.environ['GRPC_HTTP2_MIN_PING_INTERVAL_WITHOUT_DATA_MS'] = _GRPC_KEEPALIVE_MS
 
 logger = logging.getLogger(__name__)
 
-try:
-    from pymilvus import MilvusClient, DataType
-    from sentence_transformers import SentenceTransformer
-    DEPENDENCIES_AVAILABLE = True
-except ImportError as e:
-    logger.warning(f"RAG dependencies not available: {e}")
-    logger.warning("Install with: pip install pymilvus sentence-transformers")
-    DEPENDENCIES_AVAILABLE = False
-
-# Embedding 模型单例缓存（避免重复加载，节省 ~2s/次）
-_EMBEDDING_MODEL_CACHE: Dict[str, 'SentenceTransformer'] = {}
-
-def _get_embedding_model(model_path: str) -> 'SentenceTransformer':
-    """获取 Embedding 模型单例"""
-    if model_path not in _EMBEDDING_MODEL_CACHE:
-        logger.info(f"Loading embedding model (first time): {model_path}")
-        _EMBEDDING_MODEL_CACHE[model_path] = SentenceTransformer(model_path, local_files_only=True)
-    else:
-        logger.debug(f"Reusing cached embedding model: {model_path}")
-    return _EMBEDDING_MODEL_CACHE[model_path]
-
-# RAG 结果缓存（避免重复查询和 LLM 调用）
-_RAG_CACHE: Dict[str, Dict] = {}
-_RAG_CACHE_MAX_SIZE = 100
-
-# 知识库原始文档目录（用于「有哪些知识库」这类清单类提问）
+# ── 旧版保留：知识库文档清单与政策提示正则（测试锁定） ────────────
 _DOC_DIR = Path(__file__).resolve().parent.parent / "data" / "documents"
 _LIST_DOC_PATTERN = re.compile(
     r"(?:(?:有哪些|有什么|多少|列出|清单|列表|目录).{0,8}(?:知识库|文档|资料|文件))"
     r"|(?:(?:知识库|文档库|资料库).{0,8}(?:有哪些|包含|覆盖|清单|列表|目录))"
     r"|^(?:知识库|文档列表)$"
 )
-# 政策/标准类关键词：这类问题即使带「有哪些」，也要先检索条款而不是列文档清单
 _POLICY_HINT = re.compile(r"标准|政策|规定|额度|上限|报销|补贴|协议|优惠|折扣|审批|怎么报|能报")
 
 
@@ -92,476 +68,356 @@ def list_documents() -> List[Dict]:
             text = p.read_text(encoding="utf-8")
         except OSError:
             continue
-        docs.append({
-            "file": p.name,
-            "title": _first_line(text) or p.stem,
-            "chars": len(text),
-        })
+        docs.append({"file": p.name, "title": _first_line(text) or p.stem, "chars": len(text)})
     return docs
 
 
 def _collect_sources(docs: List[Dict]) -> List[Dict]:
-    """从检索结果里按文档去重，得到「引用来源」。"""
+    """从检索结果按文档去重，得到「引用来源」。兼容旧版 metadata 结构。"""
     seen, out = set(), []
     for d in docs:
         md = d.get("metadata") or {}
-        fname = md.get("parent_doc") or ""
+        fname = md.get("parent_doc") or md.get("file") or ""
         if not fname or fname in seen:
             continue
         seen.add(fname)
+        out.append({"file": fname, "title": (md.get("title") or fname).split(" (Part")[0]})
+    return out
+
+
+# ── 懒加载组件 ──────────────────────────────────────────────
+_tree_store = None
+_bm25 = None
+
+
+def _get_tree_store():
+    global _tree_store
+    if _tree_store is None:
+        from rag_core.tree_store import TreeStore
+        _tree_store = TreeStore()
+        if not _tree_store.load():
+            logger.error("树索引加载失败：%s", _tree_store.errors[:3])
+    return _tree_store
+
+
+def _get_bm25():
+    global _bm25
+    if _bm25 is None:
+        from rag_core.bm25_fallback import BM25Fallback
+        _bm25 = BM25Fallback(_get_tree_store())
+    return _bm25
+
+
+def _reset_components() -> None:
+    """测试钩子：丢弃缓存组件（改树/改配置后重建）。"""
+    global _tree_store, _bm25
+    _tree_store = None
+    _bm25 = None
+
+
+def _hits_to_docs(hits) -> List[Dict]:
+    """导航命中 → 生成用文档块（含 file/path/lines 便于引用）。"""
+    store = _get_tree_store()
+    out, seen = [], set()
+    for h in hits:
+        key = (h.doc_id, h.node_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        text = store.node_text(h.doc_id, h.node_id)
+        if not text:
+            continue
+        doc = store.docs.get(h.doc_id)
+        node = doc.find(h.node_id) if doc else None
         out.append({
-            "file": fname,
-            "title": (md.get("title") or fname).split(" (Part")[0],
+            "doc_id": h.doc_id,
+            "node_id": h.node_id,
+            "file": Path(doc.source_file).name if doc else f"{h.doc_id}.txt",
+            "path": h.path or store.path_of(h.doc_id, h.node_id),
+            "text": text,
+            "lines": node.line_range if node else None,
         })
     return out
 
 
-
 class RAGKnowledgeAgent(AgentBase):
-    """RAG知识库智能体"""
+    """RAG 知识库智能体（树导航版）"""
 
     def __init__(
         self,
         name: str = "RAGKnowledgeAgent",
         model=None,
         knowledge_base_path: str = None,
-        collection_name: str = "business_travel_knowledge",
-        embedding_model: str = "BAAI/bge-small-zh-v1.5",
+        collection_name: str = "business_travel_knowledge",  # 兼容旧签名，不再使用
         top_k: int = 3,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         self.name = name
         self.model = model
-        
-        if knowledge_base_path is None:
-            # Default to local data directory in skill folder
-            current_dir = Path(__file__).parent.parent
-            knowledge_base_path = str(current_dir / "data" / "rag_knowledge")
-
-        self.knowledge_base_path = Path(knowledge_base_path)
-        self.collection_name = collection_name
         self.top_k = top_k
         from utils.skill_loader import SkillLoader
         self.skill_loader = SkillLoader()
-
-        if not DEPENDENCIES_AVAILABLE:
-            logger.error("RAG dependencies not installed. Install with: pip install pymilvus sentence-transformers")
-            self.initialized = False
-            return
-
-        # 优先使用 config 中的配置（支持本地路径，避免连 HuggingFace）
         try:
             from config import RAG_CONFIG
-            embedding_model = RAG_CONFIG.get("embedding_model", embedding_model)
-        except Exception:
-            pass
-
-        # 若配置的是本地路径且存在，则从本地加载，否则按模型 ID 使用（会联网）
-        model_path_or_id = embedding_model
-        path_obj = Path(embedding_model).expanduser()
-        if not path_obj.is_absolute():
-            path_obj = Path.cwd() / path_obj
-        if path_obj.exists():
-            model_path_or_id = str(path_obj.resolve())
-            logger.info(f"Using local embedding model: {model_path_or_id}")
-        else:
-            if "/" in embedding_model or "\\" in embedding_model or embedding_model.startswith("."):
-                logger.warning(
-                    f"Configured embedding path does not exist: {embedding_model}，将使用 BAAI/bge-small-zh-v1.5 并尝试联网下载。"
-                )
-                model_path_or_id = "BAAI/bge-small-zh-v1.5"
-        # 使用单例缓存，避免重复加载（节省 ~2s）
-        self.embedding_model = _get_embedding_model(model_path_or_id)
-        self.embedding_dim = self.embedding_model.get_sentence_embedding_dimension()
-
-        # 初始化 Milvus Lite（本地文件存储）
-        # 使用纯英文路径避免 Windows gRPC 中文路径兼容问题
-        milvus_db_dir = Path.home() / ".aligo" / "milvus_data"
-        milvus_db_dir.mkdir(parents=True, exist_ok=True)
-        milvus_db_path = str(milvus_db_dir / "milvus_lite.db")
-        logger.info(f"Initializing Milvus Lite at: {milvus_db_path}")
-
-        self.milvus_client = MilvusClient(milvus_db_path, grpc_options={"keepalive_time": _GRPC_KEEPALIVE_MS, "keepalive_timeout": "20000", "keepalive_permit_without_calls": "0", "http2_min_recv_ping_interval_without_data": _GRPC_KEEPALIVE_MS, "http2_min_ping_interval_without_data": _GRPC_KEEPALIVE_MS})
-        self._client_created_at = None  # 用于追踪客户端创建时间
-
-        # 检查collection是否存在
-        if self.milvus_client.has_collection(collection_name):
-            logger.info(f"Loaded existing collection: {collection_name}")
-            # 预加载 collection（消除搜索时的加载延迟）
-            try:
-                self.milvus_client.load_collection(collection_name)
-                logger.info(f"Pre-loaded collection: {collection_name}")
-            except Exception as e:
-                logger.debug(f"Collection already loaded or load failed: {e}")
-        else:
-            # 创建新collection
-            logger.info(f"Creating new collection: {collection_name}")
-            self.milvus_client.create_collection(
-                collection_name=collection_name,
-                dimension=self.embedding_dim,
-                metric_type="COSINE",  # 余弦相似度
-                auto_id=False,
-            )
-            logger.info(f"Created new collection: {collection_name}")
-
+            self._nav_max_calls = int(RAG_CONFIG.get("nav_max_llm_calls", 2))
+            self._nav_floor = float(RAG_CONFIG.get("nav_confidence_floor", 0.6))
+            self._nav_timeout = float(RAG_CONFIG.get("nav_timeout_sec", 12.0))
+            self._nav_use_llm = bool(RAG_CONFIG.get("nav_use_llm", True))
+            self.top_k = int(RAG_CONFIG.get("top_k", 4))
+        except Exception:  # noqa: BLE001
+            self._nav_max_calls, self._nav_floor, self._nav_timeout = 2, 0.6, 12.0
+        self._navigator = None
+        self._answerer = None
         self.initialized = True
-        self._milvus_db_path = milvus_db_path  # 保存路径用于重连
-        logger.info("RAG Knowledge Agent (Milvus Lite) initialized successfully")
+        logger.info("RAGKnowledgeAgent（树导航版）初始化完成")
 
-    def _ensure_connection(self):
-        """确保 Milvus 连接正常，如果需要则重新创建客户端"""
-        try:
-            # 尝试一个轻量级操作来检查连接
-            self.milvus_client.has_collection(self.collection_name)
-        except Exception as e:
-            logger.warning(f"Milvus connection issue detected: {e}, reconnecting...")
+    # ── 组件 ────────────────────────────────────────────────
+    def _get_navigator(self):
+        if self._navigator is None:
+            from rag_core.navigator import Navigator
+            self._navigator = Navigator(
+                _get_tree_store(), model=self.model,
+                max_llm_calls=self._nav_max_calls,
+                confidence_floor=self._nav_floor,
+                timeout=self._nav_timeout,
+                use_llm=getattr(self, "_nav_use_llm", True),
+            )
+        return self._navigator
+
+    def _get_answerer(self):
+        if self._answerer is None:
+            from rag_core.answerer import Answerer
+            instruction = ""
             try:
-                # 关闭旧连接
-                if hasattr(self.milvus_client, 'close'):
-                    try:
-                        self.milvus_client.close()
-                    except:
-                        pass
+                instruction = self.skill_loader.get_skill_content("ask-question") or ""
+            except Exception:  # noqa: BLE001
+                pass
+            self._answerer = Answerer(model=self.model, skill_instruction=instruction)
+        return self._answerer
 
-                # 重新创建客户端
-                self.milvus_client = MilvusClient(self._milvus_db_path)
-                logger.info("Milvus client reconnected successfully")
-            except Exception as reconnect_error:
-                logger.error(f"Failed to reconnect Milvus: {reconnect_error}")
-                raise
+    # ── 检索（生产入口，评测复用） ─────────────────────────────
+    async def retrieve(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
+        """导航命中 ∪ BM25 候选 → 去重 → 按 BM25 重排 → top_k。
 
-    def add_documents(self, documents: List[Dict[str, str]]) -> Dict:
+        理由：树导航负责「定位章节」，BM25 负责「在候选人里按词面证据排序」，
+        二者并集再重排，单路失灵时另一路仍能兜住（离线评测即测此路径）。
         """
-        添加文档到知识库
-
-        Args:
-            documents: 文档列表，每个文档包含 {'content': '内容', 'metadata': {...}}
-
-        Returns:
-            添加结果统计
-        """
-        if not self.initialized:
-            return {"status": "error", "message": "RAG Agent not initialized"}
-
+        k = top_k or self.top_k
+        store = _get_tree_store()
+        meta = {"mode": "nav", "calls": 0, "degraded": False, "nav_hits": 0, "bm25_hits": 0}
+        merged: Dict[tuple, Dict] = {}
         try:
-            # 确保连接正常
-            self._ensure_connection()
-            # 获取当前文档总数，用于生成连续的ID
-            stats = self.milvus_client.get_collection_stats(self.collection_name)
-            current_count = stats.get("row_count", 0)
+            if store.loaded:
+                nav = await self._get_navigator().navigate(query)
+                meta.update(calls=nav.llm_calls, degraded=nav.degraded,
+                            ms=nav.elapsed_ms, reason=nav.reason)
+                for d in _hits_to_docs(nav.hits):
+                    merged[(d["doc_id"], d["node_id"])] = d
+                meta["nav_hits"] = len(merged)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("树导航异常，转 BM25：%s", exc)
+            meta.update(degraded=True, reason=f"error:{exc}")
 
-            # 准备数据
-            data_to_insert = []
+        nav_keys = set(merged)
+        for d in self._bm25_docs(query, top_k=max(4, k + 2)):
+            merged.setdefault((d["doc_id"], d["node_id"]), d)
+        meta["bm25_hits"] = len(merged) - meta["nav_hits"]
 
-            for i, doc in enumerate(documents):
-                # Milvus 要求 id 必须是 int64
-                doc_id = current_count + i + 1
-                content = doc['content']
-                metadata = doc.get('metadata', {})
-
-                # 生成向量
-                embedding = self.embedding_model.encode(content).tolist()
-
-                # Milvus 数据格式
-                data_to_insert.append({
-                    "id": doc_id,
-                    "vector": embedding,
-                    "content": content,
-                    "metadata": json.dumps(metadata, ensure_ascii=False)  # 将metadata转为JSON字符串
-                })
-
-            # 批量插入到 Milvus
-            self.milvus_client.insert(
-                collection_name=self.collection_name,
-                data=data_to_insert
-            )
-
-            # 获取总数
-            stats = self.milvus_client.get_collection_stats(self.collection_name)
-            total_count = stats.get("row_count", len(documents))
-
-            logger.info(f"Successfully added {len(documents)} documents to knowledge base")
-            return {
-                "status": "success",
-                "added_count": len(documents),
-                "total_count": total_count
-            }
-
-        except Exception as e:
-            logger.error(f"Error adding documents: {e}")
-            return {"status": "error", "message": str(e)}
-
-    def search_knowledge(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
-        """
-        检索知识库
-
-        Args:
-            query: 查询文本
-            top_k: 返回top k个结果
-
-        Returns:
-            检索结果列表
-        """
-        if not self.initialized:
-            return []
-
+        # 统一打分：所有候选都按 BM25 打分（导航命中加 25% 权重，保留结构信号）
         try:
-            # 确保连接正常
-            self._ensure_connection()
-            k = top_k or self.top_k
+            scores = _get_bm25().scores_for(query, list(merged))
+        except Exception:  # noqa: BLE001
+            scores = {}
+        top_score = max(scores.values()) if scores else 0.0
+        for key, d in merged.items():
+            base = scores.get(key, 0.0)
+            norm = (base / top_score) if top_score > 0 else 0.0
+            d["score"] = round(norm + (0.6 if key in nav_keys else 0.0), 4)
 
-            # 生成查询向量
-            query_embedding = self.embedding_model.encode(query).tolist()
+        # 祖先优先：父章节入选时，其子孙节点不再单列（父章节原文已覆盖，避免挤占 top_k）
+        all_keys = set(merged)
+        def _has_ancestor(key) -> bool:
+            doc_id, node_id = key
+            parts = node_id.split("#")
+            for i in range(1, len(parts)):
+                if (doc_id, "#".join(parts[:i])) in all_keys:
+                    return True
+            return False
+        survivors = [d for k, d in merged.items() if not _has_ancestor(k)]
+        if not survivors:
+            survivors = list(merged.values())
 
-            # 在 Milvus 中检索
-            results = self.milvus_client.search(
-                collection_name=self.collection_name,
-                data=[query_embedding],
-                limit=k,
-                output_fields=["id", "content", "metadata"]
-            )
+        docs = survivors
+        docs.sort(key=lambda d: -float(d.get("score", 0.0)))
+        meta["ancestor_pruned"] = len(merged) - len(survivors)
+        self._last_retrieval = meta
+        logger.info("检索：nav=%d bm25=+%d 取 %d | %s",
+                    meta["nav_hits"], max(meta["bm25_hits"], 0), min(k, len(docs)), meta)
+        return docs[:k]
 
-            # 格式化结果
-            retrieved_docs = []
-            if results and len(results) > 0:
-                for hit in results[0]:
-                    # 解析metadata
-                    metadata_str = hit.get("entity", {}).get("metadata", "{}")
-                    try:
-                        metadata = json.loads(metadata_str)
-                    except:
-                        metadata = {}
-
-                    retrieved_docs.append({
-                        'id': hit.get("entity", {}).get("id", ""),
-                        'content': hit.get("entity", {}).get("content", ""),
-                        'metadata': metadata,
-                        'distance': hit.get("distance", 0.0)
-                    })
-
-            logger.info(f"Retrieved {len(retrieved_docs)} documents for query: {query[:50]}")
-            return retrieved_docs
-
-        except Exception as e:
-            logger.error(f"Error searching knowledge: {e}")
-            return []
-
+    # ── 主流程 ──────────────────────────────────────────────
     @cached("rag_knowledge", ttl=3600)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
-        """
-        RAG问答主流程
-        1. 接收用户查询
-        2. 检索相关知识
-        3. 结合知识生成答案
-        """
         if not self.initialized:
-            return Msg(
-                name=self.name,
-                content=json.dumps({
-                    "status": "error",
-                    "message": "RAG Agent not initialized. Please install dependencies: pip install pymilvus sentence-transformers"
-                }),
-                role="assistant"
-            )
-
+            return self._err("RAG Agent not initialized")
         if x is None:
-            return Msg(name=self.name, content=json.dumps({}), role="assistant")
+            return _mk_msg(self.name, json.dumps({}))
 
-        # 获取用户查询
-        if isinstance(x, list):
-            content = x[-1].content if x else ""
-        else:
-            content = x.content
+        content = x[-1].content if isinstance(x, list) else x.content
+        user_query = self._extract_query(content)
 
-        # 尝试解析 JSON 输入 (来自 Orchestrator)
-        user_query = content
-        if isinstance(content, str) and content.strip().startswith('{'):
-            try:
-                data = json.loads(content)
-                # 只要解析成功，就认为 content 是结构化数据，尝试提取 query
-                extracted_query = ""
-                if "context" in data and isinstance(data["context"], dict):
-                    extracted_query = data["context"].get("rewritten_query", "")
-                elif "rewritten_query" in data:
-                    extracted_query = data.get("rewritten_query", "")
-
-                # 使用提取到的 query（即使为空，也比 JSON 字符串好）
-                user_query = extracted_query
-            except:
-                pass  # 解析失败则保留原字符串
-
-        # 检查 RAG 缓存（避免重复查询和 LLM 调用）
-        cache_key = hashlib.md5(user_query.encode()).hexdigest()
-        if cache_key in _RAG_CACHE:
-            logger.info(f"RAG cache hit for query: {user_query[:50]}")
-            cached = _RAG_CACHE[cache_key]
-            return Msg(name=self.name, content=json.dumps(cached, ensure_ascii=False), role="assistant")
-
-        # 「目前有哪些知识库 / 有哪些文档」→ 直接列清单，不用去检索
+        # 0) 清单类问题 → 直接列文档
         if _LIST_DOC_PATTERN.search(user_query) and not _POLICY_HINT.search(user_query):
-            docs = list_documents()
-            lines = [f"知识库共 {len(docs)} 份文档：", ""]
-            for i, d in enumerate(docs, 1):
-                lines.append(f"{i}. {d['title']}（{d['file']}，约 {d['chars'] // 1000}k 字）")
-            answer = "\n".join(lines)
-            result = {
-                "status": "document_list",
-                "query": user_query,
-                "answer": answer,
-                "documents": docs,
-                "proactive_question": "需要我帮你查具体条款吗？",
-            }
-            return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+            return self._document_list_reply(user_query)
 
-        # 检索相关知识
-        retrieved_docs = self.search_knowledge(user_query)
+        # 1) 检索：树导航 ∪ BM25 → 合并去重 → 按 BM25 重排 → top_k=4
+        # （4 个节点 ≈ 2000 字 ≈ 1400 token，SCENARIO_TOKENS rag=2048 之内；
+        #   离线评测 Hit@4=0.975 vs Hit@3=0.90，多一个槽位显著提覆盖）
+        docs = await self.retrieve(user_query, top_k=4)
+        nav_meta = self._last_retrieval
+        if not docs:
+            return self._no_knowledge(user_query)
 
-        # 二次检索：问「优惠/折扣/标准/额度」这类问题时，top_k=3 容易漏掉真正的条款，
-        # 补一次关键词式检索再合并（去重，最多 6 条）
-        if retrieved_docs and re.search(r"优惠|折扣|比例|多少|标准|额度|上限|补贴", user_query):
-            seen_ids = {d.get("id") for d in retrieved_docs}
-            for d in self.search_knowledge(f"{user_query} 具体标准 比例 折扣 金额", top_k=4):
-                if d.get("id") not in seen_ids and len(retrieved_docs) < 6:
-                    retrieved_docs.append(d)
-                    seen_ids.add(d.get("id"))
-
-        if not retrieved_docs:
-            result = {
-                "status": "no_knowledge",
-                "query": user_query,
-                "answer": "抱歉，我在知识库中没有找到相关信息。",
-                "retrieved_documents": []
-            }
-            return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
-
-        # 构建知识上下文
-        knowledge_context = "\n\n".join([
-            f"【知识片段{i+1}】\n{doc['content']}"
-            for i, doc in enumerate(retrieved_docs)
-        ])
-
-        # 如果有LLM，使用LLM生成答案
-        proactive_question = ""
-        answer = ""
+        # 2) 生成 + 数字逐字校验
+        num_check = "skipped"
+        answer, proactive = "", ""
+        cited = docs
         if self.model:
-            # 动态读取 Prompt 指令 (Progressive Disclosure)
-            skill_instruction = self.skill_loader.get_skill_content("ask-question")
-            if not skill_instruction:
-                skill_instruction = "请基于知识库中的信息回答用户的问题。"
-
-            prompt = f"""基于以下知识库信息回答用户问题，简洁准确，不超过500字。
-
-【问题】{user_query}
-
-【知识库】
-{knowledge_context}
-
-【约束】
-1. 只基于知识库信息回答，没有就直接说"知识库中没有找到相关信息"
-2. 不要编造答案；数字、金额、比例必须与知识条款完全一致
-3. 涉及城市档位时，先说明属于哪一档（如"一线城市：北京、上海、广州、深圳"），再给标准
-
-输出JSON时使用以下格式，包含"proactive_question"字段：
-- 答案内容用"answer"字段，如 "answer": "上海美食推荐：...\\n- ..."
-- 追问用"proactive_question"字段，用"需要我帮你..."开头，控制在25字内
-- 如果不需要追问，设为空字符串""
-- 示例：{{"answer": "住宿标准：一线城市500元/晚...", "proactive_question": "需要我帮你查一下具体城市的住宿标准吗？"}}
-- 示例：{{"answer": "报销流程：1.填写单据 2.提交审核...", "proactive_question": ""}}
-"""
-
-            try:
-                # 调用LLM生成答案（使用精简 prompt 减少 token 消耗）
-                messages = [
-                    {"role": "system", "content": "你是商旅知识专家，简洁回答。"},
-                    {"role": "user", "content": prompt}
-                ]
-                response = await self.model(messages)
-
-                raw_answer = extract_llm_text(response, fallback="无法生成答案")
-                if not raw_answer:
-                    raw_answer = "无法生成答案"
-
-                # 清理 LLM 可能输出的 JSON 格式（使用健壮解析）
-                proactive_question = ""
-                answer_str = raw_answer.strip()
-                json_obj = extract_json_object(answer_str)
-                if json_obj:
-                    # 提取 answer 字段
-                    answer = json_obj.get("answer") or json_obj.get("response") or json_obj.get("content") or raw_answer
-                    # 保留 proactive_question 字段供前端展示
-                    pq = json_obj.get("proactive_question", "")
-                    if pq and isinstance(pq, str) and pq.strip():
-                        proactive_question = pq.strip()
-                else:
-                    answer = raw_answer
-
-            except Exception as e:
-                logger.error(f"Error generating answer with LLM: {e}")
-                answer = f"知识库中找到相关信息，但生成答案时出错：{str(e)}"
+            ans = await self._get_answerer().generate(user_query, docs)
+            answer, proactive, num_check = ans.answer, ans.proactive_question, ans.number_check
+            if ans.used_ids:
+                cited = [d for d in docs if d["node_id"] in ans.used_ids] or docs
+            if not answer:
+                answer = "知识库中找到了相关条款，但生成答案时出错，请稍后重试。"
         else:
-            # 如果没有LLM，直接返回检索到的知识
-            answer = "以下是知识库中的相关信息：\n\n" + knowledge_context
+            answer = "以下是知识库中的相关条款：\n\n" + "\n\n".join(
+                f"【{d['path']}】\n{d['text']}" for d in docs)
 
-        # 引用来源：去重后的文档，并在答案末尾标注，方便核对（避免看起来像编的）
-        sources = _collect_sources(retrieved_docs)
-        if sources and answer:
-            cite = "、".join(f"《{s['title']}》" for s in sources[:3])
-            if cite not in answer:
-                answer = answer.rstrip() + f"\n\n依据：{cite}"
+        # 3) 引用：只列模型实际用到的节点（used），避免「答对了但引用的是别的条款」
+        import re as _re
+        answer = _re.sub(r"\n*依据：[^\n]*$", "", answer.rstrip()).rstrip()  # 剥掉模型自带的一行，统一用规范引用
+        sources = self._sources(cited)
+        cite = "、".join(f"《{s['path']}》" for s in sources[:3])
+        if cite and cite not in answer:
+            answer = answer.rstrip() + f"\n\n依据：{cite}"
 
         result = {
             "status": "success",
             "query": user_query,
             "answer": answer,
-            "proactive_question": proactive_question,
+            "proactive_question": proactive,
+            "number_check": num_check,
             "sources": sources,
             "retrieved_documents": [
-                {
-                    "content": doc['content'][:200] + "..." if len(doc['content']) > 200 else doc['content'],
-                    "metadata": doc['metadata']
-                }
-                for doc in retrieved_docs
-            ]
+                {"content": d["text"][:200] + ("..." if len(d["text"]) > 200 else ""),
+                 "metadata": {"parent_doc": d["file"], "title": d["path"],
+                              "path": d["path"], "lines": d["lines"]}}
+                for d in docs
+            ],
+            "retrieval": nav_meta,
         }
+        return _mk_msg(self.name, json.dumps(result, ensure_ascii=False))
 
-        # 存入 RAG 缓存（LRU 策略：满了清一半）
-        if len(_RAG_CACHE) >= _RAG_CACHE_MAX_SIZE:
-            keys_to_remove = list(_RAG_CACHE.keys())[:_RAG_CACHE_MAX_SIZE // 2]
-            for k in keys_to_remove:
-                del _RAG_CACHE[k]
-        _RAG_CACHE[cache_key] = result
-
-        return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")
+    # ── 兼容旧接口 ──────────────────────────────────────────
+    def search_knowledge(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
+        """兼容旧同步检索入口：返回 BM25 命中（不再走向量）。"""
+        k = top_k or self.top_k
+        return [
+            {"id": r["node_id"], "content": r["text"],
+             "metadata": {"title": r["path"]}, "distance": round(1.0 - min(r["score"], 1.0), 4)}
+            for r in _get_bm25().search(query, top_k=k)
+        ]
 
     def get_stats(self) -> Dict:
-        """获取知识库统计信息"""
-        if not self.initialized:
-            return {"status": "error", "message": "Not initialized"}
-
         try:
-            # 确保连接正常
-            self._ensure_connection()
-            stats = self.milvus_client.get_collection_stats(self.collection_name)
-            return {
-                "status": "success",
-                "collection_name": self.collection_name,
-                "total_documents": stats.get("row_count", 0),
-                "knowledge_base_path": str(self.knowledge_base_path)
-            }
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+            st = _get_tree_store().stats()
+            return {"status": "success", "collection_name": "tree_index",
+                    "total_documents": st["documents"], "nodes": st["nodes"],
+                    "leaves": st["leaves"], "stale": st["stale"],
+                    "knowledge_base_path": st["index_dir"]}
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "error", "message": str(exc)}
 
     def close(self):
-        """关闭 Milvus 连接"""
-        if hasattr(self, 'milvus_client'):
-            try:
-                if hasattr(self.milvus_client, 'close'):
-                    self.milvus_client.close()
-                    logger.info("Milvus client closed successfully")
-            except Exception as e:
-                logger.warning(f"Error closing Milvus client: {e}")
+        pass
 
     def __del__(self):
-        """析构函数，确保资源被释放"""
-        self.close()
+        pass
+
+    # ── 私有 ────────────────────────────────────────────────
+    @staticmethod
+    def _sources(docs: List[Dict]) -> List[Dict]:
+        seen, out = set(), []
+        for d in docs:
+            key = (d["file"], d["path"])
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({
+                "file": d["file"],
+                "title": (d["path"].split("｜")[0] if d["path"] else d["file"]),
+                "path": d["path"],
+                "lines": d["lines"],
+            })
+        return out
+
+    def _bm25_docs(self, query: str, top_k: int = 5) -> List[Dict]:
+        try:
+            fallback = _get_bm25()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("BM25 兜底不可用：%s", exc)
+            return []
+        store = _get_tree_store()
+        out = []
+        for r in fallback.search(query, top_k=top_k):
+            doc = store.docs.get(r["doc_id"])
+            node = doc.find(r["node_id"]) if doc else None
+            out.append({
+                "doc_id": r["doc_id"],
+                "node_id": r["node_id"],
+                "file": Path(doc.source_file).name if doc else f"{r['doc_id']}.txt",
+                "path": r["path"], "text": r["text"],
+                "lines": node.line_range if node else None,
+                "score": r["score"],
+            })
+        return out
+
+    def _extract_query(self, content) -> str:
+        if isinstance(content, list):  # agentscope 2.x：content 为块列表
+            parts = []
+            for b in content:
+                t = b.get("text", "") if isinstance(b, dict) else getattr(b, "text", "")
+                if t:
+                    parts.append(t)
+            content = "\n".join(parts)
+        if isinstance(content, str) and content.strip().startswith("{"):
+            try:
+                data = json.loads(content)
+                if isinstance(data, dict):
+                    ctx = data.get("context")
+                    if isinstance(ctx, dict) and ctx.get("rewritten_query"):
+                        return ctx["rewritten_query"]
+                    if data.get("rewritten_query"):
+                        return data["rewritten_query"]
+            except Exception:  # noqa: BLE001
+                pass
+        return content if isinstance(content, str) else str(content)
+
+    def _document_list_reply(self, query: str) -> Msg:
+        docs = list_documents()
+        lines = [f"知识库共 {len(docs)} 份文档：", ""]
+        for i, d in enumerate(docs, 1):
+            lines.append(f"{i}. {d['title']}（{d['file']}，约 {d['chars'] // 1000}k 字）")
+        result = {"status": "document_list", "query": query, "answer": "\n".join(lines),
+                  "documents": docs, "proactive_question": "需要我帮你查具体条款吗？"}
+        return _mk_msg(self.name, json.dumps(result, ensure_ascii=False))
+
+    def _no_knowledge(self, query: str) -> Msg:
+        result = {"status": "no_knowledge", "query": query,
+                  "answer": "抱歉，我在知识库中没有找到相关信息。", "retrieved_documents": []}
+        return _mk_msg(self.name, json.dumps(result, ensure_ascii=False))
+
+    def _err(self, message: str) -> Msg:
+        return Msg(name=self.name, content=json.dumps(
+            {"status": "error", "message": message}, ensure_ascii=False), role="assistant")

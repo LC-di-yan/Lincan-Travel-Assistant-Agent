@@ -1,3 +1,6 @@
+> 注：本文写于 2026-10（向量检索时期），其中 Milvus / Embedding 相关描述已被
+> 2026-11 的树索引架构取代，现状见 [rag-tree-architecture-dev-plan.md](rag-tree-architecture-dev-plan.md)。
+
 # Aligo 旅行助手 → Claude Code Skill 封装可行性方案
 
 ## 一、项目现状分析
@@ -333,7 +336,7 @@ class TravelAssistantAgent(AgentBase):
 
 **影响**：RAG类技能（ask-question、visa-info）  
 **缓解**：
-- skill.md中注明首次使用需运行 `init_knowledge_base.py`
+- skill.md中注明源文档变更后运行 `python scripts/build_rag_index.py` 重建树索引
 - 或使用 HF_ENDPOINT=https://hf-mirror.com 加速下载
 - 或对于skill模式，提供轻量级BM25备选（不依赖embedding）
 

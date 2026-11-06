@@ -1,3 +1,6 @@
+> 注：本文写于 2026-10（向量检索时期），其中 Milvus / Embedding 相关描述已被
+> 2026-11 的树索引架构取代，现状见 [rag-tree-architecture-dev-plan.md](rag-tree-architecture-dev-plan.md)。
+
 # Aligo 智能旅行助手 - 测试报告
 
 **项目名称**: Aligo 智能旅行助手（差旅出行助手）

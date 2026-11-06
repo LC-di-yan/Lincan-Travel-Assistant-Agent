@@ -75,8 +75,19 @@ data/memory/*.json
 !data/memory/.gitkeep
 !data/memory/example_user.json
 
-# Claude local settings
+# Claude local settings（claudian-settings.json 含内部 ARN/代理地址，绝不入库）
 .claude/settings.local.json
+.claude/claudian-settings.json
+
+# 决策层影子日志（运行时产物）
+data/decision_shadow/*.jsonl
+
+# 测试写入目录
+data/test_memory/
+
+# 抓取残留
+*.downloading
+image/resources/
 
 # Test results
 tests/results/

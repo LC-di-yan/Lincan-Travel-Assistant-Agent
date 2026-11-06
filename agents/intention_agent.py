@@ -25,6 +25,7 @@ import traceback
 from config import SCENARIO_TOKENS
 from utils.skill_loader import SkillLoader
 from utils.llm_response import extract_llm_json, extract_llm_text
+from utils.decision_router import maybe_use_decision
 from cache.decorators import cached
 
 logger = logging.getLogger(__name__)
@@ -1031,11 +1032,24 @@ class IntentionAgent(AgentBase):
                 return Msg(name=self.name, content=json.dumps(_elliptical, ensure_ascii=False), role="assistant")
 
         fast = _fast_match(user_query, dialogue_history=_dialogue)
+
+        # ── 决策层（NeoHorse-Jev-4B）──────────────────────────────
+        # off: 直接返回 None；shadow: 异步旁路只记日志；assist: 允许否决坏命中；
+        # primary: 额外允许高置信直通不需要实体抽取的意图。任何异常都不影响主链路。
+        _decision = None
+        try:
+            _decision = await maybe_use_decision(user_query, _dialogue, fast)
+            fast = _decision.fast
+        except Exception as _dec_exc:  # noqa: BLE001
+            logger.warning("decision layer skipped: %s", _dec_exc)
+
         _t_fast = (_time.monotonic() - _t0) * 1000
         if fast:
             _msg = f"[TIMING] Fast route hit in {_t_fast:.0f}ms, query: {user_query[:50]}"
             logger.info(_msg)
             print(_msg, flush=True)
+            if _decision is not None:
+                _decision.log_outcome("decision" if _decision.source == "decision" else "fast", fast)
             return Msg(name=self.name, content=json.dumps(fast, ensure_ascii=False), role="assistant")
         _msg = f"[TIMING] Fast route miss in {_t_fast:.0f}ms, falling back to LLM"
         logger.info(_msg)
@@ -1322,6 +1336,10 @@ P2（依赖P1结果）: itinerary_planning
                     }
                 ]
             }
+
+        # 影子日志：记录最终由 LLM 兜底（供 replay_shadow 算一致率）
+        if _decision is not None:
+            _decision.log_outcome("llm", result)
 
         # 将结果转换为JSON字符串，因为Msg的content必须是字符串
         return Msg(name=self.name, content=json.dumps(result, ensure_ascii=False), role="assistant")

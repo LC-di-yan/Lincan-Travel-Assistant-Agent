@@ -8,9 +8,9 @@ agentscope==1.0.16
 requests==2.32.3
 httpx>=0.27.0
 
-# RAG & vector store (pymilvus[milvus_lite] for local .db)
-pymilvus[milvus_lite]==2.6.9
-sentence-transformers==5.2.3
+# RAG（树索引后端）只需 jieba + rank-bm25；无向量库/无 embedding
+jieba>=0.42.1
+rank-bm25>=0.2.2
 
 # CLI
 rich==13.9.4

@@ -1,0 +1,575 @@
+{
+  "schema_version": 1,
+  "doc_id": "06_platform_guide",
+  "source_file": "C:\\Users\\86134\\Desktop\\Lincan-Travel-Assistant-Agent-main\\.claude\\skills\\ask-question\\data\\documents\\06_platform_guide.txt",
+  "source_sha256": "df42ad95f1e8b7bf7ff7f6ead3515d6e2cda777e413654d87675fd8fbf9abca7",
+  "title": "阿里商旅平台使用指南",
+  "summary": "平台简介、平台主要功能、平台优势、账号注册与登录、使用技巧、常用功能操作指南、移动端APP使用、客服与帮助、注意事项、附则",
+  "keywords": [
+    "预订",
+    "差旅",
+    "行程",
+    "平台",
+    "发票",
+    "酒店",
+    "查看",
+    "报销",
+    "改签",
+    "自动",
+    "点击",
+    "APP",
+    "退票",
+    "登录"
+  ],
+  "tree": [
+    {
+      "id": "06#h1-1",
+      "title": "一、平台简介",
+      "summary": "阿里商旅是公司统一的差旅管理平台，为员工提供一站式的差旅服务，包括差旅申请、机票预订、火车票预订、…",
+      "line_range": [
+        3,
+        9
+      ],
+      "children": []
+    },
+    {
+      "id": "06#h1-2",
+      "title": "二、平台主要功能",
+      "summary": "差旅申请、机票预订、火车票预订、酒店预订、租车服务、行程管理、费用报销、数据分析",
+      "line_range": [
+        10,
+        63
+      ],
+      "children": [
+        {
+          "id": "06#h1-2#h2-1",
+          "title": "1. 差旅申请",
+          "summary": "在线提交差旅申请",
+          "line_range": [
+            12,
+            17
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-2#h2-2",
+          "title": "2. 机票预订",
+          "summary": "搜索国内外航班",
+          "line_range": [
+            18,
+            24
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-2#h2-3",
+          "title": "3. 火车票预订",
+          "summary": "查询车次和余票",
+          "line_range": [
+            25,
+            30
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-2#h2-4",
+          "title": "4. 酒店预订",
+          "summary": "搜索和对比酒店",
+          "line_range": [
+            31,
+            37
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-2#h2-5",
+          "title": "5. 租车服务",
+          "summary": "查询租车公司和车型",
+          "line_range": [
+            38,
+            43
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-2#h2-6",
+          "title": "6. 行程管理",
+          "summary": "查看所有行程",
+          "line_range": [
+            44,
+            50
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-2#h2-7",
+          "title": "7. 费用报销",
+          "summary": "在线提交报销申请",
+          "line_range": [
+            51,
+            57
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-2#h2-8",
+          "title": "8. 数据分析",
+          "summary": "个人差旅统计",
+          "line_range": [
+            58,
+            63
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "06#h1-3",
+      "title": "三、平台优势",
+      "summary": "企业协议价、一站式服务、智能推荐、政策管控、24小时客服、数据安全、移动办公",
+      "line_range": [
+        64,
+        107
+      ],
+      "children": [
+        {
+          "id": "06#h1-3#h2-1",
+          "title": "1. 企业协议价",
+          "summary": "10%；30%",
+          "line_range": [
+            66,
+            71
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-3#h2-2",
+          "title": "2. 一站式服务",
+          "summary": "从差旅申请到报销全流程在线办理",
+          "line_range": [
+            72,
+            77
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-3#h2-3",
+          "title": "3. 智能推荐",
+          "summary": "根据差旅标准自动推荐合规产品",
+          "line_range": [
+            78,
+            83
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-3#h2-4",
+          "title": "4. 政策管控",
+          "summary": "系统自动审核是否符合差旅标准",
+          "line_range": [
+            84,
+            89
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-3#h2-5",
+          "title": "5. 24小时客服",
+          "summary": "24小时",
+          "line_range": [
+            90,
+            95
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-3#h2-6",
+          "title": "6. 数据安全",
+          "summary": "企业级数据加密",
+          "line_range": [
+            96,
+            101
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-3#h2-7",
+          "title": "7. 移动办公",
+          "summary": "支持手机APP随时随地办理",
+          "line_range": [
+            102,
+            107
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "06#h1-4",
+      "title": "四、账号注册与登录",
+      "summary": "账号注册、登录方式、密码管理",
+      "line_range": [
+        108,
+        127
+      ],
+      "children": [
+        {
+          "id": "06#h1-4#h2-1",
+          "title": "1. 账号注册",
+          "summary": "使用企业邮箱注册（如：zhangsan@alibaba-inc.com）",
+          "line_range": [
+            110,
+            115
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-4#h2-2",
+          "title": "2. 登录方式",
+          "summary": "网页端：企业邮箱+密码",
+          "line_range": [
+            116,
+            121
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-4#h2-3",
+          "title": "3. 密码管理",
+          "summary": "3个月",
+          "line_range": [
+            122,
+            127
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "06#h1-5",
+      "title": "五、使用技巧",
+      "summary": "预订技巧、关注促销、行程管理技巧、报销技巧、多设备同步",
+      "line_range": [
+        128,
+        201
+      ],
+      "children": [
+        {
+          "id": "06#h1-5#h2-1",
+          "title": "1. 预订技巧",
+          "summary": "14天；5天",
+          "line_range": [
+            130,
+            154
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-5#h2-2",
+          "title": "2. 关注促销",
+          "summary": "平台不定期有优惠活动",
+          "line_range": [
+            155,
+            160
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-5#h2-3",
+          "title": "3. 行程管理技巧",
+          "summary": "a) 行程提醒",
+          "line_range": [
+            161,
+            178
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-5#h2-4",
+          "title": "4. 报销技巧",
+          "summary": "a) 及时提交",
+          "line_range": [
+            179,
+            196
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-5#h2-5",
+          "title": "5. 多设备同步",
+          "summary": "网页端和移动端数据实时同步",
+          "line_range": [
+            197,
+            201
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "06#h1-6",
+      "title": "六、常用功能操作指南",
+      "summary": "如何提交差旅申请、如何预订机票、如何预订酒店、如何提交报销、如何查询行程、如何改签或退票",
+      "line_range": [
+        202,
+        281
+      ],
+      "children": [
+        {
+          "id": "06#h1-6#h2-1",
+          "title": "1. 如何提交差旅申请",
+          "summary": "a) 登录平台，点击\"差旅申请\"",
+          "line_range": [
+            204,
+            214
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-6#h2-2",
+          "title": "2. 如何预订机票",
+          "summary": "a) 在首页选择\"机票\"",
+          "line_range": [
+            215,
+            228
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-6#h2-3",
+          "title": "3. 如何预订酒店",
+          "summary": "a) 在首页选择\"酒店\"",
+          "line_range": [
+            229,
+            242
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-6#h2-4",
+          "title": "4. 如何提交报销",
+          "summary": "a) 登录平台，点击\"费用报销\"",
+          "line_range": [
+            243,
+            256
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-6#h2-5",
+          "title": "5. 如何查询行程",
+          "summary": "a) 登录平台，点击\"我的行程\"",
+          "line_range": [
+            257,
+            264
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-6#h2-6",
+          "title": "6. 如何改签或退票",
+          "summary": "a) 在\"我的订单\"中找到对应的机票订单",
+          "line_range": [
+            265,
+            281
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "06#h1-7",
+      "title": "七、移动端APP使用",
+      "summary": "APP下载、APP主要功能、APP使用技巧",
+      "line_range": [
+        282,
+        302
+      ],
+      "children": [
+        {
+          "id": "06#h1-7#h2-1",
+          "title": "1. APP下载",
+          "summary": "iOS：在App Store搜索\"阿里商旅\"",
+          "line_range": [
+            284,
+            288
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-7#h2-2",
+          "title": "2. APP主要功能",
+          "summary": "与网页端功能基本一致",
+          "line_range": [
+            289,
+            296
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-7#h2-3",
+          "title": "3. APP使用技巧",
+          "summary": "开启消息推送，及时接收重要通知",
+          "line_range": [
+            297,
+            302
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "06#h1-8",
+      "title": "八、客服与帮助",
+      "summary": "联系客服、帮助中心、意见反馈",
+      "line_range": [
+        303,
+        321
+      ],
+      "children": [
+        {
+          "id": "06#h1-8#h2-1",
+          "title": "1. 联系客服",
+          "summary": "24小时",
+          "line_range": [
+            305,
+            310
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-8#h2-2",
+          "title": "2. 帮助中心",
+          "summary": "平台提供详细的使用手册和视频教程",
+          "line_range": [
+            311,
+            316
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-8#h2-3",
+          "title": "3. 意见反馈",
+          "summary": "如对平台有意见或建议，可通过\"意见反馈\"提交",
+          "line_range": [
+            317,
+            321
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "06#h1-9",
+      "title": "九、注意事项",
+      "summary": "信息准确、及时支付、查看政策、保护账号、发票管理",
+      "line_range": [
+        322,
+        349
+      ],
+      "children": [
+        {
+          "id": "06#h1-9#h2-1",
+          "title": "1. 信息准确",
+          "summary": "预订时确保姓名、身份证号、手机号等信息准确无误",
+          "line_range": [
+            324,
+            328
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-9#h2-2",
+          "title": "2. 及时支付",
+          "summary": "30分钟",
+          "line_range": [
+            329,
+            333
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-9#h2-3",
+          "title": "3. 查看政策",
+          "summary": "预订前仔细阅读退改签政策",
+          "line_range": [
+            334,
+            338
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-9#h2-4",
+          "title": "4. 保护账号",
+          "summary": "不要将账号密码告诉他人",
+          "line_range": [
+            339,
+            344
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-9#h2-5",
+          "title": "5. 发票管理",
+          "summary": "及时获取和保存发票",
+          "line_range": [
+            345,
+            349
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "06#h1-10",
+      "title": "十、附则",
+      "summary": "平台更新、政策变更、技术支持、培训资源",
+      "line_range": [
+        350,
+        374
+      ],
+      "children": [
+        {
+          "id": "06#h1-10#h2-1",
+          "title": "1. 平台更新",
+          "summary": "平台会不断更新和优化功能",
+          "line_range": [
+            352,
+            356
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-10#h2-2",
+          "title": "2. 政策变更",
+          "summary": "差旅政策如有变更，会及时在平台公布",
+          "line_range": [
+            357,
+            360
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-10#h2-3",
+          "title": "3. 技术支持",
+          "summary": "如遇到技术问题，可联系IT支持",
+          "line_range": [
+            361,
+            365
+          ],
+          "children": []
+        },
+        {
+          "id": "06#h1-10#h2-4",
+          "title": "4. 培训资源",
+          "summary": "公司定期举办平台使用培训",
+          "line_range": [
+            366,
+            374
+          ],
+          "children": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "_comment": "决策层阈值覆盖示例：复制为 data/decision_thresholds.json 生效（热加载，无需重启）。未写的键用 utils/decision_thresholds.py 的默认值。",
+  "p_intent": 0.9,
+  "p_intent_floor": 0.55,
+  "p_is_request": 0.4,
+  "p_gate": 0.8,
+  "per_gate": {
+    "want_trip": 0.8,
+    "want_hotel": 0.75,
+    "want_restaurant": 0.75,
+    "want_scenic": 0.8,
+    "want_info": 0.8,
+    "want_memory": 0.85
+  },
+  "p_clarify": 0.75,
+  "veto": {
+    "p_is_request_below": 0.35,
+    "p_chitchat_above": 0.6,
+    "min_confident_intent": 0.6,
+    "min_agree_margin": 0.15
+  },
+  "timeout_sec": 8
+}

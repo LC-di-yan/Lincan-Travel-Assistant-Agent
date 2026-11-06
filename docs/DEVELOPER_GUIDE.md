@@ -16,7 +16,7 @@
 - 跨会话持久化，支持用户偏好、行程历史、聊天记录、费用记录
 
 ### 📚 RAG知识库
-- Milvus Lite向量数据库 + BGE-small-zh-v1.5 Embedding模型（本地部署）
+- 树索引 + 推理导航检索（`rag_core/`，无向量库、无 embedding）
 - 智能分块（Chunking）+ 滑动窗口切分 + 余弦相似度检索
 - 知识溯源：返回文档来源，准确率95%
 
@@ -82,7 +82,7 @@
 │                                                           │
 │  ┌─────────────────────────────────────────────────────┐ │
 │  │ RAGKnowledgeAgent Skill (知识库查询智能体)          │ │
-│  │ - 差旅政策文档查询 (Milvus Lite + RAG)             │ │
+│  │ - 差旅政策文档查询 (树索引 + RAG)             │ │
 │  │ - 企业内部知识检索                                  │ │
 │  │ - 自动文档切分 (Chunking) + 向量检索                │ │
 │  └─────────────────────────────────────────────────────┘ │
@@ -207,22 +207,25 @@ pytest tests/test_memory_system.py
 - ✅ LLM总结：异步生成历史摘要（包含行程记录）
 - ✅ 跨会话持久化：新会话访问旧数据
 
-### 3. RAG 知识库
+### 3. RAG 知识库（树索引 + 推理导航，2026-11）
 
-基于 **Milvus Lite** 和 **BGE-small-zh-v1.5 Embedding模型**的企业差旅知识检索系统。
+基于 **文档层级树 + LLM 推理导航 + BM25 兜底** 的知识检索系统，无向量库、无 embedding 模型。
 
 **技术方案**：
-- **向量数据库**: Milvus（本地存储）
-- **Embedding模型**: BGE-small-zh-v1.5（中文向量化，首次运行自动从 HuggingFace 下载）
-- **文档处理**: 智能分块（Chunking）+ 滑动窗口切分
-- **检索算法**: 余弦相似度检索（Top-K=3）
-- **可追溯性**: 返回文档来源，支持知识溯源
-- **准确率**: 95%（知识库问答准确率）
+- **索引**: 按文档自带标题（一、/1./Q1:）解析成两级树，节点存 `line_range` + 摘要，正文不落库（回源切片）
+- **检索**: 规则直通（标题/关键词）→ BM25 词面兜底 → 必要时 LLM 顺目录下钻（≤2 次调用）
+- **排序**: 两路合并，统一 BM25 打分 + 导航加权，祖先去冗余，取 top4
+- **可追溯性**: 引用输出「文档｜章节｜小节」+ 行号，可点对点核对原文
+- **防编造**: 生成后对「数字+单位」逐字校验，不符自动修复一次
+- **准确率**: 40 题离线评测 Hit@4 = 0.975（标准答案进入上下文的比率）
 
-**初始化知识库**：
+**重建索引**（源文档变更后）：
 ```bash
-python .claude/skills/ask-question/script/init_knowledge_base.py
+python scripts/build_rag_index.py          # 差旅 + 签证一起重建
+python scripts/build_rag_index.py --ask    # 只重建差旅知识库
 ```
+
+详细设计与运维见 [rag-tree-architecture-dev-plan.md](rag-tree-architecture-dev-plan.md)。
 
 **知识库内容**（8类文档）：
 - 差旅标准和规定
@@ -264,7 +267,7 @@ pip install -r requirements.txt
 # 或者手动安装核心依赖
 pip install "setuptools>=69.0.0,<82"  # milvus_lite 依赖
 pip install agentscope==1.0.16        # 多智能体框架
-pip install "pymilvus[milvus_lite]==2.6.9"  # 向量数据库
+pip install jieba rank-bm25               # RAG：BM25 词面检索（无向量库）
 pip install sentence-transformers==5.2.3    # Embedding模型
 pip install rich==13.9.4                    # CLI界面
 pip install ddgs==9.10.0                    # 网络搜索
@@ -292,10 +295,12 @@ ALIGO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 - `ALIGO_BASE_URL`: API地址
 - 也可直接编辑 `config.py` 中的 `LLM_CONFIG`
 
-### 3. 初始化知识库
+### 3. 初始化知识库（树索引）
+
+仓库已带索引产物，一般无需执行；改了 `data/documents/*.txt` 后重建：
 
 ```bash
-python .claude/skills/ask-question/script/init_knowledge_base.py
+python scripts/build_rag_index.py
 ```
 
 ### 4. 启动系统
@@ -373,7 +378,7 @@ cd web && npm install && npm run dev
 ### 6. RAGKnowledgeAgent (知识库查询智能体)
 
 - **职责**: 查询企业商旅知识库
-- **技术栈**: Milvus Lite + BGE-small-zh-v1.5 中文向量模型
+- **技术栈**: 文档树索引 + BM25 词面检索 + LLM 推理导航（rag_core/）
 - **特点**: 提供文档溯源，返回参考来源
 
 ### 7. ExpenseTrackerAgent (费用记录智能体)
@@ -551,7 +556,7 @@ pytest tests/test_json_parser.py          # JSON解析
 
 ### 数据存储
 - 💾 **JSON文件** - 长期记忆持久化（用户偏好、历史行程、聊天记录、费用）
-- 🔍 **Milvus Lite** - 向量数据库（本地.db文件，RAG知识库）
+- 🔍 **rag_core** - 树索引检索（本地 JSON 索引文件，RAG 知识库）
 
 ### 向量化与检索
 - 🧠 **BGE-small-zh-v1.5** - 中文Embedding模型（本地部署）
@@ -596,7 +601,8 @@ pytest tests/test_json_parser.py          # JSON解析
 
 ### 模型配置
 - 必须配置MiMo大模型API密钥（通过 `.env` 文件或 `config.py`）
-- BGE Embedding模型首次运行时自动从 HuggingFace 下载（约 90MB），缓存到 `data/models/`
+- RAG 使用树索引：**不需要** embedding 模型与向量库；`data/models/` 已弃用可删除
+- 若安装的是 agentscope 2.x，会因缺少 `AgentBase` 启动失败 —— 按 requirements 使用 `agentscope==1.0.16`
 
 ### 数据存储
 - 当前版本使用**JSON文件存储**长期记忆（`data/memory/{user_id}.json`）
@@ -605,7 +611,7 @@ pytest tests/test_json_parser.py          # JSON解析
 ### 知识库初始化
 - 首次运行前必须初始化RAG知识库
 - 知识库文档位于 `.claude/skills/ask-question/data/documents/`
-- Milvus数据库文件生成在 `.claude/skills/ask-question/data/milvus_travel_kb.db`
+- 树索引生成在 `.claude/skills/ask-question/data/tree_index/*.json`（可 git diff）
 
 ### Web模式
 - 开发后端：`uvicorn server.app:app --reload --port 8011`（端口可按本机情况调整）

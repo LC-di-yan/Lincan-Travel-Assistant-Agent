@@ -1,0 +1,290 @@
+{
+  "version": 1,
+  "updated": "2026-11-06",
+  "note": "决策层金标准集：意图走 choice，门控走 noul；gates 为必须为真的集合",
+  "cases": [
+    {
+      "id": "KB-001",
+      "cat": "keyword_too_broad",
+      "q": "我住在北京朝阳区",
+      "req": false,
+      "gates": [],
+      "intent": [
+        "chitchat"
+      ]
+    },
+    {
+      "id": "KB-002",
+      "cat": "keyword_too_broad",
+      "q": "今天玩得很开心",
+      "req": false,
+      "gates": [],
+      "intent": [
+        "chitchat"
+      ]
+    },
+    {
+      "id": "KB-003",
+      "cat": "keyword_too_broad",
+      "q": "他住的地方离公司很远",
+      "req": false,
+      "gates": [],
+      "intent": [
+        "chitchat"
+      ]
+    },
+    {
+      "id": "KB-004",
+      "cat": "keyword_too_broad",
+      "q": "昨晚吃了一顿大餐",
+      "req": false,
+      "gates": [],
+      "intent": [
+        "chitchat"
+      ]
+    },
+    {
+      "id": "KB-005",
+      "cat": "keyword_too_broad",
+      "q": "我们去逛逛街吧",
+      "req": false,
+      "gates": [],
+      "intent": [
+        "chitchat"
+      ]
+    },
+    {
+      "id": "KB-006",
+      "cat": "keyword_too_broad",
+      "q": "公司在哪个楼层",
+      "req": true,
+      "gates": [],
+      "intent": [
+        "rag_knowledge",
+        "chitchat"
+      ]
+    },
+    {
+      "id": "MF-001",
+      "cat": "memory_false_trigger",
+      "q": "我想去北京",
+      "req": true,
+      "gates": [
+        "want_trip"
+      ],
+      "intent": [
+        "itinerary_planning"
+      ]
+    },
+    {
+      "id": "MF-002",
+      "cat": "memory_false_trigger",
+      "q": "我去过北京吗",
+      "req": true,
+      "gates": [
+        "want_memory"
+      ],
+      "intent": [
+        "memory_query"
+      ]
+    },
+    {
+      "id": "MF-003",
+      "cat": "memory_false_trigger",
+      "q": "去年去过北京，今年还想去",
+      "req": true,
+      "gates": [
+        "want_trip"
+      ],
+      "intent": [
+        "itinerary_planning"
+      ]
+    },
+    {
+      "id": "MF-004",
+      "cat": "memory_false_trigger",
+      "q": "记得上次去北京的时候",
+      "req": true,
+      "gates": [
+        "want_memory"
+      ],
+      "intent": [
+        "memory_query"
+      ]
+    },
+    {
+      "id": "MI-001",
+      "cat": "multi_intent",
+      "q": "查一下北京的天气和上海的酒店",
+      "req": true,
+      "gates": [
+        "want_info",
+        "want_hotel"
+      ],
+      "intent": [
+        "information_query",
+        "hotel_search"
+      ]
+    },
+    {
+      "id": "MI-002",
+      "cat": "multi_intent",
+      "q": "广州天气和美食",
+      "req": true,
+      "gates": [
+        "want_info",
+        "want_restaurant"
+      ],
+      "intent": [
+        "information_query",
+        "restaurant_search"
+      ]
+    },
+    {
+      "id": "MI-003",
+      "cat": "multi_intent",
+      "q": "北京景点和酒店",
+      "req": true,
+      "gates": [
+        "want_scenic",
+        "want_hotel"
+      ],
+      "intent": [
+        "scenic_search",
+        "hotel_search"
+      ]
+    },
+    {
+      "id": "MI-004",
+      "cat": "multi_intent",
+      "q": "杭州天气和景点和美食",
+      "req": true,
+      "gates": [
+        "want_info",
+        "want_scenic",
+        "want_restaurant"
+      ],
+      "intent": [
+        "information_query",
+        "scenic_search",
+        "restaurant_search"
+      ]
+    },
+    {
+      "id": "FR-002",
+      "cat": "fast_route_hijack",
+      "q": "下周从广州去成都旅游5天，想住春熙路附近的酒店",
+      "req": true,
+      "gates": [
+        "want_trip",
+        "want_hotel"
+      ],
+      "intent": [
+        "itinerary_planning",
+        "hotel_search"
+      ]
+    },
+    {
+      "id": "FR-004",
+      "cat": "fast_route_hijack",
+      "q": "明天去杭州出差，会议结束后想去西湖玩，需要订个西湖边的民宿",
+      "req": true,
+      "gates": [
+        "want_trip",
+        "want_hotel",
+        "want_scenic"
+      ],
+      "intent": [
+        "itinerary_planning",
+        "hotel_search",
+        "scenic_search"
+      ]
+    },
+    {
+      "id": "PS-001",
+      "cat": "place_type",
+      "q": "酒店附近有什么好吃的",
+      "req": true,
+      "gates": [
+        "want_restaurant"
+      ],
+      "intent": [
+        "restaurant_search"
+      ]
+    },
+    {
+      "id": "TT-001",
+      "cat": "train_ambiguity",
+      "q": "北京去上海玩",
+      "req": true,
+      "gates": [
+        "want_trip"
+      ],
+      "intent": [
+        "itinerary_planning"
+      ]
+    },
+    {
+      "id": "TT-002",
+      "cat": "train_ambiguity",
+      "q": "从广州到深圳出差",
+      "req": true,
+      "gates": [
+        "want_trip"
+      ],
+      "intent": [
+        "itinerary_planning"
+      ]
+    },
+    {
+      "id": "TL-002",
+      "cat": "translation",
+      "q": "用阿拉伯语怎么说：谢谢",
+      "req": true,
+      "gates": [],
+      "intent": [
+        "translation"
+      ]
+    },
+    {
+      "id": "CA-001",
+      "cat": "expense",
+      "q": "记一笔打车费50元",
+      "req": true,
+      "gates": [],
+      "intent": [
+        "expense_tracking"
+      ]
+    },
+    {
+      "id": "AD-001",
+      "cat": "adversarial",
+      "q": "我昨天在西湖边上走了一下午，风景真好",
+      "req": false,
+      "gates": [],
+      "intent": [
+        "chitchat"
+      ]
+    },
+    {
+      "id": "AD-002",
+      "cat": "adversarial",
+      "q": "出差标准一晚上最多能报多少",
+      "req": true,
+      "gates": [],
+      "intent": [
+        "rag_knowledge"
+      ]
+    },
+    {
+      "id": "AD-003",
+      "cat": "adversarial",
+      "q": "帮我把这段话翻译成日语：明天见",
+      "req": true,
+      "gates": [],
+      "intent": [
+        "translation"
+      ]
+    }
+  ]
+}

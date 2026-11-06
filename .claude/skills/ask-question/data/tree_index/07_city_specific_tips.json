@@ -1,0 +1,533 @@
+{
+  "schema_version": 1,
+  "doc_id": "07_city_specific_tips",
+  "source_file": "C:\\Users\\86134\\Desktop\\Lincan-Travel-Assistant-Agent-main\\.claude\\skills\\ask-question\\data\\documents\\07_city_specific_tips.txt",
+  "source_sha256": "91b65de00c157be23fd12f68940656f9ca3e731298afc84e92866fc7250a6a69",
+  "title": "不同城市差旅注意事项",
+  "summary": "北京、上海、广州、深圳、杭州、成都、通用建议、附则",
+  "keywords": [
+    "航站楼",
+    "机场",
+    "交通",
+    "酒店",
+    "市中心",
+    "地铁",
+    "注意",
+    "出租车",
+    "出行",
+    "线路",
+    "T1",
+    "T2",
+    "40",
+    "号线"
+  ],
+  "tree": [
+    {
+      "id": "07#h1-1",
+      "title": "一、北京",
+      "summary": "机场信息、交通出行、住宿推荐区域、用餐建议、天气特点、其他注意事项",
+      "line_range": [
+        5,
+        52
+      ],
+      "children": [
+        {
+          "id": "07#h1-1#h2-1",
+          "title": "1. 机场信息",
+          "summary": "25公里；30分钟；2小时；46公里；20分钟",
+          "line_range": [
+            7,
+            19
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-1#h2-2",
+          "title": "2. 交通出行",
+          "summary": "14元",
+          "line_range": [
+            20,
+            27
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-1#h2-3",
+          "title": "3. 住宿推荐区域",
+          "summary": "国贸/建国门：商务中心，交通便利，高档酒店多",
+          "line_range": [
+            28,
+            34
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-1#h2-4",
+          "title": "4. 用餐建议",
+          "summary": "50元",
+          "line_range": [
+            35,
+            40
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-1#h2-5",
+          "title": "5. 天气特点",
+          "summary": "5. 天",
+          "line_range": [
+            41,
+            46
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-1#h2-6",
+          "title": "6. 其他注意事项",
+          "summary": "身份证：在北京办事、入住酒店等经常需要检查身份证",
+          "line_range": [
+            47,
+            52
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "07#h1-2",
+      "title": "二、上海",
+      "summary": "机场信息、交通出行、住宿推荐区域、用餐建议、天气特点、其他注意事项",
+      "line_range": [
+        53,
+        100
+      ],
+      "children": [
+        {
+          "id": "07#h1-2#h2-1",
+          "title": "1. 机场信息",
+          "summary": "40公里；8分钟；13公里",
+          "line_range": [
+            55,
+            67
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-2#h2-2",
+          "title": "2. 交通出行",
+          "summary": "16元",
+          "line_range": [
+            68,
+            75
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-2#h2-3",
+          "title": "3. 住宿推荐区域",
+          "summary": "陆家嘴：金融中心，高档商务酒店集中",
+          "line_range": [
+            76,
+            82
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-2#h2-4",
+          "title": "4. 用餐建议",
+          "summary": "100元",
+          "line_range": [
+            83,
+            88
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-2#h2-5",
+          "title": "5. 天气特点",
+          "summary": "5. 天",
+          "line_range": [
+            89,
+            94
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-2#h2-6",
+          "title": "6. 其他注意事项",
+          "summary": "语言：普通话和上海话，年轻人普遍讲普通话",
+          "line_range": [
+            95,
+            100
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "07#h1-3",
+      "title": "三、广州",
+      "summary": "机场信息、交通出行、住宿推荐区域、用餐建议、天气特点、其他注意事项",
+      "line_range": [
+        101,
+        141
+      ],
+      "children": [
+        {
+          "id": "07#h1-3#h2-1",
+          "title": "1. 机场信息",
+          "summary": "28公里",
+          "line_range": [
+            103,
+            109
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-3#h2-2",
+          "title": "2. 交通出行",
+          "summary": "12元",
+          "line_range": [
+            110,
+            116
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-3#h2-3",
+          "title": "3. 住宿推荐区域",
+          "summary": "天河区：CBD，商务酒店集中，交通便利",
+          "line_range": [
+            117,
+            122
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-3#h2-4",
+          "title": "4. 用餐建议",
+          "summary": "100元；80元",
+          "line_range": [
+            123,
+            128
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-3#h2-5",
+          "title": "5. 天气特点",
+          "summary": "5. 天",
+          "line_range": [
+            129,
+            135
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-3#h2-6",
+          "title": "6. 其他注意事项",
+          "summary": "语言：普通话和粤语，普通话基本通用",
+          "line_range": [
+            136,
+            141
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "07#h1-4",
+      "title": "四、深圳",
+      "summary": "机场信息、交通出行、住宿推荐区域、用餐建议、天气特点、其他注意事项",
+      "line_range": [
+        142,
+        181
+      ],
+      "children": [
+        {
+          "id": "07#h1-4#h2-1",
+          "title": "1. 机场信息",
+          "summary": "32公里；40分钟",
+          "line_range": [
+            144,
+            150
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-4#h2-2",
+          "title": "2. 交通出行",
+          "summary": "10元",
+          "line_range": [
+            151,
+            157
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-4#h2-3",
+          "title": "3. 住宿推荐区域",
+          "summary": "福田：商务中心，高端酒店多，交通便利",
+          "line_range": [
+            158,
+            163
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-4#h2-4",
+          "title": "4. 用餐建议",
+          "summary": "80元",
+          "line_range": [
+            164,
+            169
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-4#h2-5",
+          "title": "5. 天气特点",
+          "summary": "5. 天",
+          "line_range": [
+            170,
+            175
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-4#h2-6",
+          "title": "6. 其他注意事项",
+          "summary": "语言：普通话为主，部分地区讲粤语",
+          "line_range": [
+            176,
+            181
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "07#h1-5",
+      "title": "五、杭州",
+      "summary": "机场信息、交通出行、住宿推荐区域、用餐建议、天气特点、其他注意事项",
+      "line_range": [
+        182,
+        223
+      ],
+      "children": [
+        {
+          "id": "07#h1-5#h2-1",
+          "title": "1. 机场信息",
+          "summary": "27公里；50分钟",
+          "line_range": [
+            184,
+            190
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-5#h2-2",
+          "title": "2. 交通出行",
+          "summary": "13元",
+          "line_range": [
+            191,
+            198
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-5#h2-3",
+          "title": "3. 住宿推荐区域",
+          "summary": "西湖周边：风景优美，高档酒店多，价格较高",
+          "line_range": [
+            199,
+            204
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-5#h2-4",
+          "title": "4. 用餐建议",
+          "summary": "100元",
+          "line_range": [
+            205,
+            210
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-5#h2-5",
+          "title": "5. 天气特点",
+          "summary": "5. 天",
+          "line_range": [
+            211,
+            217
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-5#h2-6",
+          "title": "6. 其他注意事项",
+          "summary": "西湖：如有时间可游览，但注意不要耽误工作",
+          "line_range": [
+            218,
+            223
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "07#h1-6",
+      "title": "六、成都",
+      "summary": "机场信息、交通出行、住宿推荐区域、用餐建议、天气特点、其他注意事项",
+      "line_range": [
+        224,
+        272
+      ],
+      "children": [
+        {
+          "id": "07#h1-6#h2-1",
+          "title": "1. 机场信息",
+          "summary": "16公里；40分钟；50公里",
+          "line_range": [
+            226,
+            238
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-6#h2-2",
+          "title": "2. 交通出行",
+          "summary": "9元",
+          "line_range": [
+            239,
+            245
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-6#h2-3",
+          "title": "3. 住宿推荐区域",
+          "summary": "春熙路：市中心商圈，交通便利，各档次酒店",
+          "line_range": [
+            246,
+            251
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-6#h2-4",
+          "title": "4. 用餐建议",
+          "summary": "80元",
+          "line_range": [
+            252,
+            258
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-6#h2-5",
+          "title": "5. 天气特点",
+          "summary": "5. 天",
+          "line_range": [
+            259,
+            266
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-6#h2-6",
+          "title": "6. 其他注意事项",
+          "summary": "语言：普通话通用，但带有川普口音",
+          "line_range": [
+            267,
+            272
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "07#h1-7",
+      "title": "七、通用建议",
+      "summary": "出行前准备、时间管理、饮食注意、住宿安全、行李准备、沟通礼仪",
+      "line_range": [
+        273,
+        309
+      ],
+      "children": [
+        {
+          "id": "07#h1-7#h2-1",
+          "title": "1. 出行前准备",
+          "summary": "查看目的地天气预报，准备合适衣物",
+          "line_range": [
+            275,
+            280
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-7#h2-2",
+          "title": "2. 时间管理",
+          "summary": "预留充足的交通时间，避免迟到",
+          "line_range": [
+            281,
+            285
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-7#h2-3",
+          "title": "3. 饮食注意",
+          "summary": "尝试本地特色，但注意肠胃适应",
+          "line_range": [
+            286,
+            291
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-7#h2-4",
+          "title": "4. 住宿安全",
+          "summary": "选择正规酒店，关注安全设施",
+          "line_range": [
+            292,
+            297
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-7#h2-5",
+          "title": "5. 行李准备",
+          "summary": "根据出差天数和目的地气候准备行李",
+          "line_range": [
+            298,
+            303
+          ],
+          "children": []
+        },
+        {
+          "id": "07#h1-7#h2-6",
+          "title": "6. 沟通礼仪",
+          "summary": "尊重当地文化和习俗",
+          "line_range": [
+            304,
+            309
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "07#h1-8",
+      "title": "八、附则",
+      "summary": "本指南仅提供常见商务城市的基本信息，具体情况可能因季节、政策等因素变化。",
+      "line_range": [
+        310,
+        324
+      ],
+      "children": []
+    }
+  ]
+}

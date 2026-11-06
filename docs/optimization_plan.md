@@ -1,3 +1,6 @@
+> 注：本文写于 2026-10（向量检索时期），其中 Milvus / Embedding 相关描述已被
+> 2026-11 的树索引架构取代，现状见 [rag-tree-architecture-dev-plan.md](rag-tree-architecture-dev-plan.md)。
+
 # Aligo 智能旅行助手 - 优化方案
 
 **基于**: 2026-06-03 测试报告
@@ -437,7 +440,7 @@ async def test_intention_response_time(benchmark):
 | 任务 | 文件 | 预期收益 |
 |------|------|----------|
 | Embedding 模型单例化 | ask-question/agent.py | RAG -2s |
-| Milvus 预加载 | ask-question/agent.py | RAG -1s |
+| Milvus 预加载 | ask-question/agent.py | 已随 2026-11 树索引架构移除（冷启动 0s） |
 | RAG max_tokens 限制 | ask-question/agent.py | RAG -10s |
 | 行程规划 prompt 精简 | plan-trip/agent.py | 行程规划 -120s |
 | JSON 中文引号修复 | utils/json_parser.py | 解析成功率 +5% |
