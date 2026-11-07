@@ -24,7 +24,8 @@
 | 环境 | 结果 |
 |---|---|
 | 1.0.16（收口后） | 169 passed / 7 skipped / 0 failed |
-| **2.0.11 + glm-5.3-flash（最终）** | **183 passed / 7 skipped / 0 failed** |
+| 2.0.11 + glm-5.3-flash（离线默认） | 196 passed / 7 skipped / 0 failed |
+| **2.0.11 + 全前置条件齐备（最终）** | **203 passed / 0 skipped / 0 failed** |
 | RAG 40 题检索指标（两版本） | **逐位一致**（Hit@1 0.575 · Hit@3 0.900 · Hit@4 0.975 · MRR 0.744） |
 | 决策层 24 条金标准（custom vs jev） | 判定**逐条等价**；jev 中位 375ms（-38%） |
 
@@ -60,7 +61,7 @@ git revert 70a9fb8..7f10cbf                    # 或直接回退到升级前提�
 | 1 | 决策层 `shadow` → `assist` 提升 | ✅ **已评估：判定暂不切**。24 条真实样本一致率 87.5%，但 assist 否决模拟为 **0 次**（RISKY_AGENTS 不覆盖那唯一误判），切过去零收益且 fast 路径 +797ms。已改为直接修正天气正则缺陷。详见 [影子分析](decision-shadow-analysis.md) | 保持 shadow 继续积累；将来前置条件是「样本中出现 ≥1 次正确否决」，而非只看一致率 |
 | 2 | `tests/test_cli_qa.py` 渲染入口失效 | ✅ **已修**（方案 A）：`cli.py` 补回 `_display_results`，遍历聚合 `results[]` 按 priority 排序并委托现有 `_display_single_agent_result`，与流式路径共用渲染器。7 项契约测试 + 真实 `capture_display_results()` 验证通过 | — |
 | 3 | 高德 POI 路径未验证 | `AMAP_API_KEY` 未配置，`test_hotel_search.py` 自带守卫直接退出 | 配置 `AMAP_API_KEY` 后重跑该脚本 |
-| 4 | skipped 用例 | 🔶 `test_decision_eval.py` 已用真实 key 解锁并跑通（1 passed）；其余为 `test_web_contracts.py`（需服务运行 + `ALIGO_AUDIO_BASE_URL`） | 启动服务 / 配置音频 URL 后自动执行 |
+| 4 | skipped 用例 | ✅ **全部解锁并跑通**：构建 `web/dist` + 启动服务 + 音频 mock + 决策 key → **203 passed / 0 skipped**。复跑步骤见 [零跳过指南](testing-full-suite.md) | — |
 | 5 | **TokenRhythm key 必须轮换** | ⚠️ **更正此前结论**：该 key 确实进过 git 历史并已推送 —— `7f10cbf:data/cv.txt` 含明文（由 `git add -A` 误纳入），`c340530` 才删除；另 `experiments/check_history_secrets.py` 曾在 HEAD 硬编码该 key（已删）。当前工作树/HEAD 已无残留，但**历史仍可检出** | **立即在 TokenRhythm 控制台轮换**（已推送的密钥不能只靠删文件）。如需彻底清除历史，见下方「历史清除」 |
 
 ## 安全事件更正与处置（2026-11-07）
