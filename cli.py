@@ -291,6 +291,45 @@ class AligoCLI:
         self.console.print(f"\n[dim]完成 ({elapsed:.1f}s)[/dim]")
         await self.memory_manager.add_message_async("assistant", json.dumps(result_data, ensure_ascii=False))
 
+    def _display_results(self, result_data: Optional[dict]):
+        """渲染编排器的聚合结果（离线/无队列场景）。
+
+        与流式路径共用 _display_single_agent_result，避免两处渲染逻辑漂移：
+        流式路径从 result_queue 逐项取；这里从聚合结果的 results[] 逐项取，
+        两者元素形状一致（agent_name / status / data，见 OrchestrationAgent._aggregate_results）。
+
+        tests/test_cli_qa.py 依赖此方法把渲染输出捕获成字符串。
+        """
+        if not isinstance(result_data, dict) or not result_data:
+            self.console.print("❌ 没有可显示的结果", style="red")
+            return
+
+        # 顶层错误（解析失败 / 无输入 / 意图格式非法）
+        if result_data.get("error"):
+            self.console.print(f"❌ {result_data['error']}", style="red")
+            return
+
+        if result_data.get("status") == "no_agents":
+            self.console.print(
+                f"ℹ️  {result_data.get('message', '没有需要调度的智能体')}", style="dim"
+            )
+            return
+
+        items = result_data.get("results") or []
+        if not items:
+            self.console.print("ℹ️  本次没有产生智能体结果", style="dim")
+            return
+
+        # 按优先级稳定排序，保持与调度顺序一致
+        for item in sorted(items, key=lambda x: x.get("priority", 999)):
+            if isinstance(item, dict):
+                self._display_single_agent_result(item)
+
+        if result_data.get("status") == "partial_failure":
+            self.console.print(
+                f"⚠️  部分智能体失败（{result_data.get('errors', 0)} 个）", style="yellow"
+            )
+
     def _display_single_agent_result(self, item: dict):
         """从队列中收到的单个 Agent 结果，即时打印"""
         agent_name = item.get("agent_name", "")
