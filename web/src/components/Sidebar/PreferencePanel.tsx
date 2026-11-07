@@ -1,46 +1,47 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { Hotel, Luggage, Pin, RefreshCw, Utensils, type LucideIcon } from 'lucide-react'
+import { PreferenceTypeIcon } from '../Icons'
 import { fetchPreferences } from '../../api/client'
 import { useChatStore } from '../../store/chatStore'
 
-const CATEGORIES = [
+const CATEGORIES: { key: string; label: string; icon: LucideIcon; keys: string[] }[] = [
   {
     key: 'travel',
     label: '旅行偏好',
-    emoji: '🧳',
+    icon: Luggage,
     keys: ['travel_preference', 'favorite_city', 'weather_preference', 'trip_style', 'home_location'],
   },
   {
     key: 'stay',
     label: '住宿出行',
-    emoji: '🏨',
+    icon: Hotel,
     keys: ['hotel_brands', 'airlines', 'seat_preference'],
   },
   {
     key: 'life',
     label: '生活方式',
-    emoji: '🍽️',
+    icon: Utensils,
     keys: ['dietary', 'budget'],
   },
   {
     key: 'other',
     label: '其他',
-    emoji: '📌',
+    icon: Pin,
     keys: [],
   },
 ]
 
-const PREF_LABELS: Record<string, { label: string; icon: string }> = {
-  hotel_brands: { label: '酒店', icon: '🏨' },
-  airlines: { label: '航空', icon: '✈️' },
-  seat_preference: { label: '座位', icon: '💺' },
-  home_location: { label: '常驻地', icon: '🏠' },
-  dietary: { label: '饮食', icon: '🍽️' },
-  budget: { label: '预算', icon: '💰' },
-  travel_preference: { label: '旅行方式', icon: '🧳' },
-  favorite_city: { label: '心仪城市', icon: '❤️' },
-  weather_preference: { label: '天气偏好', icon: '🌤️' },
-  trip_style: { label: '风格', icon: '✨' },
+const PREF_LABELS: Record<string, string> = {
+  hotel_brands: '酒店',
+  airlines: '航空',
+  seat_preference: '座位',
+  home_location: '常驻地',
+  dietary: '饮食',
+  budget: '预算',
+  travel_preference: '旅行方式',
+  favorite_city: '心仪城市',
+  weather_preference: '天气偏好',
+  trip_style: '风格',
 }
 
 const CAT_STYLES: Record<string, { bg: string; border: string; text: string }> = {
@@ -153,19 +154,21 @@ export function PreferencePanel() {
             return (
               <section key={cat.key} className="border-b border-rule py-3 last:border-0">
                 <div className="mb-2 flex items-center gap-1.5">
-                  <span className="text-[11px]" aria-hidden="true">{cat.emoji}</span>
+                  <cat.icon size={12} strokeWidth={1.5} aria-hidden="true" />
                   <span className="font-mono text-[9px] tracking-[0.14em] text-ink-3">{cat.label}</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {items.map(([key, value]) => {
-                    const meta = PREF_LABELS[key]
+                    const label = PREF_LABELS[key] || key
                     return (
                       <span
                         key={key}
+                        title={label}
+                        aria-label={label + '：' + formatValue(value)}
                         className="inline-flex items-center gap-1 rounded-[2px] border px-2 py-1 text-[10px]"
                         style={{ backgroundColor: style.bg, borderColor: style.border, color: style.text }}
                       >
-                        <span aria-hidden="true">{meta?.icon || '📌'}</span>
+                        <PreferenceTypeIcon kind={key} size={12} className="shrink-0" />
                         {formatValue(value)}
                       </span>
                     )

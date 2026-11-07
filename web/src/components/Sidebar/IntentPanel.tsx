@@ -1,5 +1,5 @@
 import { useChatStore } from '../../store/chatStore'
-import { getAgentLabel } from '../Icons/AgentIcon'
+import { getAgentLabel } from '../Icons'
 
 const intentLabels: Record<string, string> = {
   itinerary_planning: '行程规划',

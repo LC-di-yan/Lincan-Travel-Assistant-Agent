@@ -182,6 +182,41 @@
 
 }
 
+/* ── 触感反馈（Tactile press）───────────────────────────────────────────
+   审计发现全站 active: 反馈为 0 处：按钮按下无任何物理回应。
+   这里统一给可点击元素加按下缩放 + 一致缓动，避免逐个组件补 39 处 class。
+   放在 @layer 之外：无层级样式在 CSS 级联中优先于 Tailwind utilities，
+   因此能覆盖组件自带的 transition-colors（否则 transform 不会有过渡）。
+   遮罩类按钮用 data-press="off" 退出，避免缩放后露出边缘。 */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+a[href] {
+  transition-property: color, background-color, border-color, opacity, transform, box-shadow;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+button:not(:disabled):not([data-press='off']):active,
+[role='button']:not([aria-disabled='true']):not([data-press='off']):active {
+  transform: scale(0.97);
+  transition-duration: 60ms;
+}
+
+/* 禁用态统一给出不可用光标，避免用户反复点击 */
+button:disabled,
+[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+/* 触控目标：粗指针设备（手机/平板）下保证最小 44px，
+   桌面保持紧凑密度。用 min-height 而非固定 height，避免破坏既有排版。 */
+@media (pointer: coarse) {
+  button:not([data-press='off']),
+  [role='button'] {
+    min-height: 44px;
+  }
+}
+
 /* Scrollbar: thin, neutral, no glow */
 ::-webkit-scrollbar {
   width: 6px;

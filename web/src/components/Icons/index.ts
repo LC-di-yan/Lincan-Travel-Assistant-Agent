@@ -1,1 +1,5 @@
-export { AgentIcon, getAgentColor, getAgentLabel, AGENT_CONFIG } from './AgentIcon'
+export { AgentIcon } from './AgentIcon'
+export { getAgentColor, getAgentLabel, AGENT_CONFIG } from './agentConfig'
+export { PreferenceTypeIcon, ExpenseCategoryIcon } from './CategoryIcon'
+export { preferenceIcon, expenseIcon, EXPENSE_CATEGORIES } from './categoryIcons'
+export { PERSONA_ICONS, PERSONA_FALLBACK_ICON } from './personaIcons'

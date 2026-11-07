@@ -1,25 +1,5 @@
 import { CardShell } from './CardShell'
-
-const TYPE_ICONS: Record<string, string> = {
-  hotel_brand: '🏨',
-  hotel_brands: '🏨',
-  hotel: '🏨',
-  airline: '✈️',
-  airlines: '✈️',
-  seat: '💺',
-  seat_preference: '💺',
-  food: '🍽️',
-  dietary: '🍽️',
-  transport: '🚕',
-  home: '🏠',
-  home_location: '🏠',
-  city: '🏙️',
-  favorite_city: '❤️',
-  budget: '💰',
-  travel_preference: '🧳',
-  weather_preference: '🌤️',
-  trip_style: '✨',
-}
+import { PreferenceTypeIcon } from '../Icons'
 
 const TYPE_LABELS: Record<string, string> = {
   hotel_brand: '酒店品牌',
@@ -63,7 +43,7 @@ export function PreferenceCard({ data }: { data: Record<string, unknown> }) {
         ) : (
           prefList.map((p, i) => (
             <div key={i} className="flex items-start gap-3 border-b border-rule py-2.5 last:border-0">
-              <span className="mt-0.5 text-sm" aria-hidden="true">{TYPE_ICONS[p.type] || '⭐'}</span>
+              <PreferenceTypeIcon kind={p.type} className="mt-1 shrink-0 text-ink-3" />
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] tracking-[0.06em] text-ink-3">{TYPE_LABELS[p.type] || p.type}</div>
                 <div className="mt-0.5 text-[13px] leading-6 text-ink">

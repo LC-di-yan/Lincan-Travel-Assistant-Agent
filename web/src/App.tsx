@@ -134,6 +134,7 @@ export default function App() {
               <button
                 type="button"
                 aria-label="关闭侧栏"
+                data-press="off"
                 className="fixed inset-0 z-40 bg-black/35"
                 onClick={closeSidebar}
               />

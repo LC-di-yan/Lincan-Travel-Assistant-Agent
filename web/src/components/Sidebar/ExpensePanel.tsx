@@ -2,16 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { fetchExpenses } from '../../api/client'
 import { useChatStore } from '../../store/chatStore'
-
-const CATEGORY_ICONS: Record<string, string> = {
-  '交通': '🚕',
-  '餐饮': '🍽️',
-  '住宿': '🏨',
-  '通讯': '📱',
-  '办公': '💼',
-  '娱乐': '🎬',
-  '其他': '📦',
-}
+import { ExpenseCategoryIcon } from '../Icons'
 
 interface ExpenseItem {
   id?: string
@@ -102,7 +93,7 @@ export function ExpensePanel() {
             const pct = total > 0 ? Math.round((amt / total) * 100) : 0
             return (
               <div key={cat} className="flex items-center gap-2 py-1 text-[11px]">
-                <span className="w-4 text-center" aria-hidden="true">{CATEGORY_ICONS[cat] || '📦'}</span>
+                <ExpenseCategoryIcon kind={cat} size={12} className="w-4 shrink-0 text-ink-3" />
                 <span className="w-10 shrink-0 text-ink-2">{cat}</span>
                 <div className="h-1 flex-1 bg-paper-sunken">
                   <div className="h-full bg-accent" style={{ width: pct + '%' }} />
@@ -132,7 +123,7 @@ export function ExpensePanel() {
         <div>
           {expenses.slice(0, 20).map((item, i) => (
             <div key={item.id || i} className="flex items-center gap-2 border-b border-rule py-2 text-[11px] last:border-0">
-              <span className="w-4 text-center" aria-hidden="true">{CATEGORY_ICONS[item.category || ''] || '📦'}</span>
+              <ExpenseCategoryIcon kind={item.category} size={12} className="w-4 shrink-0 text-ink-3" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-ink-2">{item.description || item.category}</div>
                 {item.date && <div className="font-mono text-[9px] text-ink-3">{item.date}</div>}

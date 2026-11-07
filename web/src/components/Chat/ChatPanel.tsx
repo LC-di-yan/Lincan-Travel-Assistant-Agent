@@ -261,12 +261,13 @@ export function ChatPanel() {
           store.setThinkingStatus('')
         },
         onError: (data) => {
-          store.patchMessage(assistantMessageId, { content: `❌ ${data.message}` })
+          store.patchMessage(assistantMessageId, { content: String(data.message ?? '处理失败'), isError: true })
         },
       })
     } catch (err) {
       store.patchMessage(assistantMessageId, {
-        content: `❌ 连接失败: ${err instanceof Error ? err.message : String(err)}`,
+        content: '连接失败: ' + (err instanceof Error ? err.message : String(err)),
+        isError: true,
       })
     } finally {
       store.setProcessing(false)
@@ -290,13 +291,23 @@ export function ChatPanel() {
     const store = useChatStore.getState()
     store.setProcessing(false)
     store.setThinkingStatus('')
-    store.updateLastAssistant({ content: '⏹ 已停止生成' })
+    store.updateLastAssistant({ content: '已停止生成' })
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto py-2">
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          role="log"
+          aria-label="对话消息"
+          aria-live="polite"
+          /* 流式生成期间置 busy：读屏软件等生成结束再整段播报，
+             避免逐 token 朗读造成噪音风暴 */
+          aria-busy={isProcessing}
+          className="flex-1 overflow-y-auto py-2"
+        >
           {messages.length === 0 && (
             <div className="flex h-full items-center justify-center px-4 py-10">
               <div className="w-full max-w-[760px]">

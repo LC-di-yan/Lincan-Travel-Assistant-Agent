@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
-import { Volume2, Square, Loader2 } from 'lucide-react'
+import { Volume2, Square, Loader2, TriangleAlert } from 'lucide-react'
 import { Markdown } from '../Markdown'
 import type { Message } from '../../api/types'
 import { ResultDashboard } from '../Results/ResultDashboard'
@@ -69,7 +69,7 @@ export function MessageBubble({
     hour: '2-digit',
     minute: '2-digit',
   })
-  const isError = !isUser && msg.content.trim().startsWith('❌')
+  const isError = !isUser && msg.isError === true
 
   const handlePlay = async () => {
     if (ttsBusy) {
@@ -187,9 +187,13 @@ export function MessageBubble({
         )}
 
         {isError && (
-          <div className="flex max-w-[680px] items-start gap-3 border border-err/30 bg-error-light px-3 py-2.5">
-            <p className="min-w-0 flex-1 text-[12px] leading-5 text-err">
-              {msg.content.replace(/^❌\s*/, '')}
+          <div
+            role="alert"
+            className="flex max-w-[680px] items-start gap-2.5 rounded-[2px] border border-err/30 bg-error-light px-3 py-2.5"
+          >
+            <TriangleAlert size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-err" aria-hidden="true" />
+            <p className="min-w-0 flex-1 text-[12px] leading-5 text-err [overflow-wrap:anywhere]">
+              {msg.content}
             </p>
             {onSend && userMessage && (
               <button

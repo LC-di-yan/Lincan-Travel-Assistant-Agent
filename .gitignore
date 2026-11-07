@@ -106,7 +106,11 @@ data/pytest_*.txt
 # data 根目录只放运行时产物与调试日志，一律不入库（data/baseline/ 等子目录不受影响）
 data/*.txt
 data/*.log
+data/*.json.tmp
 data/ab_*.json
+data/lint.json
+# 前端视觉验证截图（本地产物，用 present 展示，不入库）
+data/visual/
 data/baseline_p2_tests.txt
 experiments/pytest_*.txt
 data/p2_batch3_tests.txt

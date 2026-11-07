@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { X, Volume2, Play, Square, Loader2 } from 'lucide-react'
+import { X, Volume2, Play, Square, Loader2, Check } from 'lucide-react'
+import { PERSONA_ICONS, PERSONA_FALLBACK_ICON } from '../Icons'
 import { useTTSPrefs, useLoadPersonas } from '../../hooks/useTTSPrefs'
 import { useTTSPlayer } from '../../hooks/useTTSPlayer'
 
@@ -101,9 +102,9 @@ function TTSSettingsBody({ onClose }: { onClose: () => void }) {
                     className="flex flex-1 items-center gap-2 text-left"
                     aria-pressed={selected}
                   >
-                    <span aria-hidden="true">{p.emoji}</span>
+                    <PersonaGlyph id={p.id} />
                     <span>{p.label}</span>
-                    {selected && <span aria-hidden="true">✓</span>}
+                    {selected && <Check size={12} strokeWidth={2} aria-hidden="true" />}
                   </button>
                   <button
                     type="button"
@@ -152,4 +153,8 @@ function TTSSettingsBody({ onClose }: { onClose: () => void }) {
       </div>
     </>
   )
+}
+function PersonaGlyph({ id }: { id: string }) {
+  const Icon = PERSONA_ICONS[id] ?? PERSONA_FALLBACK_ICON
+  return <Icon size={13} strokeWidth={1.5} className="shrink-0" aria-hidden="true" />
 }

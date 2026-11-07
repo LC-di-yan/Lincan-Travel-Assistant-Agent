@@ -204,4 +204,8 @@ export interface Message {
   agentResults?: AgentResult[]
   orchestrationResult?: OrchestrationResult
   narrationText?: string  // LLM 生成的播报文案（手动播放优先用）
+  /** 显式错误标记。
+   *  此前错误态靠 content.startsWith('❌') 判断——emoji 承载状态语义，
+   *  既违反无 emoji 图标规范，也会在文案改动时静默失效。 */
+  isError?: boolean
 }

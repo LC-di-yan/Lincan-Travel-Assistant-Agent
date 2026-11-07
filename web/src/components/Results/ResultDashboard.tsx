@@ -11,7 +11,7 @@ import { HotelCard } from './HotelCard'
 import { RestaurantCard } from './RestaurantCard'
 import { ScenicCard } from './ScenicCard'
 import { TrainCard } from './TrainCard'
-import { getAgentLabel } from '../Icons/AgentIcon'
+import { getAgentLabel } from '../Icons'
 import { AlertCircle } from 'lucide-react'
 
 function ResultCard({ result }: { result: AgentResult }) {

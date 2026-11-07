@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Square } from 'lucide-react'
 import type { AgentResult, IntentionData } from '../../api/types'
-import { getAgentLabel } from '../Icons/AgentIcon'
+import { getAgentLabel } from '../Icons'
 
 type NodeStatus = 'pending' | 'active' | 'done' | 'error'
 
@@ -71,7 +71,8 @@ export function RouteStrip({
         <button
           type="button"
           onClick={onCancel}
-          className="flex h-9 items-center gap-1.5 rounded-[2px] border border-rule-strong px-2.5 text-[11px] font-medium text-ink-2 hover:bg-paper-sunken"
+          aria-label="停止生成"
+          className="flex h-9 items-center gap-1.5 rounded-[2px] border border-rule-strong px-2.5 text-[11px] font-medium text-ink-2 hover:bg-paper-sunken hover:text-ink"
         >
           <Square size={10} fill="currentColor" aria-hidden="true" />
           停止

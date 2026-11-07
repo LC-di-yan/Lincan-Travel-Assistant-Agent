@@ -1,13 +1,6 @@
 import { CompactReceipt, CompactReceiptExchange } from './CompactReceipt'
 import { getAgentColor } from '../Icons'
 
-const FLAGS: Record<string, string> = {
-  CNY: '\u{1F1E8}\u{1F1F3}', USD: '\u{1F1FA}\u{1F1F8}', EUR: '\u{1F1EA}\u{1F1FA}',
-  GBP: '\u{1F1EC}\u{1F1E7}', JPY: '\u{1F1EF}\u{1F1F5}', KRW: '\u{1F1F0}\u{1F1F7}',
-  HKD: '\u{1F1ED}\u{1F1F0}', TWD: '\u{1F1F9}\u{1F1FC}', SGD: '\u{1F1F8}\u{1F1EC}',
-  THB: '\u{1F1F9}\u{1F1ED}', AUD: '\u{1F1E6}\u{1F1FA}', CAD: '\u{1F1E8}\u{1F1E6}',
-}
-
 const accent = getAgentColor('currency_converter')
 
 export function CurrencyCard({ data }: { data: Record<string, unknown> }) {
@@ -35,14 +28,8 @@ export function CurrencyCard({ data }: { data: Record<string, unknown> }) {
       footer={rate ? '1 ' + from + ' = ' + rate + ' ' + to : undefined}
     >
       <CompactReceiptExchange
-        from={{
-          icon: FLAGS[from] || '\u{1F4B1}',
-          value: `${amount} ${from}`,
-        }}
-        to={{
-          icon: FLAGS[to] || '\u{1F4B1}',
-          value: `${result.toFixed(2)} ${to}`,
-        }}
+        from={{ code: from, value: amount + ' ' + from, mono: true }}
+        to={{ code: to, value: result.toFixed(2) + ' ' + to, mono: true }}
       />
     </CompactReceipt>
   )

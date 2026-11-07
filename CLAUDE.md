@@ -152,6 +152,8 @@ python cli.py health
 | `docs/decision-shadow-analysis.md` | 影子回放分析与 assist 提升评估（含否决模拟结论） |
 | `docs/testing-full-suite.md` | 全量测试「零跳过」复跑指南（服务 / 前端构建 / 音频 mock / 决策 key） |
 | `docs/ci-and-hooks.md` | 提交门禁与 CI（pre-commit 安装 / 密钥扫描 / CI 激活步骤） |
+| `docs/frontend-optimization-2026-11.md` | 前端优化记录（emoji 归零 / 触感反馈 / 无障碍 / 审计与验证） |
+| `tools/audit_frontend.py` | 前端设计审计（渲染层 emoji、无障碍属性、交互护栏） |
 | `docs/ci-workflow.yml` | CI 工作流内容（待复制到 .github/workflows/ci.yml 激活） |
 | `tools/install_hooks.py` | 安装本地 pre-commit 门禁钩子（每个克隆装一次） |
 | `tools/collect_shadow_samples.py` / `tools/simulate_assist_veto.py` | 影子样本采集 / assist 否决离线模拟 |
