@@ -118,6 +118,10 @@ docs/            设计文档、截图、展示页、变更记录
 python -m venv .venv && .venv\Scripts\activate      # Windows
 pip install -r requirements.txt
 
+# 1b. 装提交门禁钩子（.git/hooks 不进版本库，每个克隆装一次；约 1 秒/次提交）
+#     拦密钥误提交 + AgentScope 1.x 写法回潮，详见 docs/ci-and-hooks.md
+python tools/install_hooks.py
+
 # 2. 配置模型（见下一节「配置与密钥」）
 copy .env.example .env
 # 编辑 .env：填 ALIGO_API_KEY / ALIGO_BASE_URL / ALIGO_MODEL_NAME
@@ -223,6 +227,7 @@ python verify_llm.py
 - 双跑对比： [docs/as2-ab-report.md](docs/as2-ab-report.md)（1.0.16 vs 2.0.11 + 回滚演练）
 - 决策层影子分析：[docs/decision-shadow-analysis.md](docs/decision-shadow-analysis.md)（一致率 87.5% · assist 否决模拟 · 天气正则修正）
 - 全量测试零跳过指南：[docs/testing-full-suite.md](docs/testing-full-suite.md)（服务 / 前端构建 / 音频 mock / 决策 key → 203 passed）
+- 提交门禁与 CI：[docs/ci-and-hooks.md](docs/ci-and-hooks.md)（**克隆后请跑 `python tools/install_hooks.py`**）
 - [设计文档与开发指南](docs/DEVELOPER_GUIDE.md)（原 README，含子智能体详解与 CLI 用法）
 - [变更记录](docs/CHANGELOG.md)（2026-10 的故障复盘与修复）
 - 其它设计与方案：`docs/` 目录

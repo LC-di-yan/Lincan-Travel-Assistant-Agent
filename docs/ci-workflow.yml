@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    name: 静态门禁（无需密钥）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 门禁只依赖标准库 + git，先跑，失败即刻拦住
+      - name: AgentScope 1.x 写法门禁
+        run: python tools/check_as2_gate.py
+
+      - name: 密钥扫描门禁
+        run: python tools/scan_secrets.py
+
+  offline-tests:
+    name: 离线测试（无需密钥）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # 可选依赖，但 tests/test_decision_jev_backend.py 需要它构造 JevClassifierModel
+          pip install typesafe-sdk==0.7.5
+          pip install pytest pytest-asyncio
+
+      # 刻意不创建 .env：验证「新克隆 / 无密钥」环境也能跑绿。
+      # 需要真实 LLM / 服务 / 音频 mock / 决策 key 的用例在此排除，
+      # 它们的完整跑法见 docs/testing-full-suite.md。
+      - name: 离线用例
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python -m pytest tests/ -q \
+            --ignore=tests/test_cli_qa.py \
+            --ignore=tests/test_web_contracts.py \
+            --ignore=tests/test_decision_eval.py \
+            --ignore=tests/test_event_collection_agent.py \
+            --ignore=tests/test_information_query_agent.py \
+            --ignore=tests/test_intention_agent.py \
+            --ignore=tests/test_memory_system.py \
+            --ignore=tests/test_orchestration.py \
+            --ignore=tests/test_rag_agent.py
+
+      - name: RAG 检索离线评测（40 题基线）
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python tests/eval_rag_tree.py

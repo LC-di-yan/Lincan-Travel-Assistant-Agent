@@ -14,6 +14,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from server.session import SessionManager  # noqa: E402
 
+# SessionManager() 在构造时就会创建 OpenAI 客户端，缺 api_key 会直接抛
+# openai.OpenAIError。无 .env 的环境（新克隆 / CI）应跳过而不是失败。
+from config import LLM_CONFIG  # noqa: E402
+
+pytestmark = pytest.mark.skipif(
+    not LLM_CONFIG.get("api_key"),
+    reason="需要 ALIGO_API_KEY（SessionManager 构造即创建 LLM 客户端）",
+)
+
 USER = "pytest_session_reuse"
 
 

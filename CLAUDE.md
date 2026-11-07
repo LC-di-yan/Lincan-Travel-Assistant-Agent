@@ -151,6 +151,9 @@ python cli.py health
 | `docs/decision-layer-dev-plan.md` | 决策层设计与实现文档 |
 | `docs/decision-shadow-analysis.md` | 影子回放分析与 assist 提升评估（含否决模拟结论） |
 | `docs/testing-full-suite.md` | 全量测试「零跳过」复跑指南（服务 / 前端构建 / 音频 mock / 决策 key） |
+| `docs/ci-and-hooks.md` | 提交门禁与 CI（pre-commit 安装 / 密钥扫描 / CI 激活步骤） |
+| `docs/ci-workflow.yml` | CI 工作流内容（待复制到 .github/workflows/ci.yml 激活） |
+| `tools/install_hooks.py` | 安装本地 pre-commit 门禁钩子（每个克隆装一次） |
 | `tools/collect_shadow_samples.py` / `tools/simulate_assist_veto.py` | 影子样本采集 / assist 否决离线模拟 |
 | `docs/agentscope-2-upgrade-dev-plan.md` | AgentScope 2.0.11 升级与架构重构开发计划（含实测 API 速查与门禁方案） |
 | `docs/agentscope-2-delivery.md` | 升级交付说明（范围 / 验收 / 踩坑 / 回滚，README 摘要） |
