@@ -26,6 +26,7 @@
 | 7 | **国旗 emoji 表意不准** | CurrencyCard/TranslationCard 用国旗代表币种/语言 | 改 ISO 代码芯片（币种跨国流通、语言≠国家），与票据等宽体系一致 |
 | 8 | **Fast Refresh 失效** | AgentIcon/CategoryIcon 混合导出组件与常量函数 | 拆纯数据 `.ts` + 组件 `.tsx` |
 | 9 | **粗指针触控目标偏小** | 移动端部分按钮 36px | `@media (pointer: coarse)` 下 `min-height:44px`，桌面保持紧凑 |
+| 10 | **浅色主题一处未达 WCAG AA** | `--ink-3:#666b73` 配 `--paper-sunken` 实测 **4.44:1**（要求 4.5） | 微调为 `#62676f` → 5.15 / 5.60 / **4.71**，色相明度几乎不变 |
 
 ## 新增/改动文件
 
@@ -37,6 +38,7 @@
 | `web/src/components/Icons/agentConfig.ts` | Agent 元数据与色值（改用主题 token） |
 | `web/src/styles/globals.css` | 触感反馈、禁用光标、粗指针 44px |
 | `tools/audit_frontend.py` | 可复跑审计：渲染层 emoji / 无障碍属性 / CSS 护栏 |
+| `tools/audit_contrast.py` | WCAG 对比度实测（两主题 × 13 组配色，阈值 4.5:1） |
 | `web/e2e/visual-check.mjs` | Edge+CDP 截图与计算样式探针（无需 Playwright） |
 
 ## 验证（全部实跑）
@@ -52,6 +54,7 @@
 | 读屏区域 | `role=log[aria-live]` 存在，`aria-busy` 随生成态切换 |
 | 移动端触控 | 14 个可见按钮，**低于 44px 的 0 个** |
 | Web 契约 | 4 passed / 2 skipped（音频需 mock，另轮已验 6/6） |
+| **WCAG 对比度** | `tools/audit_contrast.py`：13 组前景/背景 × 2 主题，**全部 ≥ 4.5:1**（修复前浅色有 1 组 4.44） |
 
 截图（本地产物，未入库）：`data/visual/desktop-light.png`、`desktop-dark.png`、
 `mobile-light.png`、`light-expense-result.png`。
@@ -68,7 +71,8 @@
 ## 复跑方式
 
 ```powershell
-python tools/audit_frontend.py                  # 静态审计
+python tools/audit_frontend.py                  # 静态审计（emoji / a11y / 护栏）
+python tools/audit_contrast.py                  # WCAG 对比度（两主题全部需 >= 4.5）
 cd web; npm run build; cd ..                    # 构建（静态挂载在启动时判定，必须先 build）
 python server/app.py                            # 另开终端
 node web/e2e/visual-check.mjs                   # 截图 + 计算样式探针

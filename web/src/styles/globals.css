@@ -34,7 +34,9 @@
   --paper-sunken: #efe9de;
   --ink: #171a1f;
   --ink-2: #4a4f57;
-  --ink-3: #666b73;
+  /* #62676f 而非原 #666b73：后者配 --paper-sunken 仅 4.44:1，未达 WCAG AA 4.5。
+     此值在三种纸面上分别 5.15 / 5.60 / 4.71，色相与明度几乎不变。 */
+  --ink-3: #62676f;
   --rule: #d9d2c5;
   --rule-strong: #8c8578;
   --accent: #b83c22;
