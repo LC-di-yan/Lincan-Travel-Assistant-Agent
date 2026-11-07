@@ -101,6 +101,7 @@ Thumbs.db
 
 # AgentScope 升级的影子环境与临时产物
 .venv-as2/
+.venv-as1/
 data/pytest_*.txt
 data/collect*.txt
 data/baseline_p2_tests.txt

@@ -1,6 +1,6 @@
 # AgentScope 2.0.11 升级与架构重构开发计划
 
-> 状态：**P0–P6a、P8 已完成并验收**（2026-11-06，2.0.11 全量 175 passed / 0 failed）｜P5 停在做加法式桥接（按用户决定）｜P6b/P7 判定不适用或阻塞（见 §11） | 版本基线：agentscope==1.0.16 → **2.0.11（已上线主环境）** | 环境：Python 3.12.8
+> 状态：**P0–P6a、P7 决策项、P8 已完成并验收**（2026-11-06，2.0.11 全量 **183 passed / 7 skipped / 0 failed**）｜P5 停在加法式桥接（按用户决定）｜P6b 与 P7 的 SSE/权限/AskUser 判定不适用（见 §11） | 版本基线：agentscope==1.0.16 → **2.0.11（已上线主环境）** | 环境：Python 3.12.8
 >
 > 一句话结论：**这不是换版本号，是断裂式重设计下的架构重构。** 官方定性 2.0 为 breaking change；本项目对框架的依赖
 > 表面很轻（只用 4 个入口），语义却很重（把 Msg.content 当成 JSON 字符串信箱）。真正危险的不是会报错的删除项，
@@ -246,7 +246,7 @@ Top 冲击文件：
 | 任务 | 1. `IntentionAgent` 改 `reply(inputs, structured_schema=IntentDecision)`，`IntentDecision` 复用 `utils/decision_schema.py` 的 13 类意图定义；`json_parser` 降为「端点不支持 tool_choice」兜底。<br>2. `OrchestrationAgent` 保留自研优先级调度，同时把同优先级并行改为可选 `TeamPipeline(leader, members, reset_members)`，**影子对比**后决定去留。<br>3. plan-trip 评估 `SOP/SOPEngine` 与 `GoalPipeline(executor, verifier, verifier_reset_context, max_iters, max_retries)`：用「里程碑 + 逐步校验」替代手写多轮修补。<br>4. `TracingMiddleware`（OTel）替换自研 `[TIMING]` print 埋点；保留 `data/decision_shadow/*.jsonl`。 |
 | 验收 | 24 条金标准 + 40 题 RAG 指标不低于 P0；JSON 解析失败告警下降 ≥ 50% |
 
-### P7 事件流、权限与决策层退役（3 人日）— ⛔ 判定不适用/阻塞（见 §11）
+### P7 事件流、权限与决策层退役（3 人日）— 🔶 决策项 ✅ 已完成并线上验证；SSE/权限/AskUser ⛔ 不适用（见 §11）
 
 | 项 | 内容 |
 |---|---|

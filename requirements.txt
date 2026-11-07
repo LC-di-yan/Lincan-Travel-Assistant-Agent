@@ -5,6 +5,8 @@ setuptools>=69.0.0,<82
 agentscope==2.0.11
 
 # 可选：决策层 TypeSafe 后端（仅 ALIGO_DECISION_BACKEND=jev 时需要，默认 custom 不依赖）
+# 启用 jev 后端时执行：pip install typesafe-sdk==0.7.5
+# 缺失时决策层安全降级（route() 返回 None → 回退 LLM/规则），不影响主链路
 # typesafe-sdk==0.7.5
 
 # HTTP
