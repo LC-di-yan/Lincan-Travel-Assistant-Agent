@@ -111,6 +111,7 @@ data/ab_*.json
 data/lint.json
 # 前端视觉验证截图（本地产物，用 present 展示，不入库）
 data/visual/
+data/demo/
 data/baseline_p2_tests.txt
 experiments/pytest_*.txt
 data/p2_batch3_tests.txt
