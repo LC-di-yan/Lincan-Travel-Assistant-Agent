@@ -72,8 +72,8 @@ git revert 70a9fb8..7f10cbf                    # 或直接回退到升级前提�
 |---|---|---|
 | 历史是否含 key | `git show 7f10cbf:data/cv.txt` | **含明文 key**（该提交已推送到 origin/main） |
 | 何时移除 | `git log --all -- data/cv.txt` | `7f10cbf` 引入 → `c340530` 删除 |
-| HEAD 是否残留 | `git grep -l 'sk_tr_hzZG' HEAD` | 曾在 `experiments/check_history_secrets.py`（扫描脚本硬编码了 key），**已删除** |
-| 当前工作树 | `git grep -l 'sk_tr_hzZG'` | 无残留 |
+| HEAD 是否残留 | `git grep -l '<key-prefix>' HEAD` | 曾在 `experiments/check_history_secrets.py`（扫描脚本硬编码了 key），**已删除** |
+| 当前工作树 | `git grep -l '<key-prefix>'` | 无残留 |
 
 > 踩坑教训：`git log -S <字符串>` 会把**删除**该字符串的提交也算命中，
 > 只看「有没有命中」会误判；必须用 `git show <commit>:<path>` 直接验blob内容，
