@@ -221,6 +221,7 @@ python verify_llm.py
 - 升级开发计划：[docs/agentscope-2-upgrade-dev-plan.md](docs/agentscope-2-upgrade-dev-plan.md)（API 速查 · 冲击面 · P0–P8 · 风险册）
 - 验收基线： [docs/agentscope-2-baseline.md](docs/agentscope-2-baseline.md)（双版本 / 线上模型 / 决策层实测）
 - 双跑对比： [docs/as2-ab-report.md](docs/as2-ab-report.md)（1.0.16 vs 2.0.11 + 回滚演练）
+- 决策层影子分析：[docs/decision-shadow-analysis.md](docs/decision-shadow-analysis.md)（一致率 87.5% · assist 否决模拟 · 天气正则修正）
 - [设计文档与开发指南](docs/DEVELOPER_GUIDE.md)（原 README，含子智能体详解与 CLI 用法）
 - [变更记录](docs/CHANGELOG.md)（2026-10 的故障复盘与修复）
 - 其它设计与方案：`docs/` 目录

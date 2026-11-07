@@ -57,8 +57,42 @@ git revert 70a9fb8..7f10cbf                    # 或直接回退到升级前提�
 
 | # | 事项 | 现状 | 需要什么 |
 |---|---|---|---|
-| 1 | 决策层 `shadow` → `assist` 提升 | 影子日志仅 21 条（冒烟产生），无真实流量样本 | 跑一段真实会话后 `python tools/replay_shadow.py` 看一致率；达标再改 `ALIGO_DECISION_MODE=assist`。**注意 assist 是「否决制」**，`is_request` 准确率 83.3% 意味着约 1/6 误判会挡掉正常请求，不宜直接切 |
-| 2 | `tests/test_cli_qa.py` 渲染入口失效 | 依赖 `AligoCLI._display_results`，该方法在 `cli.py` 中不存在（**升级前既有的接口漂移**）；10 题 LLM 管线可跑通，仅结果渲染报错 | 二选一：给 `cli.py` 补一个聚合 `_display_results`（复用现有 `_display_single_agent_result`），或把测试改调 `_display_single_agent_result` |
+| 1 | 决策层 `shadow` → `assist` 提升 | ✅ **已评估：判定暂不切**。24 条真实样本一致率 87.5%，但 assist 否决模拟为 **0 次**（RISKY_AGENTS 不覆盖那唯一误判），切过去零收益且 fast 路径 +797ms。已改为直接修正天气正则缺陷。详见 [影子分析](decision-shadow-analysis.md) | 保持 shadow 继续积累；将来前置条件是「样本中出现 ≥1 次正确否决」，而非只看一致率 |
+| 2 | `tests/test_cli_qa.py` 渲染入口失效 | ✅ **已修**（方案 A）：`cli.py` 补回 `_display_results`，遍历聚合 `results[]` 按 priority 排序并委托现有 `_display_single_agent_result`，与流式路径共用渲染器。7 项契约测试 + 真实 `capture_display_results()` 验证通过 | — |
 | 3 | 高德 POI 路径未验证 | `AMAP_API_KEY` 未配置，`test_hotel_search.py` 自带守卫直接退出 | 配置 `AMAP_API_KEY` 后重跑该脚本 |
-| 4 | 7 个 skipped 用例 | 依赖外部 key / 服务，非失败 | 按需补齐对应 key 后会自动执行 |
-| 5 | 密钥轮换 | 本次升级用到的 LLM 网关 key 与 TokenRhythm key 曾出现在协作对话记录中（**未进入 git 历史，已复扫确认**） | 若对话记录会外传，建议在各自控制台轮换 |
+| 4 | skipped 用例 | 🔶 `test_decision_eval.py` 已用真实 key 解锁并跑通（1 passed）；其余为 `test_web_contracts.py`（需服务运行 + `ALIGO_AUDIO_BASE_URL`） | 启动服务 / 配置音频 URL 后自动执行 |
+| 5 | **TokenRhythm key 必须轮换** | ⚠️ **更正此前结论**：该 key 确实进过 git 历史并已推送 —— `7f10cbf:data/cv.txt` 含明文（由 `git add -A` 误纳入），`c340530` 才删除；另 `experiments/check_history_secrets.py` 曾在 HEAD 硬编码该 key（已删）。当前工作树/HEAD 已无残留，但**历史仍可检出** | **立即在 TokenRhythm 控制台轮换**（已推送的密钥不能只靠删文件）。如需彻底清除历史，见下方「历史清除」 |
+
+## 安全事件更正与处置（2026-11-07）
+
+**此前交付说明里「未进入 git 历史」的判断是错的**，特此更正。复核方式与结论：
+
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| 历史是否含 key | `git show 7f10cbf:data/cv.txt` | **含明文 key**（该提交已推送到 origin/main） |
+| 何时移除 | `git log --all -- data/cv.txt` | `7f10cbf` 引入 → `c340530` 删除 |
+| HEAD 是否残留 | `git grep -l 'sk_tr_hzZG' HEAD` | 曾在 `experiments/check_history_secrets.py`（扫描脚本硬编码了 key），**已删除** |
+| 当前工作树 | `git grep -l 'sk_tr_hzZG'` | 无残留 |
+
+> 踩坑教训：`git log -S <字符串>` 会把**删除**该字符串的提交也算命中，
+> 只看「有没有命中」会误判；必须用 `git show <commit>:<path>` 直接验blob内容，
+> 并区分 diff 里的 `+` / `-`。
+
+### 已处置
+
+- 删除硬编码 key 的扫描脚本；取消跟踪 `data/` 根目录 48 个探针日志
+- `.gitignore` 收紧为 `data/*.txt` / `data/*.log`（不影响 `data/baseline/` 回滚基线）
+- 全仓复扫：工作树与 HEAD 均无 key
+
+### 仍需使用者执行
+
+1. **轮换 TokenRhythm key**（必须）：密钥已推送到远端，删文件不等于失效。
+2. **历史清除**（可选，破坏性）：
+   ```bash
+   pip install git-filter-repo
+   git filter-repo --path data/cv.txt --invert-paths
+   git filter-repo --path experiments/check_history_secrets.py --invert-paths
+   git push --force-with-lease origin main
+   ```
+   代价：重写全部提交 hash，协作者需重新 clone；**且仍不能替代轮换**。
+   本轮未执行此操作（需明确授权）。

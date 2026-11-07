@@ -101,6 +101,17 @@ _WEATHER_PATTERNS = [
     re.compile(r"天气[怎么样如何]"),
 ]
 
+# 天气「评价/感叹」而非查询：如"今天天气真不错啊"。
+# 由来（2026-11-07 影子回放）：24 条真实样本里唯一一条决策层比正则更准的案例就是它 ——
+# 正则误判为 information_query 并去查天气，决策层判 chitchat(0.95)。
+# 命中评价词且没有任何查询信号时，放弃快路由交给 LLM（LLM 能正确判为闲聊）。
+_WEATHER_COMMENT_RE = re.compile(
+    r"天气(?:真|很|挺|太|还|蛮|可)?(?:不错|好|差|热|冷|舒服|糟糕|给力|宜人|恶劣)"
+)
+_WEATHER_QUERY_SIGNAL_RE = re.compile(
+    r"怎么样|怎样|如何|查|查询|看看|看一下|预报|多少度|气温|温度|会不会|要不要|下雨|下雪|穿什么|weather|[?？]"
+)
+
 # 住宿类关键词（酒店/民宿/旅馆/客栈/青旅/招待所/住的地方/落脚/下榻）
 _HOTEL_KEYWORDS = r"酒店|民宿|宾馆|旅馆|客栈|青旅|青年旅舍|招待所|住宿|住的地方|住哪儿|哪儿住|睡的?地方|落脚|下榻|歇脚|安顿|过夜|睡觉|投宿|借宿|旅店|旅舍|公寓酒店|度假村"
 
@@ -727,6 +738,9 @@ def _fast_match(query: str, dialogue_history: list = None) -> Optional[dict]:
     for p in _WEATHER_PATTERNS:
         m = p.search(q)
         if m:
+            # 评价/感叹句不是查询（"今天天气真不错啊"）→ 交给 LLM 判闲聊
+            if _WEATHER_COMMENT_RE.search(q) and not _WEATHER_QUERY_SIGNAL_RE.search(q):
+                return None
             city = m.group(1).strip() if m.lastindex and m.group(1) else ""
             # 也提取城市从住宿关键词
             if not city:

@@ -103,7 +103,10 @@ Thumbs.db
 .venv-as2/
 .venv-as1/
 data/pytest_*.txt
-data/collect*.txt
+# data 根目录只放运行时产物与调试日志，一律不入库（data/baseline/ 等子目录不受影响）
+data/*.txt
+data/*.log
+data/ab_*.json
 data/baseline_p2_tests.txt
 experiments/pytest_*.txt
 data/p2_batch3_tests.txt

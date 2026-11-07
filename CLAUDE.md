@@ -149,6 +149,8 @@ python cli.py health
 | `tests/decision_eval/cases.json` | 决策层金标准集（24 条） |
 | `data/decision_shadow/` | 决策层影子日志（jsonl，按日滚动） |
 | `docs/decision-layer-dev-plan.md` | 决策层设计与实现文档 |
+| `docs/decision-shadow-analysis.md` | 影子回放分析与 assist 提升评估（含否决模拟结论） |
+| `tools/collect_shadow_samples.py` / `tools/simulate_assist_veto.py` | 影子样本采集 / assist 否决离线模拟 |
 | `docs/agentscope-2-upgrade-dev-plan.md` | AgentScope 2.0.11 升级与架构重构开发计划（含实测 API 速查与门禁方案） |
 | `docs/agentscope-2-delivery.md` | 升级交付说明（范围 / 验收 / 踩坑 / 回滚，README 摘要） |
 | `docs/agentscope-2-baseline.md` | 升级基线与双版本验证记录 |
