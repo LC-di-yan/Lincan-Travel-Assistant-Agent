@@ -1,5 +1,13 @@
 # GitHub Pages 静态演示
 
+## 已上线
+
+**<https://lc-di-yan.github.io/Lincan-Travel-Assistant-Agent/demo/>**
+
+落地页（根路径）：<https://lc-di-yan.github.io/Lincan-Travel-Assistant-Agent/>
+
+浏览器实测：7 个场景可切换、汇率卡渲染 `USD → CNY 667.13`、与主站同一套暖纸墨色视觉。
+
 ## 页面
 
 `web/demo/` 是一个**零依赖的自包含静态页**（`index.html` + `app.js` + `data/*.json`），
@@ -30,27 +38,37 @@ cd web/demo; python -m http.server 8099
 # 打开 http://127.0.0.1:8099/
 ```
 
-## 发布到 GitHub Pages
+## 发布方式（已验证生效）
 
-`web/demo/` 的内容已推送到本仓库的 **`gh-pages` 分支**。启用只需一步（网页操作）：
-
-1. 打开 <https://github.com/LC-di-yan/Lincan-Travel-Assistant-Agent/settings/pages>
-2. **Source** 选 `Deploy from a branch`
-3. **Branch** 选 `gh-pages`，目录选 `/ (root)`，点 **Save**
-4. 等 1–2 分钟，访问 <https://lc-di-yan.github.io/Lincan-Travel-Assistant-Agent/>
-
-### 为什么必须手动点
-
-试过用 GitHub Actions 自动启用（内置 `GITHUB_TOKEN` + `permissions: pages: write`），
-实测被拒：
+仓库的 Pages **本来就已启用**，source 为 `main` 分支的 **`/docs`** 目录。
+所以只要把页面放进 `docs/demo/`、push 到 main，Pages 就会自动重建并发布——
+**不需要改任何 Pages 设置**。
 
 ```
-gh api -X PUT repos/{owner}/{repo}/pages -f 'source[branch]=gh-pages'
-→ {"message":"Resource not accessible by integration","status":403}
+push main → Pages(main /docs) 自动构建 → /Lincan-Travel-Assistant-Agent/demo/
 ```
 
-`GET /pages` 能读（说明站点已存在），但 **修改 Pages 配置需要仓库 admin 权限**，
-`GITHUB_TOKEN` 不具备。因此自动化止步于此，最后一步需在网页点一下。
+落地页 `docs/index.html` 提供根路径入口，指向 `/demo/`。
+
+### 走过的弯路（记录以免重犯）
+
+1. 一开始误判「GitHub Pages 不可用」——实际是本机 hosts 把 `github.com` 指向 `127.0.0.1`，
+   但 `*.github.io` **不受影响**，Pages 站点一直可访问。
+2. 试过用 Actions + `GITHUB_TOKEN` 改 Pages source，被拒：
+   `{"message":"Resource not accessible by integration","status":403}`
+   ——修改 Pages 配置需要仓库 admin 权限。
+3. 最终发现 source 已是 `main /docs`，**根本不需要改配置**，放对目录即可。
+
+### 推送受阻时的绕行（本机环境特有）
+
+`github.com` 与 `api.github.com` 被 hosts 屏蔽，但真实 IP 可达。git 2.44+ 支持：
+
+```powershell
+git -c http.curloptResolve=github.com:443:140.82.112.3 push https://github.com/<owner>/<repo>.git main
+```
+
+调用 GitHub API 同理：`curl --resolve api.github.com:443:140.82.112.5 ...`。
+
 
 ## 已知限制
 

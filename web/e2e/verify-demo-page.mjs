@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 const URL = process.env.DEMO_URL || 'http://127.0.0.1:8099/'
+const TAG = process.env.SHOT_TAG || 'gp-demo'
 const PORT = 9381
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
 const profile = mkdtempSync(join(tmpdir(), 'aligo-gpdemo-'))
@@ -19,7 +20,7 @@ await send('Page.enable'); await send('Runtime.enable')
 await send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false})
 await send('Page.navigate',{url:URL})
 await sleep(3500)
-const shot = async n => { const r = await send('Page.captureScreenshot',{format:'png'}); writeFileSync('data/'+n+'.png', Buffer.from(r.result.data,'base64')); return n }
+const shot = async n => { const r = await send('Page.captureScreenshot',{format:'png'}); writeFileSync('data/'+TAG+'-'+n+'.png', Buffer.from(r.result.data,'base64')); return n }
 console.log('scenes:', await ev('document.querySelectorAll(".scene").length'))
 console.log('answer:', (await ev('document.getElementById("ans").textContent'))?.slice(0,60))
 console.log('card:', await ev('!!document.querySelector(".card")'))
