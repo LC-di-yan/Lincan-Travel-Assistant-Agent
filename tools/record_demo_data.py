@@ -2,7 +2,7 @@
 import json, os, time, urllib.request
 
 BASE = 'http://127.0.0.1:3003'
-OUT = 'web/demo/data'
+OUT = 'docs/demo/data'
 os.makedirs(OUT, exist_ok=True)
 
 SCENES = [
