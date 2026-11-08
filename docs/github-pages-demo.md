@@ -1,77 +1,72 @@
-# GitHub Pages 静态演示
+# GitHub Pages 演示（可交互对话）
 
-## 已上线
+## 地址
 
-**<https://lc-di-yan.github.io/Lincan-Travel-Assistant-Agent/demo/>**
+- 演示：**<https://lc-di-yan.github.io/Lincan-Travel-Assistant-Agent/demo/>**
+- 落地页：<https://lc-di-yan.github.io/Lincan-Travel-Assistant-Agent/>
 
-落地页（根路径）：<https://lc-di-yan.github.io/Lincan-Travel-Assistant-Agent/>
+打开即可直接提问，**不需要后端**——因为它跑的是真实前端 + 浏览器内 mock 后端。
 
-浏览器实测：7 个场景可切换、汇率卡渲染 `USD → CNY 667.13`、与主站同一套暖纸墨色视觉。
+## 它是怎么做到的
 
-## 页面
+三部分组成，都在 `docs/demo/`：
 
-`web/demo/` 是一个**零依赖的自包含静态页**（`index.html` + `app.js` + `data/*.json`），
-内容是把项目**真实运行**产生的 7 组交互录下来回放：行程规划、火车票、知识库问答、
-天气、费用记录、汇率、偏好记忆。
+| 文件/目录 | 作用 |
+|---|---|
+| `index.html` + `assets/` | **真实的 React 前端构建产物**（`vite build --base=./`），与本地生产构建同一份代码 |
+| `mock-backend.js` | 在页面加载前拦截 `window.fetch`，把 `/api/*` 接管掉 |
+| `data/*.json` | 7 组**真实运行录制**的交互数据（意图识别 + 各技能返回） |
 
-页面本身不含任何密钥，不发起网络请求（只读取同目录 JSON），因此可以安全地公开托管。
+`mock-backend.js` 收到 `/api/chat` 后：
 
-## 为什么是「录制回放」而不是「在线对话」
+1. 关键词匹配到 7 个场景之一（行程/车票/知识库/天气/记账/汇率/偏好）；
+2. 按真实 SSE 协议逐步吐事件：`thinking → intention → dispatching → agent_start → agent_result → complete`，
+   每步之间有延迟，所以进度条、意图面板、结果卡片都会像真实运行时一样动起来；
+3. 匹配不到时返回一条提示，说明演示覆盖范围。
 
-在线对话需要 Python 后端持有模型密钥。静态托管做不到这一点，也不应该把密钥打进前端。
-所以这里用「真实数据 + 静态回放」：画面里的每一条回答都是真实调用大模型与技能产生的，
-只是被录成了 JSON。需要实时对话请用 README 里的在线实例（隧道）。
+因此用户体验与真实运行几乎一致：输入问题、看到处理链路、拿到结构化卡片、
+右侧意图/实体/调度/推理面板同步更新。
 
-## 重新录制数据
+## 与真实运行的区别
 
-```powershell
-python server/app.py            # 先启动后端
-python tools/record_demo_data.py  # 逐场景真实请求，写入 web/demo/data/
-```
+- 回答来自录制快照，不会再有新的推理（汇率、余票是录制时点的值）；
+- 朗读 / TTS 不可用（依赖后端音频接口）；
+- 覆盖 7 个场景，超出范围的输入会提示演示边界。
 
-> 行程规划偶发「模型返回格式有误」，脚本会记录失败态；重跑一次通常即可。
-
-## 本地预览
-
-```powershell
-cd web/demo; python -m http.server 8099
-# 打开 http://127.0.0.1:8099/
-```
-
-## 发布方式（已验证生效）
-
-仓库的 Pages **本来就已启用**，source 为 `main` 分支的 **`/docs`** 目录。
-所以只要把页面放进 `docs/demo/`、push 到 main，Pages 就会自动重建并发布——
-**不需要改任何 Pages 设置**。
-
-```
-push main → Pages(main /docs) 自动构建 → /Lincan-Travel-Assistant-Agent/demo/
-```
-
-落地页 `docs/index.html` 提供根路径入口，指向 `/demo/`。
-
-### 走过的弯路（记录以免重犯）
-
-1. 一开始误判「GitHub Pages 不可用」——实际是本机 hosts 把 `github.com` 指向 `127.0.0.1`，
-   但 `*.github.io` **不受影响**，Pages 站点一直可访问。
-2. 试过用 Actions + `GITHUB_TOKEN` 改 Pages source，被拒：
-   `{"message":"Resource not accessible by integration","status":403}`
-   ——修改 Pages 配置需要仓库 admin 权限。
-3. 最终发现 source 已是 `main /docs`，**根本不需要改配置**，放对目录即可。
-
-### 推送受阻时的绕行（本机环境特有）
-
-`github.com` 与 `api.github.com` 被 hosts 屏蔽，但真实 IP 可达。git 2.44+ 支持：
+## 重新构建与更新
 
 ```powershell
-git -c http.curloptResolve=github.com:443:140.82.112.3 push https://github.com/<owner>/<repo>.git main
+# 1) 重新录制数据（需本地后端在跑）
+python server/app.py
+python tools/record_demo_data.py      # 写入 docs/demo/data/
+
+# 2) 重新构建并部署前端
+cd web; npx vite build --base=./ --outDir=dist-pages --emptyOutDir; cd ..
+Get-ChildItem docs/demo -Force | Where-Object { $_.Name -notin @('data','mock-backend.js') } | Remove-Item -Recurse -Force
+Copy-Item web/dist-pages/* docs/demo -Recurse -Force
+
+# 3) 注入 mock（每次构建后都要，产物 index.html 会被覆盖）
+$idx = Get-Content docs/demo/index.html -Raw
+$idx = $idx -replace '<script type="module"', '<script src="mock-backend.js"></script><script type="module"'
+Set-Content docs/demo/index.html -Value $idx -Encoding utf8 -NoNewline
+
+# 4) 推送 → Pages 自动重建
+git add docs/demo; git commit -m 'demo: update'; git push
 ```
 
-调用 GitHub API 同理：`curl --resolve api.github.com:443:140.82.112.5 ...`。
+## 发布机制
 
+仓库的 Pages **已启用**，source 为 `main` 分支的 **`/docs`** 目录。
+所以只要把文件放进 `docs/` 并 push，Pages 会自动重建——不需要改任何设置。
 
-## 已知限制
+### 本机推送受阻时的绕行
 
-- 回放数据是录制时点的快照（汇率、余票会随时间变化）；
-- 页面不联网，所以「朗读」等需要后端的按钮无效；
-- 行程规划那条录制自第 2 次成功尝试（首轮遇到模型输出格式问题）。
+`github.com` / `api.github.com` 被本机 hosts 指向 `127.0.0.1`（Steam++ 残留），
+但真实 IP 可达。git 2.44+ 支持指定解析：
+
+```powershell
+git -c http.curloptResolve=github.com:443:140.82.114.3 push https://github.com/<owner>/<repo>.git main
+```
+
+调 GitHub API 同理：`curl --resolve api.github.com:443:140.82.112.5 ...`。
+IP 可能轮换，`140.82.112.3` / `.113.3` / `.114.3` 可依次重试。

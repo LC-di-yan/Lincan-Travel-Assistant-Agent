@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Star -->
+  <path d="M12 2 L14.5 8.5 L21.5 9 L16 14 L17.5 21 L12 17.5 L6.5 21 L8 14 L2.5 9 L9.5 8.5 Z" fill="#ec4899" opacity="0.1"/>
+  <path d="M12 2 L14.5 8.5 L21.5 9 L16 14 L17.5 21 L12 17.5 L6.5 21 L8 14 L2.5 9 L9.5 8.5 Z"/>
+  <!-- Slider -->
+  <line x1="4" y1="22" x2="20" y2="22" stroke="#ec4899" stroke-width="1.5" opacity="0.4"/>
+  <circle cx="14" cy="22" r="2" fill="#ec4899" stroke="none" opacity="0.6"/>
+</svg>

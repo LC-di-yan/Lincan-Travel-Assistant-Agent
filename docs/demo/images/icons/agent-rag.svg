@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Book -->
+  <path d="M4 4.5C4 3.12 5.12 2 6.5 2H20v17H6.5C5.12 19 4 17.88 4 16.5V4.5Z"/>
+  <path d="M4 16.5C4 15.12 5.12 14 6.5 14H20"/>
+  <!-- Search magnifier -->
+  <circle cx="14" cy="8" r="2.5" stroke="#8b5cf6"/>
+  <line x1="16" y1="10" x2="18" y2="12" stroke="#8b5cf6"/>
+  <!-- Lightning bolt -->
+  <path d="M11 17 L13 14 L11.5 14 L13 11" stroke="#8b5cf6" stroke-width="1.5"/>
+</svg>

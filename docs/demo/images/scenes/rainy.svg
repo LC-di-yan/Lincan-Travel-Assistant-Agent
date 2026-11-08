@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Dark cloud -->
+  <g opacity="0.35" fill="#64748b">
+    <ellipse cx="24" cy="18" rx="14" ry="8" />
+    <ellipse cx="18" cy="14" rx="9" ry="7" />
+    <ellipse cx="30" cy="14" rx="10" ry="7" />
+    <ellipse cx="24" cy="12" rx="8" ry="6" />
+  </g>
+  <!-- Rain drops -->
+  <g stroke="#60a5fa" stroke-width="1.5" stroke-linecap="round" opacity="0.3">
+    <line x1="16" y1="28" x2="14" y2="34" />
+    <line x1="22" y1="28" x2="20" y2="34" />
+    <line x1="28" y1="28" x2="26" y2="34" />
+    <line x1="34" y1="28" x2="32" y2="34" />
+    <line x1="19" y1="34" x2="17" y2="40" />
+    <line x1="25" y1="34" x2="23" y2="40" />
+    <line x1="31" y1="34" x2="29" y2="40" />
+  </g>
+</svg>
