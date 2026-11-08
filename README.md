@@ -10,24 +10,28 @@
 <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white">
 <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black">
 <img alt="AgentScope" src="https://img.shields.io/badge/AgentScope-2.0.11-blueviolet">
-<img alt="Tests" src="https://img.shields.io/badge/tests-81%20passed-brightgreen">
+<img alt="Tests" src="https://img.shields.io/badge/tests-203%20passed-brightgreen">
 </p>
 
 ---
 
 ## 效果预览
 
-| 行程规划（一句话 → 3 天可执行行程，约 5s） | 酒店搜索（高德 POI + 图片/评分/地址） |
+| 行程规划（一句话 → 3 天可执行行程） | 火车票（12306 实时余票） |
 |---|---|
-| ![行程规划](docs/screenshots/02-itinerary.png) | ![酒店搜索](docs/screenshots/03-hotel.png) |
+| ![行程规划](docs/screenshots/02-itinerary.png) | ![火车票](docs/screenshots/05-train.png) |
 
-| 天气 / 信息查询 | 火车票（12306） |
+| 知识库问答（树索引 + 推理导航，带出处） | 天气 / 信息查询 |
 |---|---|
-| ![天气](docs/screenshots/04-weather.png) | ![火车票](docs/screenshots/05-train.png) |
+| ![知识库问答](docs/screenshots/09-rag.png) | ![天气](docs/screenshots/04-weather.png) |
 
-| 偏好记忆（说一次就记住，下次规划自动用上） | 记账 + 汇率（一句话完成，侧栏实时汇总） |
+| 偏好记忆（说一次就记住） | 记账 + 汇率（侧栏实时汇总） |
 |---|---|
-| ![偏好](docs/screenshots/06-preference.png) | ![记账与汇率](docs/screenshots/07-expense-currency.png) |
+| ![偏好](docs/screenshots/06-preference.png) | ![记账](docs/screenshots/07-expense.png) · ![汇率](docs/screenshots/08-currency.png) |
+
+> 界面为 2026-11 前端优化后的版本：分类图标全部使用线性 SVG（无 emoji 字形差异）、
+> 汇率/翻译用 ISO 代码芯片而非国旗、全站统一的按下反馈与 44px 触控目标。
+> 设计细节与实测数据见 [前端优化记录](docs/frontend-optimization-2026-11.md)。
 
 ---
 
@@ -187,7 +191,7 @@ python tools/scan_secrets.py     # 扫描 sk- / QC- / token / 口令，输出脱
 
 ```bash
 # 单元 + 集成（无向量库，不需要先停服务；少数用例需要 ALIGO_API_KEY）
-python -m pytest -q                                  # 149 passed / 7 failed(缺 Key) / 7 skipped
+python -m pytest -q                                  # 196 passed / 7 skipped（条件齐备时 203/0，见下）
 
 # 前端-后端契约（需服务运行中）
 python -m pytest tests/test_web_contracts.py -q      # 4 passed / 2 skipped（TTS 需 mock 上游）

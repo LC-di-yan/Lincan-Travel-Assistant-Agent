@@ -13,6 +13,55 @@
 注：`design-taste-frontend` 默认禁衬线标题，但同时 `redesign-existing-projects` 明确
 「编辑/创意类项目用衬线标题配无衬线正文」——本项目属后者，故保留宋体，不套用禁令。
 
+## 界面一览（截图取自真实运行）
+
+以下每一张都是**服务真实跑起来、发真实请求、等结果渲染完成后**截的，不是设计稿。
+采集脚本 `web/e2e/shots-collect.mjs`（Edge + CDP，无需 Playwright），每个场景用独立用户隔离。
+
+### 空状态与行程规划
+
+| 空状态 | 行程规划 |
+|---|---|
+| ![空状态](screenshots/01-home.png) | ![行程规划](screenshots/02-itinerary.png) |
+
+左侧空状态用 `01 / 02 / 03` 编号列出示例问法（等宽排版标记，非 emoji）；
+右侧一句话生成 3 天行程：每天时间轴、交通方式、门票与餐饮预算逐项列出。
+
+### 火车票与列表展开
+
+| 车票查询（15 趟 + 余票） | 说「列出来」→ 原地展开全部 |
+|---|---|
+| ![火车票](screenshots/05-train.png) | ![列表展开](screenshots/08-train-list.png) |
+
+余票标签（`二等座 无 / 一等座 有`）是等宽小标签，标签化后面扫一眼就能比较。
+
+### 知识库问答与天气
+
+| 树索引检索 + 出处 | 天气卡 |
+|---|---|
+| ![知识库](screenshots/09-rag.png) | ![天气](screenshots/04-weather.png) |
+
+知识库答案带「依据：文档名 / 章节」并可展开来源，这是树索引相对向量检索的可解释性优势。
+
+### 偏好、记账与汇率
+
+| 偏好记忆 | 记账 | 汇率 |
+|---|---|---|
+| ![偏好](screenshots/06-preference.png) | ![记账](screenshots/07-expense.png) | ![汇率](screenshots/08-currency.png) |
+
+这三张最能体现本轮改造：
+
+- 偏好行首图标：`🏨` → `Hotel` 线性图标、`🍽️` → `Utensils`、`❤️` → `Heart`（继承 currentColor，明暗自适应）
+- 记账徽章：`✓ 已记录` → `已记录`（勾号 emoji 会让基线抖动，且不同系统字形不一致）
+- 汇率：`🇺🇸 → 🇨🇳` 国旗 → `USD` / `CNY` 等宽芯片；中间箭头从文字 `↓` 换成 SVG（字符箭头跟着基线走，撑不开间距）
+
+## 深色与移动端
+
+| 深色主题 | 移动端 390×844（@2x） |
+|---|---|
+| ![深色](screenshots/10-dark.png) | ![移动端](screenshots/11-mobile.png) |
+
+移动端实测：14 个可见按钮无一低于 44px（`@media (pointer: coarse)` 兜底）。
 ## 审计发现的硬问题与修复
 
 | # | 问题 | 证据 | 修复 |
@@ -56,8 +105,7 @@
 | Web 契约 | 4 passed / 2 skipped（音频需 mock，另轮已验 6/6） |
 | **WCAG 对比度** | `tools/audit_contrast.py`：13 组前景/背景 × 2 主题，**全部 ≥ 4.5:1**（修复前浅色有 1 组 4.44） |
 
-截图（本地产物，未入库）：`data/visual/desktop-light.png`、`desktop-dark.png`、
-`mobile-light.png`、`light-expense-result.png`。
+界面截图已入库到 `docs/screenshots/`，见文首「界面一览」。复跑采集：`node web/e2e/shots-collect.mjs`。
 
 ## 刻意不改的地方
 
