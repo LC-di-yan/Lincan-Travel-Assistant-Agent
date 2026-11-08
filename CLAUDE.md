@@ -153,6 +153,7 @@ python cli.py health
 | `docs/testing-full-suite.md` | 全量测试「零跳过」复跑指南（服务 / 前端构建 / 音频 mock / 决策 key） |
 | `docs/ci-and-hooks.md` | 提交门禁与 CI（pre-commit 安装 / 密钥扫描 / CI 激活步骤） |
 | `docs/frontend-optimization-2026-11.md` | 前端优化记录（emoji 归零 / 触感反馈 / 无障碍 / 审计与验证） |
+| `docs/demo.md` | 在线演示：隧道启动 / 时效 / 安全须知 / GitHub Pages 为何不可行 |
 | `tools/audit_frontend.py` | 前端设计审计（渲染层 emoji、无障碍属性、交互护栏） |
 | `docs/ci-workflow.yml` | CI 工作流内容（待复制到 .github/workflows/ci.yml 激活） |
 | `tools/install_hooks.py` | 安装本地 pre-commit 门禁钩子（每个克隆装一次） |

@@ -5,6 +5,9 @@
 基于 **AgentScope 多智能体框架 + FastAPI + React 19** 的差旅规划系统：意图识别 → 优先级并行调度 → 10 个技能智能体 → 两层记忆 → SSE 流式回显。
 模型层做了**多通道路由与故障转移**，单个模型服务挂掉不会让整站瘫痪。
 
+> **在线演示**：<https://844b3e816654c3.lhr.life> —— 真实运行的实例（真实 LLM 与知识库，非预录）。
+> 链接随隧道会话存活，失效时按 [docs/demo.md](docs/demo.md) 一条命令重建。
+
 <p>
 <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white">
 <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white">
