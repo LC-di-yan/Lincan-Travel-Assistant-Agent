@@ -1,5 +1,17 @@
 # 在线演示（Demo）
 
+本项目提供两种演示形态，用途不同：
+
+| 形态 | 地址 | 是否实时 | 依赖 |
+|---|---|---|---|
+| 在线实例（隧道） | 见下节 | ✅ 真实对话 | 本机服务保持运行 |
+| 静态演示（GitHub Pages） | <https://lc-di-yan.github.io/Lincan-Travel-Assistant-Agent/> | ⏸ 真实数据回放 | 无（纯静态） |
+
+**静态演示**把 7 组真实运行的交互录成 JSON 回放，零依赖、不联网、不含密钥，
+适合发给人「看效果」；**在线实例**才能真的打字对话，但它依赖本机开机。
+静态页的源码在 `web/demo/`，发布说明见 [github-pages-demo.md](github-pages-demo.md)。
+
+
 ## 当前演示地址
 
 **https://a33d4d9ae24bff.lhr.life**
