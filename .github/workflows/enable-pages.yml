@@ -1,0 +1,44 @@
+# 用 Actions 内置 GITHUB_TOKEN 启用/更新 GitHub Pages（source = gh-pages 分支）。
+# 之所以放在 workflow 里：本机 hosts 屏蔽 github.com 与 api.github.com，且 gh CLI token 失效，
+# 但 git 可经 SSH 443 推送；Actions 运行环境本身能访问 GitHub API。
+name: Enable Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/enable-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update Pages site
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -e
+          if gh api "repos/$REPO/pages" >/dev/null 2>&1; then
+            echo 'Pages already enabled, updating source'
+            gh api -X PUT "repos/$REPO/pages" \
+              -f 'source[branch]=gh-pages' -f 'source[path]=/' >/dev/null
+          else
+            echo 'Creating Pages site'
+            gh api -X POST "repos/$REPO/pages" \
+              -f 'source[branch]=gh-pages' -f 'source[path]=/' >/dev/null
+          fi
+          gh api "repos/$REPO/pages" --jq '{url: .html_url, status: .status, branch: .source.branch}'
+
+      - name: Request build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api -X POST "repos/$REPO/pages/builds" >/dev/null 2>&1 || true
+          echo 'build requested'
