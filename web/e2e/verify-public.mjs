@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-const URL = 'https://844b3e816654c3.lhr.life'
+const URL = process.env.DEMO_URL || 'https://7e1d02f18071d270-223-104-83-153.serveousercontent.com'
 const PORT = 9370
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
 const profile = mkdtempSync(join(tmpdir(), 'aligo-tunnel-'))

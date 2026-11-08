@@ -107,6 +107,7 @@ data/pytest_*.txt
 data/*.txt
 data/*.log
 data/*.png
+data/demo-runtime/
 data/*.json.tmp
 data/ab_*.json
 data/lint.json

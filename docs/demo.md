@@ -2,7 +2,7 @@
 
 ## 当前演示地址
 
-**https://844b3e816654c3.lhr.life**
+**https://a33d4d9ae24bff.lhr.life**
 
 > 这是**真实运行**的实例：链接通过 SSH 反向隧道指向本机 `server/app.py`，
 > 所有回答都由真实 LLM 生成（不是预录数据），知识库检索、火车票、费用记录等技能都会真实工作。
@@ -14,8 +14,18 @@
 
 ### 时效与关闭
 
-隧道跟随创建它的终端会话，**会话结束或断网后链接即失效**（表现为 502 或无法访问）。
-重新生成链接的命令见下节。演示结束后建议主动关闭，避免服务长期暴露在公网。
+当前演示以**独立后台进程**运行（`Start-Process` 启动的 `python server/app.py` 与 `ssh` 隧道），
+不随终端会话结束而中断；但**重启机器、断网或进程被杀**后链接会失效（表现为 502）。
+
+查看运行中的实例：
+
+```powershell
+Get-NetTCPConnection -LocalPort 3003 -State Listen      # 服务是否在跑
+Get-CimInstance Win32_Process -Filter "Name='ssh.exe'"  # 隧道是否在跑
+Get-Content data/demo-runtime/tunnel.out.log            # 当前公网地址
+```
+
+演示结束后建议主动关闭，避免服务长期暴露：`Stop-Process -Id <pid>`。
 
 ## 为什么不用 GitHub Pages
 
@@ -29,6 +39,27 @@ GitHub Pages 只能托管静态文件，无法运行 Python 后端；若把密�
 
 因此本仓库的演示采用「本机服务 + 反向隧道」：既能真实交互，又不需要把密钥交到浏览器。
 
+## 隧道选型（全部实测过）
+
+| 方案 | 结果 |
+|---|---|
+| **localhost.run** | ✅ 采用。无警告页，浏览器直接可用 |
+| cloudflared | ❌ 二进制从 GitHub Releases 下载，被本机 hosts 屏蔽，装不上 |
+| serveo.net | ❌ 免费版对浏览器弹 `Serveo - Warning` 跳转页（curl 能过、浏览器不能） |
+| pinggy.io | ❌ 启动即进入全屏 TUI，URL 无法稳定捕获 |
+| localtunnel | ❌ 有「输入公网 IP 作密码」的拦截页，不适合给人看 |
+| jsDelivr 托管仓库页 | ❌ 本机访问 `cdn.jsdelivr.net` 超时（code=000） |
+| GitHub Pages | ❌ 需网页/API 启用（hosts 屏蔽 + gh token 失效），且静态页无后端 |
+
+### localhost.run 的两个坑
+
+1. **转发目标写 `127.0.0.1`**，不要写 `localhost` —— 后者可能解析到 IPv6 `::1`，
+   而服务只监听 IPv4 `0.0.0.0`，表现为隧道建立成功但请求一律 **502**。
+2. **重建隧道前要冷却约 30–40 秒** —— 立刻换新隧道会因服务端旧连接未释放而持续 502。
+   本仓库实测：冷却 35 秒后重建，浏览器与 SSE 均正常。
+3. 另注：Python `urllib` 直连该隧道偶发 `SSL: DECRYPTION_FAILED_OR_BAD_RECORD_MAC`，
+   但 `curl` 与浏览器正常 —— 属客户端 TLS 实现差异，不代表隧道不可用。
+
 ## 如何自己启动演示
 
 ```powershell
@@ -40,10 +71,7 @@ ssh -R 80:127.0.0.1:3003 nokey@localhost.run
 # 输出里会打印 https://<随机id>.lhr.life，即为演示地址
 ```
 
-**关键细节（踩过的坑）**：转发目标必须写 `127.0.0.1`，不能写 `localhost`。
-`localhost` 可能解析到 IPv6 `::1`，而服务只监听 IPv4 `0.0.0.0`，结果隧道通但一直返回 **502**。
-
-备用隧道服务：`ssh -R 80:localhost:3003 serveo.net`（同样可用）。
+细节见上文「隧道选型」中的两个坑（IPv4 目标 + 重建冷却）。
 
 ## 安全须知
 
