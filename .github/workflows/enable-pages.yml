@@ -1,6 +1,3 @@
-# 用 Actions 内置 GITHUB_TOKEN 启用/更新 GitHub Pages（source = gh-pages 分支）。
-# 之所以放在 workflow 里：本机 hosts 屏蔽 github.com 与 api.github.com，且 gh CLI token 失效，
-# 但 git 可经 SSH 443 推送；Actions 运行环境本身能访问 GitHub API。
 name: Enable Pages
 
 on:
@@ -11,34 +8,49 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
 
 jobs:
   enable:
     runs-on: ubuntu-latest
     steps:
-      - name: Create or update Pages site
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -e
-          if gh api "repos/$REPO/pages" >/dev/null 2>&1; then
-            echo 'Pages already enabled, updating source'
-            gh api -X PUT "repos/$REPO/pages" \
-              -f 'source[branch]=gh-pages' -f 'source[path]=/' >/dev/null
-          else
-            echo 'Creating Pages site'
-            gh api -X POST "repos/$REPO/pages" \
-              -f 'source[branch]=gh-pages' -f 'source[path]=/' >/dev/null
-          fi
-          gh api "repos/$REPO/pages" --jq '{url: .html_url, status: .status, branch: .source.branch}'
+      - uses: actions/checkout@v4
 
-      - name: Request build
+      - name: Create or update Pages site
+        id: pages
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          gh api -X POST "repos/$REPO/pages/builds" >/dev/null 2>&1 || true
-          echo 'build requested'
+          set +e
+          OUT=''
+          if gh api "repos/$REPO/pages" >/dev/null 2>&1; then
+            OUT=$(gh api -X PUT "repos/$REPO/pages" -f 'source[branch]=gh-pages' -f 'source[path]=/' 2>&1)
+            RC=$?
+            ACTION=update
+          else
+            OUT=$(gh api -X POST "repos/$REPO/pages" -f 'source[branch]=gh-pages' -f 'source[path]=/' 2>&1)
+            RC=$?
+            ACTION=create
+          fi
+          {
+            echo 'pages_rc='$RC
+            echo 'pages_action='$ACTION
+            echo 'pages_url=https://${{ github.repository_owner }}.github.io/$(basename $REPO)/'
+            echo '--- api output ---'
+            echo "$OUT" | head -c 800
+          } > pages-status.txt
+          cat pages-status.txt
+
+      - name: Report result back to repo
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f pages-status.txt ]; then echo 'workflow ran but no status file' > pages-status.txt; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add pages-status.txt
+          git commit -m 'ci: pages status [skip ci]' || echo 'nothing to commit'
+          git push || echo 'push failed'
