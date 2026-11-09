@@ -1,5 +1,7 @@
 # Aligo 前端 UI 优化方案 v2
 
+> 注：本方案配套的原始审计截图（13 张 before/after）已在 2026-11 精简中移出仓库，以减小克隆体积；当前界面效果见 [docs/screenshots/](../docs/screenshots/) 与 [前端优化记录](frontend-optimization-2026-11.md)。
+
 ## 从「AI 聊天演示」到「差旅工作台」
 
 > 版本：v2.0 · 2026-10-20  
@@ -47,15 +49,12 @@
 
 **当前桌面端（亮色）**
 
-![当前桌面端亮色](ui-audit/current-desktop-light.png)
 
 **当前桌面端（暗色）**
 
-![当前桌面端暗色](ui-audit/current-desktop-dark.png)
 
 **当前移动端（390px）**
 
-![当前移动端](ui-audit/current-mobile-390.png)
 
 ### 1.2 根因一：没有设计系统，只有局部美化
 
@@ -138,13 +137,11 @@ web/src/styles/globals.css:7：
 
 ### 2.3 视觉语法样张（不是布局）
 
-![行程文件视觉语法](ui-audit/direction-itinerary-file.png)
 
 > 这张只展示**视觉语法**：纸/墨/朱砂、1px 规则线、2px 圆角、宋体标题、等宽数字、印章式状态。它不是最终布局。
 
 #### 2.3.1 聊天态样张（保留聊天框）
 
-![聊天优先的行程文件](ui-audit/direction-chat.png)
 
 > 主界面仍然是聊天：消息线程 + 输入框。助手回复 = 一段人话 + 一个可折叠、可导出的文件块；侧栏是辅助，可收起。
 
@@ -764,11 +761,6 @@ npx lighthouse http://localhost:4173 --view
 
 ### E. 证据截图
 
-- ui-audit/current-desktop-light.png
-- ui-audit/current-desktop-dark.png
-- ui-audit/current-mobile-390.png
-- ui-audit/direction-itinerary-file.png
-- ui-audit/direction-chat.png
 
 ---
 
@@ -795,15 +787,10 @@ npx lighthouse http://localhost:4173 --view
 
 ### 截图
 
-![实现后空状态 · 桌面](ui-audit/implemented-empty-desktop.png)
 
-![实现后空状态 · 移动端](ui-audit/implemented-empty-mobile.png)
 
-![聊天态 · 示例数据](ui-audit/implemented-chat-desktop.png)
 
-![结果卡 · 亮色](ui-audit/implemented-cards-light.png)
 
-![结果卡 · 暗色](ui-audit/implemented-cards-dark.png)
 
 ### 剩余
 

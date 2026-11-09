@@ -143,6 +143,17 @@ python -m uvicorn server.app:app --host 0.0.0.0 --port 3003
 # 打开 http://127.0.0.1:3003
 ```
 
+**仓库只放源码与必需数据**，依赖和构建产物请按上面步骤自行生成（clone 更小、也不用等大文件）：
+
+| 不提交 | 由谁生成 |
+|---|---|
+| `node_modules/`、`.venv/` | 各自的包管理器：`npm install` / `pip install -r requirements.txt` |
+| `web/dist/`、`web/dist-pages/` | `cd web && npm run build` |
+| `.env`（含密钥） | 从 `.env.example` 复制后填自己的 Key |
+| 运行时数据（记忆、费用、影子日志、截图） | 首次运行时自动生成；测试 fixture 除外 |
+
+体积参考：README 截图与在线演示页（`docs/demo/`）是**必须入库**的，其余均为可再生成产物。
+
 **知识库**：RAG 问答使用「文档树索引」，仓库内已带好构建产物，开箱即用（无需向量库、无需下载模型）。
 
 源文档改动后重建索引（差旅 + 签证一起）：

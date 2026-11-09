@@ -1,5 +1,7 @@
 # 前后端适配记录
 
+> 注：本方案配套的原始审计截图（13 张 before/after）已在 2026-11 精简中移出仓库，以减小克隆体积；当前界面效果见 [docs/screenshots/](../docs/screenshots/) 与 [前端优化记录](frontend-optimization-2026-11.md)。
+
 日期：2026-10-20  
 范围：`aligo/web`（React）与 `aligo/server`（FastAPI + SSE）
 
@@ -72,7 +74,6 @@ thinking / intention / dispatching / agent_start / agent_result / complete / err
   `loading → playing → idle`，`/api/tts` 200，无 console error
 - **narrate → TTS**：自动朗读链路成功调用 `/api/narrate` 与 `/api/tts`，音频节点启动
 
-![侧栏插件 · 真实后端](ui-audit/implemented-sidebar-plugins.png)
 
 ## 6. 自动化测试
 

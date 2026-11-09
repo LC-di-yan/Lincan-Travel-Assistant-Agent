@@ -1,5 +1,0 @@
-pages_rc=1
-pages_action=update
-pages_url=https://LC-di-yan.github.io/$(basename $REPO)/
---- api output ---
-{"message":"Resource not accessible by integration","documentation_url":"https://docs.github.com/rest/pages/pages#update-information-about-a-apiname-pages-site","status":"403"}gh: Resource not accessible by integration (HTTP 403)

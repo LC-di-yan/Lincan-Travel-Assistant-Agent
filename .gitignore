@@ -118,3 +118,10 @@ data/baseline_p2_tests.txt
 experiments/pytest_*.txt
 data/p2_batch3_tests.txt
 data/commit_msg.txt
+
+# 构建产物与历史审计截图不入库（2026-11 精简：clone 体积从 7.4MB 降到 4.3MB）
+# 游客自行构建：cd web && npm install && npm run build（产物 web/dist/ 已被上面忽略）
+web/dist-pages/
+docs/ui-audit/
+# 一次性验证脚本（用后即删）
+experiments/_*.py
