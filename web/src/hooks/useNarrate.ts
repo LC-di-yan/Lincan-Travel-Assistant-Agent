@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { readNarration } from '../utils/narrationStream'
 import { useTTSPrefsStore } from './useTTSPrefs'
 
 export interface NarrateRequest {
@@ -53,52 +54,7 @@ export function useNarrate() {
       return null
     }
 
-    const reader = resp.body?.getReader()
-    if (!reader) return null
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let currentEvent = ''
-    let fullText = ''
-    let hadError = false
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (line.startsWith('event:')) {
-            currentEvent = line.slice(6).trim()
-          } else if (line.startsWith('data:')) {
-            const dataStr = line.slice(5).trim()
-            if (!dataStr) continue
-            try {
-              const data = JSON.parse(dataStr)
-              if (currentEvent === 'delta' && data.text) {
-                fullText += data.text
-              } else if (currentEvent === 'error') {
-                console.error('[Narrate] server error:', data.message)
-                hadError = true
-              }
-              // done 事件：流结束，正常退出
-            } catch {
-              // ignore parse errors
-            }
-            currentEvent = ''  // data 行处理后清空 event
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock()
-    }
-
-    if (hadError || !fullText.trim()) return null
-    return fullText.trim()
+    return readNarration(resp)
   }, [personaId])
 
   /**

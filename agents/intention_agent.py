@@ -29,12 +29,21 @@ import logging
 import os
 import random
 import re
-import traceback
 from config import SCENARIO_TOKENS
 from utils.skill_loader import SkillLoader
-from utils.llm_response import extract_llm_json, extract_llm_text
+from utils.llm_response import extract_llm_json
+from utils.llm_errors import describe, friendly, classify
 from utils.decision_router import maybe_use_decision
 from cache.decorators import cached
+from utils.expenses import expense_fields, is_single_expense_statement
+from utils.expense_commands import parse_expense_command, read_scope
+from utils.weather_intent import needs_weather
+from utils.local_transport import needs_transport_advice
+from utils.currency_parser import parse_currency
+from utils.preference_parser import parse_preference, can_route_preference_statement
+from utils.memory_query import is_simple_memory_query
+from utils.train_intent import build_train_intention
+from utils.information_intent import is_simple_information_request
 
 logger = logging.getLogger(__name__)
 
@@ -192,52 +201,10 @@ _SCENIC_PATTERNS = [
     # 该条是 BUG-010 的主因（纯关键词命中叙述句）
 ]
 
-_CURRENCY_PATTERNS = [
-    re.compile(r"(\d+(?:\.\d+)?)\s*([美元人民币日元欧元英镑港币韩元])\s*[兑换换比]\s*([美元人民币日元欧元英镑港币韩元])"),
-    re.compile(r"([美元人民币日元欧元英镑港币韩元])[兑换换].*?([美元人民币日元欧元英镑港币韩元])"),
-    re.compile(r"汇率"),
-]
-
-# 货币中文 → 代码
-_CURRENCY_CODE = {
-    "人民币": "CNY", "元": "CNY", "块": "CNY",
-    "美元": "USD", "美金": "USD", "刀": "USD",
-    "欧元": "EUR", "英镑": "GBP", "日元": "JPY",
-    "韩元": "KRW", "港币": "HKD", "港元": "HKD",
-    "新台币": "TWD", "台币": "TWD",
-    "新加坡元": "SGD", "新币": "SGD",
-    "泰铢": "THB", "澳元": "AUD", "加元": "CAD",
-}
-
-# 货币中文关键词按长度降序（避免"元"先匹配"美元"中的"元"）
-_CURRENCY_WORDS = sorted(_CURRENCY_CODE.keys(), key=len, reverse=True)
-
-
 def _extract_currency(q: str) -> Optional[dict]:
-    """用正则从查询中提取货币信息，跳过 LLM 调用。返回 None 表示需要 LLM。"""
-    # 模式1: "100美元多少人民币" / "100美元换人民币"
-    m = re.search(r"(\d+(?:\.\d+)?)\s*([^\d\s]+?)\s*(?:多少|换|兑|兑换|换算|等于|是|转)\s*(?:多少|几)?\s*([^\d\s]+)", q)
-    if m:
-        amount = float(m.group(1))
-        currencies = re.findall(r"|".join(_CURRENCY_WORDS), q)
-        codes = list(dict.fromkeys(_CURRENCY_CODE[w] for w in currencies))  # 去重保序
-        if len(codes) >= 2:
-            return {"from_currency": codes[0], "to_currency": codes[1], "amount": amount}
+    """意图与技能共用同一套完整请求解析，避免金额丢失或多意图误命中。"""
+    return parse_currency(q)
 
-    # 模式2: "美元兑人民币" / "日元汇率" (纯汇率，无金额)
-    m = re.search(r"([^\d\s]+?)\s*(?:兑|兑换|换|汇率)\s*([^\d\s]+)", q)
-    if m:
-        currencies = re.findall(r"|".join(_CURRENCY_WORDS), q)
-        codes = list(dict.fromkeys(_CURRENCY_CODE[w] for w in currencies))
-        if len(codes) >= 2:
-            return {"from_currency": codes[0], "to_currency": codes[1], "amount": 1}
-
-    # 模式3: "汇率" 单关键词 + "日元" → 日元兑人民币
-    m = re.search(r"|".join(_CURRENCY_WORDS), q)
-    if m and "汇率" in q:
-        return {"from_currency": _CURRENCY_CODE[m.group(0)], "to_currency": "CNY", "amount": 1}
-
-    return None
 
 # 翻译语言白名单（中文/英文双向，覆盖常见语种）
 # 修复 BUG-021/022/023/024：补全俄/西班牙/阿拉伯/葡萄牙/意大利/泰/越南等语种
@@ -390,6 +357,8 @@ def _detect_secondary_intents(q: str, primary: str) -> list:
     primary: 'hotel_search' / 'restaurant_search' / 'scenic_search' / 'information_query'
     """
     secondary = []
+    if primary != "information_query" and (needs_weather(q) or needs_transport_advice(q)):
+        secondary.append(("information_query", "查询天气、穿衣或当地交通需求", "用户要求的信息及适用出行建议", "information_query", "天气与出行查询"))
     if primary != "hotel_search" and any(w in q for w in _HOTEL_WORDS):
         secondary.append(("hotel_search", "查住宿", "酒店列表", "hotel_search", "酒店搜索"))
     if primary != "restaurant_search" and any(w in q for w in _RESTAURANT_WORDS):
@@ -648,6 +617,44 @@ def _extract_train_entities(query: str):
 
 
 def _fast_match(query: str, dialogue_history: list = None) -> Optional[dict]:
+    result = _fast_match_rules(query, dialogue_history)
+    if result and result.get("reasoning") == "确定性本地解析":
+        return result
+    if result and any(task.get("agent_name") == "memory_query" for task in result.get("agent_schedule", [])) and not is_simple_memory_query(query):
+        # 旧记忆关键词只能用于完整意图识别的参考，不能吞掉同句中的其他任务。
+        return None
+    if result and any(pattern.search(query) for pattern in _MEMORY_PATTERNS) and not any(task.get("agent_name") == "memory_query" for task in result.get("agent_schedule", [])):
+        return None
+    # 任一早返回分支不能吞掉天气/穿衣子任务；不支持组合时交给完整意图识别。
+    if result and (needs_weather(query) or needs_transport_advice(query)):
+        scheduled = {task.get("agent_name") for task in result.get("agent_schedule", [])}
+        if "information_query" not in scheduled:
+            return None
+    return result
+
+
+def build_expense_intention(text: str) -> Optional[dict]:
+    command = parse_expense_command(text)
+    if command and command["kind"] == "invalid":
+        return None
+    if not command and (read_scope(text) is None or re.search(
+        r"天气|汇率|换算|翻译|签证|顺便|同时|另外|还要|以及|并且|查票|规划|预订|"
+        r"(?:推荐|查找)(?:酒店|餐厅|景点)|酒店推荐|餐厅推荐|查(?:一下)?(?:火车票|高铁票|航班)", text
+    )):
+        return None
+    result = {
+        "reasoning": "确定性本地解析",
+        "intents": [{"type": "expense_tracking", "confidence": 1.0, "description": "账本操作", "reason": "匹配明确的账本请求"}],
+        "key_entities": {},
+        "rewritten_query": "确认费用操作" if command and command["kind"] == "confirm" else text,
+        "agent_schedule": [{"agent_name": "expense_tracking", "priority": 1, "reason": "处理账本请求", "expected_output": "账本查询或确认"}],
+    }
+    if command and command["kind"] == "record" and len(command["items"]) == 1:
+        result["fast_expense"] = command["items"][0]
+    return result
+
+
+def _fast_match_rules(query: str, dialogue_history: list = None) -> Optional[dict]:
     """
     规则快速路由器：尝试用正则匹配高置信度意图。
     返回 None 表示需要走 LLM，返回 dict 表示直接命中。
@@ -657,21 +664,53 @@ def _fast_match(query: str, dialogue_history: list = None) -> Optional[dict]:
     _has_history = bool(dialogue_history)
     q = query.strip()
 
+    if ledger := build_expense_intention(q):
+        return ledger
+
     # ── 位置指示词消解（"附近" → 焦点城市）──
     resolved_q, focus_city = _resolve_deixis(q, dialogue_history or [])
     if resolved_q != q:
         q = resolved_q
 
+    # 确定性单任务优先，不能被「3天/酒店/出差/行程」等泛关键词拦截。
+    currency = parse_currency(q)
+    preference = parse_preference(q)
+    preference_route = bool(preference) or can_route_preference_statement(q)
+    agent_name = "currency_conversion" if currency else "preference" if preference_route else "memory_query" if is_simple_memory_query(q) else ""
+    if agent_name:
+        result = {
+            "reasoning": "确定性本地解析",
+            "intents": [{"type": agent_name, "confidence": 1.0, "description": "明确单任务", "reason": "完整请求规则匹配"}],
+            "key_entities": {}, "rewritten_query": q,
+            "agent_schedule": [{"agent_name": agent_name, "priority": 1, "reason": "直接执行", "expected_output": "处理结果"}],
+        }
+        if currency:
+            result["fast_currency"] = currency
+        return result
+
+    # 明确查票即便缺起点/日期也能本地反问，不必先请求模型。
+    if ticket := build_train_intention(q):
+        return ticket
+
     # ── 明确的差旅骨架「从A去/到B + N天」：规则直接出意图 ──
     # 这类查询原来每次都要等一次 5~12s 的 LLM 意图识别，而结果其实完全可判定
     _pair = _match_trip_pair(q)
     if _pair:
+        # 含住宿或餐馆需求时不能只派行程规划：它不会查询实际商家。
+        if any(word in q for word in (*_HOTEL_WORDS, *_RESTAURANT_WORDS)):
+            return None
+        if re.search(r"火车|高铁|动车|车票|车次|余票", q) and not re.search(r"规划|攻略|怎么玩|安排行程", q):
+            return None
+        if re.search(r"顺便|同时|另外|并且|以及|还要|记[一]?笔|天气|汇率|翻译", q):
+            return None
         return _pair
 
     # ── 差旅信号短路：含出差/行程/开会等信号强制走 LLM ──
     # 原因：fast route 命中单关键词（如'酒店'）会吞掉 itinerary_planning
     # 意图并丢失 fast_event，导致差旅信息无法写入长期记忆。
-    if _has_trip_signal(q):
+    # 「未来3天天气」的3天不是行程规划，保留原始时间范围直接查预报。
+    weather_only_duration = needs_weather(q) and not re.search(r"出差|行程|规划|攻略|旅游|开会|探亲|度假", q)
+    if _has_trip_signal(q) and not weather_only_duration:
         return None
 
     # ── 政策/标准类问题：直接走知识库，不是找酒店 ──
@@ -710,10 +749,15 @@ def _fast_match(query: str, dialogue_history: list = None) -> Optional[dict]:
             amount, desc = None, ""
             for g in groups:
                 if g and re.match(r"^\d+(\.\d+)?$", g):
+                    if not is_single_expense_statement(q, g):
+                        return None
                     amount = float(g)
                 elif g:
                     desc = g.strip()
             if amount:
+                fields = expense_fields(q)
+                if fields is None:
+                    return None
                 # 从描述中推断分类
                 category = "其他"
                 for keyword, cat in _CATEGORY_MAP.items():
@@ -723,68 +767,80 @@ def _fast_match(query: str, dialogue_history: list = None) -> Optional[dict]:
                 return {
                     "reasoning": "规则匹配: 记账关键词",
                     "intents": [{"type": "expense_tracking", "confidence": 0.95, "description": "费用记录", "reason": "匹配记账模式"}],
-                    "key_entities": {"other": f"{desc} {amount}元"},
+                    "key_entities": {"other": f"{desc} {amount} {fields['currency']}"},
                     "rewritten_query": q,
                     "agent_schedule": [{"agent_name": "expense_tracking", "priority": 1, "reason": "记账", "expected_output": "记录确认"}],
                     # 快速路由提取的参数，供 expense agent 直接使用
                     "fast_expense": {
+                        **fields,
                         "amount": amount,
                         "category": category,
                         "description": desc or q,
                     },
                 }
 
-    # 天气
-    for p in _WEATHER_PATTERNS:
-        m = p.search(q)
-        if m:
-            # 评价/感叹句不是查询（"今天天气真不错啊"）→ 交给 LLM 判闲聊
-            if _WEATHER_COMMENT_RE.search(q) and not _WEATHER_QUERY_SIGNAL_RE.search(q):
-                return None
-            city = m.group(1).strip() if m.lastindex and m.group(1) else ""
-            # 也提取城市从住宿关键词
-            if not city:
-                for hq in ["住宿", "酒店", "宾馆", "民宿", "旅馆", "青旅", "客栈"]:
-                    if hq in q:
-                        # 尝试从城市列表中提取
-                        for c in _CITY_KEYWORDS:
-                            if c in q:
-                                city = c
-                                break
-                        break
-            # 有对话历史但没提取到城市 → 交给 LLM 用历史补全
-            if not city and _has_history:
-                return None
-            # 检测是否同时有酒店/住宿需求
-            has_hotel = any(w in q for w in _HOTEL_WORDS)
-            # 餐厅/美食关键词
-            has_restaurant = any(w in q for w in _RESTAURANT_WORDS)
-            # 景点关键词
-            has_scenic = any(w in q for w in _SCENIC_WORDS)
-            agent_schedule = [{"agent_name": "information_query", "priority": 1, "reason": "查天气", "expected_output": "天气信息"}]
-            intents = [{"type": "information_query", "confidence": 0.9, "description": "天气查询", "reason": "匹配天气模式"}]
-            # 已知限制：当查询含多个城市（如"北京天气和上海酒店"）时，
-            # 仅提取首个城市，后续 hotel_search/restaurant_search 复用该城市。
-            # 完整修复需重构城市提取为列表，属 _CITY_KEYWORDS 范畴。
-            if has_hotel:
-                agent_schedule.append({"agent_name": "hotel_search", "priority": 1, "reason": "查住宿", "expected_output": "酒店列表"})
-                intents.append({"type": "hotel_search", "confidence": 0.85, "description": "酒店搜索", "reason": "查询含住宿关键词"})
-            if has_restaurant:
-                agent_schedule.append({"agent_name": "restaurant_search", "priority": 1, "reason": "查美食", "expected_output": "餐厅列表"})
-                intents.append({"type": "restaurant_search", "confidence": 0.85, "description": "餐厅搜索", "reason": "查询含美食关键词"})
-            if has_scenic:
-                agent_schedule.append({"agent_name": "scenic_search", "priority": 1, "reason": "查景点", "expected_output": "景点列表"})
-                intents.append({"type": "scenic_search", "confidence": 0.85, "description": "景点搜索", "reason": "查询含景点关键词"})
+    # 天气、穿衣与当地交通共享快速识别；不能只认含“天气”的句子。
+    if needs_weather(q) or needs_transport_advice(q):
+        if not is_simple_information_request(q, _CITY_KEYWORDS):
+            return None
+        # 不支持的额外任务必须交给完整编排，不能被信息查询吞掉。
+        if re.search(r"火车|高铁|动车|列车|车票|车次|机票|航班|翻译|汇率|换算|记(?:一)?笔|记账|费用|报销|签证|政策|标准|记录|偏好|喜欢|习惯|写|邮件|提醒|美元|人民币|美金|欧元|日元|英镑|USD|CNY", q, re.I):
+            return None
+        if len([city for city in _CITY_KEYWORDS if city in q]) > 1:
+            return None
+        # 评价/感叹句不是查询（"今天天气真不错啊"）→ 交给 LLM 判闲聊
+        if _WEATHER_COMMENT_RE.search(q) and not _WEATHER_QUERY_SIGNAL_RE.search(q):
+            return None
+        city = next((c for c in sorted(_CITY_KEYWORDS, key=len, reverse=True) if c in q), "")
+        if not city and dialogue_history:
+            city = _city_from_history(dialogue_history)
+            if city:
+                q = f"{city} {q}"
+        # 也提取城市从住宿关键词
+        if not city:
+            for hq in ["住宿", "酒店", "宾馆", "民宿", "旅馆", "青旅", "客栈"]:
+                if hq in q:
+                    # 尝试从城市列表中提取
+                    for c in _CITY_KEYWORDS:
+                        if c in q:
+                            city = c
+                            break
+                    break
+        # 检测是否同时有酒店/住宿需求
+        has_hotel = any(w in q for w in _HOTEL_WORDS)
+        # 餐厅/美食关键词
+        has_restaurant = any(w in q for w in _RESTAURANT_WORDS)
+        # 景点关键词
+        has_scenic = any(w in q for w in _SCENIC_WORDS)
+        info_label = "天气与穿衣查询" if needs_weather(q) else "当地交通建议"
+        agent_schedule = [{"agent_name": "information_query", "priority": 1, "reason": info_label, "expected_output": "信息查询结果"}]
+        intents = [{"type": "information_query", "confidence": 1.0, "description": info_label, "reason": "共享天气/交通规则匹配"}]
+        # 多城市请求已在上方交给完整编排，不跨城市复用单一目的地。
+        if has_hotel:
+            agent_schedule.append({"agent_name": "hotel_search", "priority": 1, "reason": "查住宿", "expected_output": "酒店列表"})
+            intents.append({"type": "hotel_search", "confidence": 0.85, "description": "酒店搜索", "reason": "查询含住宿关键词"})
+        if has_restaurant:
+            agent_schedule.append({"agent_name": "restaurant_search", "priority": 1, "reason": "查美食", "expected_output": "餐厅列表"})
+            intents.append({"type": "restaurant_search", "confidence": 0.85, "description": "餐厅搜索", "reason": "查询含美食关键词"})
+        if has_scenic:
+            agent_schedule.append({"agent_name": "scenic_search", "priority": 1, "reason": "查景点", "expected_output": "景点列表"})
+            intents.append({"type": "scenic_search", "confidence": 0.85, "description": "景点搜索", "reason": "查询含景点关键词"})
+        if not city and not (has_hotel or has_restaurant or has_scenic):
             return {
-                "reasoning": "规则匹配: 天气查询" +
-                             ("+酒店搜索" if has_hotel else "") +
-                             ("+餐厅搜索" if has_restaurant else "") +
-                             ("+景点搜索" if has_scenic else ""),
-                "intents": intents,
-                "key_entities": {"destination": city} if city else {},
-                "rewritten_query": q,
-                "agent_schedule": agent_schedule,
+                "reasoning": "确定性本地解析", "intents": intents,
+                "key_entities": {}, "rewritten_query": q,
+                "agent_schedule": agent_schedule, "needs_clarification": True,
+                "clarification_question": "你想查询哪个城市的天气或交通？",
+                "fast_event": {"missing_info": ["目的地"]},
             }
+        if not city:
+            return None
+        return {
+            "reasoning": "确定性本地解析", # 所有识别出的子任务均进入调度，不需要再次分类。
+            "intents": intents,
+            "key_entities": {"destination": city}, "rewritten_query": q,
+            "agent_schedule": agent_schedule,
+        }
 
     # 火车票/高铁/动车查询：稳健提取城市对和日期，避免日期前缀污染正则分组
     train_ticket_keywords = ["火车", "高铁", "动车", "列车", "12306", "车次", "班次", "余票", "有票", "没票", "查票", "订票", "抢票"]
@@ -804,7 +860,7 @@ def _fast_match(query: str, dialogue_history: list = None) -> Optional[dict]:
                 "reasoning": reasoning,
                 "intents": intents,
                 "key_entities": {"origin": from_city, "destination": to_city, "date": date_str},
-                "rewritten_query": f"{from_city}到{to_city}{' ' + date_str if date_str else ''}高铁/火车票",
+                "rewritten_query": q if secondary else f"{from_city}到{to_city}{' ' + date_str if date_str else ''}高铁/火车票",
                 "agent_schedule": agent_schedule,
                 "fast_train_ticket": {
                     "from": from_city,
@@ -925,20 +981,6 @@ def _fast_match(query: str, dialogue_history: list = None) -> Optional[dict]:
                 "agent_schedule": agent_schedule,
             }
 
-    # 汇率
-    for p in _CURRENCY_PATTERNS:
-        m = p.search(q)
-        if m:
-            fast_currency = _extract_currency(q)
-            return {
-                "reasoning": "规则匹配: 汇率查询",
-                "intents": [{"type": "currency_conversion", "confidence": 0.9, "description": "汇率查询", "reason": "匹配汇率模式"}],
-                "key_entities": {},
-                "rewritten_query": q,
-                "agent_schedule": [{"agent_name": "currency_conversion", "priority": 1, "reason": "查汇率", "expected_output": "汇率信息"}],
-                "fast_currency": fast_currency,
-            }
-
     # 翻译
     for p in _TRANSLATION_PATTERNS:
         m = p.search(q)
@@ -1029,7 +1071,13 @@ class IntentionAgent(SkillAgentBase):
         self.conversation_history = []
         self.skill_loader = SkillLoader()
 
-    @cached("intention", ttl=1800, key_fn=_intention_cache_key)
+    @staticmethod
+    def prepare_trip(text, previous=None):
+        from utils.trip_request import resolve_trip_turn
+
+        return resolve_trip_turn(text, previous)
+
+    @cached("intention_rules_v4", ttl=1800, key_fn=_intention_cache_key)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         """
         意图识别主流程
@@ -1062,6 +1110,10 @@ class IntentionAgent(SkillAgentBase):
         else:
             user_query = msg_text(x)
 
+        # Clear ledger requests are already understood and must not be reinterpreted from chat history.
+        if ledger := build_expense_intention(user_query):
+            return mk_msg(self.name, ledger)
+
         # ── 快速路径：规则匹配跳过 LLM ──
         # 提取纯对话历史（不含系统记忆），用于判断是否为追问
         _dialogue = [h for h in self.conversation_history if not h.startswith("[系统记忆]")]
@@ -1077,12 +1129,15 @@ class IntentionAgent(SkillAgentBase):
         if _dialogue:
             _elliptical = _resolve_elliptical(user_query, _dialogue)
             if _elliptical:
-                _msg = f"[TIMING] Elliptical resolved in {(_time.monotonic() - _t0) * 1000:.0f}ms, query: {user_query[:50]}"
+                _msg = f"[TIMING] Elliptical resolved in {(_time.monotonic() - _t0) * 1000:.0f}ms"
                 logger.info(_msg)
                 print(_msg, flush=True)
                 return mk_msg(self.name, _elliptical)
 
         fast = _fast_match(user_query, dialogue_history=_dialogue)
+        if fast and fast.get("reasoning") == "确定性本地解析":
+            logger.info("[TIMING] Deterministic intent in %.1fms", (_time.monotonic() - _t0) * 1000)
+            return mk_msg(self.name, fast)
 
         # ── 决策层（NeoHorse-Jev-4B）──────────────────────────────
         # off: 直接返回 None；shadow: 异步旁路只记日志；assist: 允许否决坏命中；
@@ -1096,7 +1151,7 @@ class IntentionAgent(SkillAgentBase):
 
         _t_fast = (_time.monotonic() - _t0) * 1000
         if fast:
-            _msg = f"[TIMING] Fast route hit in {_t_fast:.0f}ms, query: {user_query[:50]}"
+            _msg = f"[TIMING] Fast route hit in {_t_fast:.0f}ms"
             logger.info(_msg)
             print(_msg, flush=True)
             if _decision is not None:
@@ -1300,7 +1355,7 @@ P2（依赖P1结果）: itinerary_planning
         }
 
         result = default_result
-        last_error_msg = "JSON解析失败"
+        error_code = "parse"
         max_attempts = 2
         _t_llm_start = _time.monotonic()
         for attempt in range(1, max_attempts + 1):
@@ -1320,62 +1375,26 @@ P2（依赖P1结果）: itinerary_planning
                     parsed = extract_llm_json(response, fallback=None)
                 if attempt == 1:
                     logger.info("[INTENT] 输出来源=%s structured_mode=%s", _parse_source, _INTENT_STRUCTURED)
-                if parsed is None or (isinstance(parsed, dict) and "error" in parsed):
-                    raw_text = extract_llm_text(response, fallback="<empty>")
-                    logger.warning(
-                        "Intent JSON parse failed on attempt %d/%d, raw text (first 500 chars): %s",
-                        attempt,
-                        max_attempts,
-                        raw_text[:500],
-                    )
-                    if attempt == max_attempts:
-                        # 只留一句概括；原始文本已经在上面 warning 里，不进 reasoning
-                        last_error_msg = "模型返回的内容不是可解析的 JSON"
+                if not isinstance(parsed, dict) or "error" in parsed:
+                    error_code = "parse"
+                    logger.warning("Intent JSON parse failed on attempt %d/%d", attempt, max_attempts)
                     continue
                 result = parsed
                 break
-            except UnboundLocalError as exc:
-                # Python 3.12+ 的 except ... as e 在退出 except 块后会隐式删除 e，
-                # 如果底层 C 扩展（anyio _asyncio 后端）或异步任务取消/超时的竞态条件
-                # 在已删除的帧局部变量上操作，就会触发此错误。
-                last_error_msg = f"UnboundLocalError: {exc}"
-                full_tb = traceback.format_exc()
-                logger.error(
-                    "Intent recognition UnboundLocalError on attempt %d/%d: %s\n"
-                    "Likely cause: C extension (anyio) or async race condition.\n"
-                    "Full traceback:\n%s",
-                    attempt,
-                    max_attempts,
-                    last_error_msg,
-                    full_tb,
-                )
-                if attempt == max_attempts:
-                    break
-                await asyncio.sleep(0.5 + random.random() * 0.5)
             except Exception as exc:
-                last_error_msg = str(exc)
-                full_tb = traceback.format_exc()
-                logger.error(
-                    "Intent recognition failed on attempt %d/%d: %s\nFull traceback:\n%s",
-                    attempt,
-                    max_attempts,
-                    last_error_msg,
-                    full_tb,
-                )
+                error_code = classify(exc)
+                logger.warning("Intent recognition failed on attempt %d/%d (%s)", attempt, max_attempts, describe(exc))
                 if attempt == max_attempts:
                     break
                 await asyncio.sleep(0.5 + random.random() * 0.5)
 
         if result is default_result or "error" in result:
             # 侧栏 REASONING 会原样展示 reasoning：上游 403 的 JSON 不能写进来
-            from utils.llm_errors import describe, friendly_text, classify
-
-            _reason = friendly_text(last_error_msg, default="未能识别出明确意图")
-            if last_error_msg:
-                logger.warning("Intent fallback to default strategy: %s", describe(Exception(last_error_msg)))
+            _reason = friendly(code=error_code)
+            logger.warning("Intent fallback to default strategy: %s", error_code)
             result = {
                 "reasoning": f"意图识别出错，使用默认策略：{_reason}",
-                "error_code": classify(Exception(last_error_msg)) if last_error_msg else "",
+                "error_code": error_code,
                 "intents": [
                     {
                         "type": "information_query",

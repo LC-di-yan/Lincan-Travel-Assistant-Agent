@@ -1,59 +1,25 @@
 import { useState, useRef, useEffect } from 'react'
 import { Download, FileText, Calendar, Copy, Check } from 'lucide-react'
 import type { Itinerary } from '../../api/types'
-
-function generateICS(itinerary: Itinerary): string {
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Aligo Travel//CN',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
-  ]
-
-  const today = new Date()
-  let dayOffset = 0
-
-  for (const plan of itinerary.daily_plans || []) {
-    const date = new Date(today)
-    date.setDate(date.getDate() + dayOffset)
-
-    for (const act of plan.activities || []) {
-      const timeStr = act.time || '09:00'
-      const [h, m] = timeStr.split(':').map(Number)
-      const start = new Date(date)
-      start.setHours(h, m, 0, 0)
-      const end = new Date(start)
-      end.setHours(h + 1, m, 0, 0)
-
-      const fmtDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
-
-      lines.push('BEGIN:VEVENT')
-      lines.push('DTSTART:' + fmtDate(start))
-      lines.push('DTEND:' + fmtDate(end))
-      lines.push('SUMMARY:' + (act.activity || '行程'))
-      if (act.description) lines.push('DESCRIPTION:' + act.description)
-      lines.push('UID:' + crypto.randomUUID())
-      lines.push('END:VEVENT')
-    }
-    dayOffset++
-  }
-
-  lines.push('END:VCALENDAR')
-  return lines.join('\r\n')
-}
+import { generateICS } from '../../utils/calendar'
+import { activityTime, evidenceSources } from '../../utils/flightEvidence'
 
 function generateText(itinerary: Itinerary): string {
   const lines: string[] = []
   lines.push(itinerary.title || '行程')
   if (itinerary.duration) lines.push(itinerary.duration)
+  if (itinerary.route) lines.push('路线示意: ' + itinerary.route)
+  if (itinerary.estimated_budget) lines.push('预计预算: ' + itinerary.estimated_budget)
+  lines.push(itinerary.price_notice || '票价、房价与可订状态未核验。')
+  for (const source of evidenceSources(itinerary.sources)) lines.push('来源: ' + source.title + (source.url ? ' ' + source.url : ''))
   lines.push('─'.repeat(30))
 
   for (const plan of itinerary.daily_plans || []) {
-    lines.push('\n' + plan.day)
+    lines.push('\n' + [typeof plan.day === 'number' ? `第 ${plan.day} 天` : plan.day, plan.date, plan.city, plan.theme].filter(Boolean).join(' · '))
     for (const act of plan.activities || []) {
-      const time = act.time ? '[' + act.time + '] ' : ''
-      lines.push('  ' + time + (act.activity || ''))
+      const time = '[' + (activityTime(act.time) || '时刻待核验') + '] '
+      lines.push('  ' + time + (act.activity || act.location || '未命名活动'))
+      if (act.location && act.activity && act.location !== act.activity) lines.push('    地点: ' + act.location)
       if (act.description) lines.push('    ' + act.description)
       if (act.transport) lines.push('    交通: ' + act.transport)
     }
@@ -90,7 +56,9 @@ function escapeHtml(text: string): string {
 export function ExportButton({ itinerary }: { itinerary: Itinerary }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [exportError, setExportError] = useState('')
   const ref = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -104,7 +72,11 @@ export function ExportButton({ itinerary }: { itinerary: Itinerary }) {
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setOpen(false)
+        trigger.current?.focus()
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     const first = menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')
@@ -113,18 +85,24 @@ export function ExportButton({ itinerary }: { itinerary: Itinerary }) {
   }, [open])
 
   const handleICS = () => {
-    const ics = generateICS(itinerary)
-    downloadFile(ics, (itinerary.title || '行程') + '.ics', 'text/calendar')
-    setOpen(false)
+    try {
+      const ics = generateICS(itinerary)
+      downloadFile(ics, (itinerary.title || '行程') + '.ics', 'text/calendar')
+      setExportError('')
+      setOpen(false)
+      trigger.current?.focus()
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : '日历暂时无法导出')
+    }
   }
 
-  const handleText = () => {
-    const text = generateText(itinerary)
-    navigator.clipboard.writeText(text).then(() => {
+  const handleText = async () => {
+    try {
+      await navigator.clipboard.writeText(generateText(itinerary))
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }).catch(() => {})
-    setOpen(false)
+      setExportError('')
+    } catch { setExportError('无法复制，请使用打印或手动复制。') }
+    finally { setOpen(false); trigger.current?.focus() }
   }
 
   const handlePrint = () => {
@@ -140,26 +118,30 @@ export function ExportButton({ itinerary }: { itinerary: Itinerary }) {
       win.print()
     }
     setOpen(false)
+    trigger.current?.focus()
   }
 
   return (
     <div ref={ref} className="relative shrink-0">
       <button
+        ref={trigger}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
         className="flex h-8 items-center gap-1 rounded-[2px] border border-rule-strong px-2 text-[11px] font-medium text-ink-2 hover:bg-paper-sunken hover:text-ink"
       >
-        <Download size={12} aria-hidden="true" /> 导出
+        {copied ? <Check size={12} aria-hidden="true" /> : <Download size={12} aria-hidden="true" />} 导出
       </button>
 
+      {copied && <p role="status" className="sr-only">行程文本已复制</p>}
+      {exportError && <p role="alert" className="max-w-64 text-[11px] text-err">{exportError}</p>}
       {open && (
         <div
           ref={menuRef}
           role="menu"
           aria-label="导出行程"
-          className="absolute right-0 top-full z-50 mt-1 min-w-[150px] overflow-hidden rounded-[2px] border border-rule bg-paper-raised shadow-lg"
+          className="absolute right-0 top-full z-50 mt-1 min-w-[150px] overflow-hidden rounded-input border border-rule border-t-2 border-t-route bg-paper-raised shadow-lg"
         >
           <button
             type="button"

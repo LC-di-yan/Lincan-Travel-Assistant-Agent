@@ -8,7 +8,7 @@
   python scripts/build_rag_index.py --llm      # 用 LLM 润色节点摘要（需 ALIGO_API_KEY）
 
 说明：
-- 树索引产物在 .claude/skills/<skill>/data/tree_index/*.json，可直接 git diff 评审；
+- 树索引产物在 .claude/skills/<skill>/data/tree_index/*.json，可离线重新生成；
 - 加载时若源 txt 的 sha256 与索引不一致会标记 stale 并拒绝使用，所以源文档变更后必须重建；
 - 结构层级取自文档自带标题（一、/ 1. / Q1:），LLM 只润色摘要，无 Key 也能建（启发式摘要）。
 """
@@ -50,7 +50,7 @@ def main() -> int:
                         use_llm=args.llm)
         total += res["built"]
     print(f"\n完成：共 {total} 篇文档重建完成。")
-    print("自检：python tests/eval_rag_tree.py")
+    print("自检：python -m pytest tests/test_tree_builder.py -q")
     return 0 if total else 1
 
 

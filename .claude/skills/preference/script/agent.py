@@ -10,6 +10,7 @@ import json
 import logging
 
 from utils.llm_response import extract_llm_json
+from utils.preference_parser import parse_preference
 from utils.as_compat import mk_msg, msg_text, as_messages
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,10 @@ class PreferenceAgent(SkillAgentBase):
             user_query = context.get("rewritten_query", "") or str(data)
         except json.JSONDecodeError:
             user_query = raw
+
+        # 明确偏好陈述不需要模型推理，也无需先读取旧值；由协调器持久化。
+        if parsed := parse_preference(user_query):
+            return mk_msg(self.name, parsed)
 
         # 获取当前已保存的偏好
         current_preferences = {}

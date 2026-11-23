@@ -3,8 +3,10 @@
 统一管理两层记忆，提供简单的API
 """
 from typing import Dict, Any, List, Optional
+import asyncio
 from .short_term_memory import ShortTermMemory
 from .long_term_memory import LongTermMemory, PostgresLongTermMemory
+from .conversation_archive import redact_private_text
 import logging
 import json
 
@@ -27,6 +29,7 @@ class MemoryManager:
 
         # 初始化两层记忆
         self.short_term = ShortTermMemory(max_turns=10)
+        self._conversation_restored = False
         if db_pool:
             self.long_term = PostgresLongTermMemory(user_id, db_pool)
         else:
@@ -41,12 +44,37 @@ class MemoryManager:
         self.short_term.add_message(role, content, metadata)
         self.long_term.add_chat_message(role, content, self.session_id)
 
-    async def add_message_async(self, role: str, content: str, metadata: Dict = None):
-        """异步添加消息（PG 模式使用，JSON 模式自动降级为同步）"""
-        self.short_term.add_message(role, content, metadata)
-        result = self.long_term.add_chat_message(role, content, self.session_id)
-        if hasattr(result, '__await__'):
-            await result
+    async def add_message_async(self, role: str, content: str, metadata: Dict = None, *,
+                                presentation=None, include_short_term=True):
+        """持久化后按需更新已打开会话的短期上下文。"""
+        if isinstance(self.long_term, PostgresLongTermMemory):
+            await self.long_term.add_chat_message(role, content, self.session_id, presentation=presentation)
+        else:
+            await asyncio.to_thread(self.long_term.add_chat_message, role, content, self.session_id,
+                                    presentation=presentation)
+        if include_short_term:
+            self.short_term.add_message(role, content, metadata)
+
+    async def restore_conversation(self):
+        """冷启动只加载当前会话的近期文本与最新恢复点。"""
+        if self._conversation_restored or self.short_term.messages:
+            return None
+        args = {"limit": self.short_term.max_turns * 2, "check_exists": False}
+        if isinstance(self.long_term, PostgresLongTermMemory):
+            page = await self.long_term.read_conversation(self.session_id, **args)
+        else:
+            page = await asyncio.to_thread(self.long_term.read_conversation, self.session_id, **args)
+        checkpoint = None
+        for row in page["rows"]:
+            data = row.get("presentation")
+            data = data if isinstance(data, dict) else {}
+            if row["role"] == "assistant":
+                checkpoint = data.get("checkpoint")
+                if data.get("status") in {"error", "interrupted"}:
+                    continue
+            self.short_term.add_message(row["role"], redact_private_text(row["content"]))
+        self._conversation_restored = True
+        return checkpoint
 
     # ========== 综合查询 ==========
 

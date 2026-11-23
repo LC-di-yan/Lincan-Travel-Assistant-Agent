@@ -42,6 +42,10 @@ if project_root not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from server.frontend_assets import frontend_assets
+from server.auth import allowed_origins, router as auth_router
+from utils.provider_http import provider_resources
+from utils.search_executor import close_search_executor
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +53,12 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    async with provider_resources(), _app_dependencies():
+        yield
+
+
+@asynccontextmanager
+async def _app_dependencies():
     # 启动：初始化数据库连接池
     from db.connection import get_pool
     pool = await get_pool()
@@ -107,15 +117,18 @@ async def lifespan(app: FastAPI):
     except Exception as _e:
         logger.warning(f"decision layer probe skipped: {_e}")
 
-    yield
+    try:
+        yield
+    finally:
+        from db.connection import close_pool
+        from cache.connection import close_redis
 
-    # 关闭：释放数据库连接池
-    from db.connection import close_pool
-    await close_pool()
-    # 关闭：释放 Redis 连接池
-    from cache.connection import close_redis
-    await close_redis()
-    logger.info("Aligo Web Server shutting down...")
+        close_search_executor()
+        try:
+            await close_pool()
+        finally:
+            await close_redis()
+        logger.info("Aligo Web Server shutting down...")
 
 
 app = FastAPI(
@@ -128,29 +141,27 @@ app = FastAPI(
 # CORS - 从环境变量读取允许的域名，逗号分隔
 # 生产环境应设置 CORS_ORIGINS 环境变量（如 http://your-server-ip）
 # 也支持 allow_origin_regex 匹配同源请求
-cors_origins = os.environ.get("CORS_ORIGINS", "").split(",")
-_default_origins = [
-    "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000",
-    "http://localhost:8000", "http://localhost:8001", "http://127.0.0.1:8001",
-]
-cors_origins = [o.strip() for o in cors_origins if o.strip()] or _default_origins
+cors_origins = allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(set(cors_origins)),
-    allow_origin_regex=r"^https?://[\w\.\-]+(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # 注册路由
-from server.routes import chat, memory, health, tts, narrate
+from server.routes import chat, memory, health, tts, narrate, suggestions, personal, conversations
+app.include_router(auth_router)
 app.include_router(health.router)
 app.include_router(chat.router)
 app.include_router(memory.router)
 app.include_router(tts.router)
 app.include_router(narrate.router)
+app.include_router(suggestions.router)
+app.include_router(personal.router)
+app.include_router(conversations.router)
 
 @app.middleware("http")
 async def no_cache_index(request, call_next):
@@ -163,12 +174,16 @@ async def no_cache_index(request, call_next):
     if request.url.path in ("/", "/index.html"):
         response.headers["Cache-Control"] = "no-store, max-age=0"
         response.headers["Pragma"] = "no-cache"
+    elif request.url.path.startswith(("/api/personal/", "/api/conversations")):
+        response.headers["Cache-Control"] = "private, no-store"
     return response
 
 
 # 生产模式：挂载前端静态文件
 dist_path = Path(__file__).resolve().parent.parent / "web" / "dist"
 if dist_path.exists():
+    if (dist_path / "assets").is_dir():
+        app.mount("/assets", frontend_assets(dist_path / "assets"), name="frontend-assets")
     app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="static")
 
 

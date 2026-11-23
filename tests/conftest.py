@@ -12,6 +12,19 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 
+def pytest_addoption(parser):
+    parser.addoption("--live-model", action="store_true", help="运行会调用真实模型的演示用例（可能计费）")
+
+
+@pytest.fixture()
+def live_model(request):
+    if not request.config.getoption("--live-model"):
+        pytest.skip("真实模型演示需要显式传入 --live-model")
+    from config import LLM_CONFIG
+    if not LLM_CONFIG.get("api_key"):
+        pytest.fail("已请求真实模型演示，但未设置 ALIGO_API_KEY")
+
+
 @pytest.fixture
 def mock_model():
     """Mock LLM model that returns a configurable response"""

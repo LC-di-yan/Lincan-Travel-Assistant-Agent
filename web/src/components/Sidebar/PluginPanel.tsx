@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface Plugin {
   name: string
@@ -25,26 +25,44 @@ const friendlyNames: Record<string, string> = {
 export function PluginPanel() {
   const [plugins, setPlugins] = useState<Plugin[]>([])
   const [loading, setLoading] = useState(true)
+  const [attempt, setAttempt] = useState(0)
+  const [error, setError] = useState('')
+  const [pending, setPending] = useState('')
+  const lock = useRef(false)
 
   useEffect(() => {
-    fetch('/api/plugins')
-      .then((r) => r.json())
-      .then((d) => setPlugins(d.plugins || []))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+    const request = new AbortController()
+    fetch('/api/plugins', { signal: request.signal })
+      .then((r) => { if (!r.ok) throw new Error(); return r.json() })
+      .then((d) => {
+        if (!Array.isArray(d.plugins)) throw new Error()
+        if (!request.signal.aborted) setPlugins(d.plugins)
+      })
+      .catch(() => { if (!request.signal.aborted) setError('暂时无法读取插件状态。') })
+      .finally(() => { if (!request.signal.aborted) setLoading(false) })
+    return () => request.abort()
+  }, [attempt])
 
   const toggle = async (name: string, enabled: boolean) => {
+    if (lock.current) return
+    lock.current = true
+    setPending(name)
+    setError('')
     try {
       const res = await fetch('/api/plugins', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, enabled }),
       })
+      if (!res.ok) throw new Error()
       const data = await res.json()
-      setPlugins(data.plugins || [])
+      if (!Array.isArray(data.plugins)) throw new Error()
+      setPlugins(data.plugins)
     } catch {
-      /* keep last state */
+      setError('未收到插件更新回执。保持上次已知状态，请重试或重新读取。')
+    } finally {
+      lock.current = false
+      setPending('')
     }
   }
 
@@ -74,6 +92,11 @@ export function PluginPanel() {
           {plugins.filter((p) => p.enabled).length}/{plugins.length}
         </span>
       </div>
+      {error && <div className="my-2 border border-rule p-2 text-xs text-err">
+        <p role="alert">{error}</p>
+        <button type="button" className="min-h-11 font-semibold text-route underline" disabled={!!pending}
+          onClick={() => { setLoading(true); setError(''); setAttempt(n => n + 1) }}>重新读取插件状态</button>
+      </div>}
 
       <div>
         {plugins.map((plugin) => (
@@ -96,16 +119,18 @@ export function PluginPanel() {
               type="button"
               role="switch"
               aria-checked={plugin.enabled}
+              disabled={!!pending}
               aria-label={(plugin.enabled ? '禁用 ' : '启用 ') + (friendlyNames[plugin.name] || plugin.name)}
               onClick={() => toggle(plugin.name, !plugin.enabled)}
-              className="relative h-5 w-9 shrink-0 rounded-full transition-colors"
-              style={{ backgroundColor: plugin.enabled ? 'var(--accent)' : 'var(--rule-strong)' }}
+              className="grid size-11 shrink-0 place-items-center rounded-input disabled:opacity-55"
             >
+              <span aria-hidden="true" className="relative h-5 w-9 rounded-full" style={{ backgroundColor: plugin.enabled ? 'var(--route)' : 'var(--rule-strong)' }}>
               <span
                 aria-hidden="true"
                 className="absolute top-0.5 h-4 w-4 rounded-full bg-paper transition-transform"
                 style={{ transform: plugin.enabled ? 'translateX(18px)' : 'translateX(2px)' }}
               />
+              </span>
             </button>
           </div>
         ))}

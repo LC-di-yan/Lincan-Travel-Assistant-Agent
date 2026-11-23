@@ -28,10 +28,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     session_id  VARCHAR(32),
     role        VARCHAR(16) NOT NULL,
     content     TEXT NOT NULL,
+    presentation JSONB,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_chat_user_time ON chat_messages(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_messages(user_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_owner_session_order ON chat_messages(user_id, session_id, id DESC);
 
 -- 行程记录
 CREATE TABLE IF NOT EXISTS trip_history (
@@ -63,6 +65,15 @@ CREATE TABLE IF NOT EXISTS expenses (
 );
 CREATE INDEX IF NOT EXISTS idx_expense_user_time ON expenses(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_expense_user_cat ON expenses(user_id, category);
+
+-- 费用确认提案与幂等回执；保留原账本行和历史数据。
+CREATE TABLE IF NOT EXISTS expense_operations (
+    user_id     VARCHAR(64) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    session_id  VARCHAR(32) NOT NULL,
+    operation_id VARCHAR(24) NOT NULL,
+    operation   JSONB NOT NULL,
+    PRIMARY KEY (user_id, session_id, operation_id)
+);
 
 -- 插件配置
 CREATE TABLE IF NOT EXISTS plugin_config (

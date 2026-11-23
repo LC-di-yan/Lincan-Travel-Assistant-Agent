@@ -1,157 +1,76 @@
-import { useState } from 'react'
-import { Star, MapPin, ExternalLink } from 'lucide-react'
-import { CardShell } from './CardShell'
+import { useId, useState } from 'react'
+import { MapPin } from 'lucide-react'
+import { asRecord } from '../../utils/resultData'
+import { amapMarker, evidenceSources, evidenceText, mapReference, publicLink } from '../../utils/flightEvidence'
+import { EvidenceBand, FlightResult, ResultDisclosure } from './FlightResult'
 
-export interface PlaceItem {
-  id: string
-  name: string
-  address: string
-  rating: string
-  cost: string
-  distance: string
-  photo: string
-  location: string
+function PlacePhoto({ url }: { url?: string }) {
+  const [unavailable, setUnavailable] = useState(false)
+  return <span className="fdr-place-thumb" aria-hidden="true">
+    {url && !unavailable
+      ? <img src={url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setUnavailable(true)} />
+      : <MapPin size={19} />}
+  </span>
 }
 
-function amapLink(location: string, name: string): string {
-  if (!location) return '#'
-  return 'https://uri.amap.com/marker?position=' + location + '&name=' + encodeURIComponent(name)
-}
-
-function formatCost(cost: string): string {
-  if (typeof cost !== 'string') return ''
-  const cleaned = cost.replace(/[￥¥\[\]"]/g, '')
-  if (!cleaned) return ''
-  return '¥' + cleaned
-}
-
-function formatDistance(meters: number): string {
-  if (meters >= 1000) return (meters / 1000).toFixed(1) + 'km'
-  return Math.round(meters) + 'm'
-}
-
-function PlaceRow({ item }: { item: PlaceItem }) {
-  const rating = Number(item.rating)
-  const costDisplay = item.cost ? formatCost(item.cost) : ''
-  const dist = Number(item.distance)
-  const distDisplay = dist > 0 ? formatDistance(dist) : ''
-
-  return (
-    <a
-      href={amapLink(item.location, item.name)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex gap-3 border-b border-rule py-2.5 last:border-0 hover:bg-paper-sunken"
-    >
-      <div
-        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[2px] border border-rule bg-paper-sunken bg-cover bg-center"
-        style={{ backgroundImage: item.photo ? 'url(' + item.photo + ')' : undefined }}
-        aria-hidden="true"
-      >
-        {!item.photo && <MapPin size={14} className="text-ink-3" />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="truncate text-[13px] font-semibold text-ink">{item.name}</span>
-          {rating > 0 && (
-            <span className="flex shrink-0 items-center gap-0.5 font-mono text-[11px] tabular text-accent">
-              <Star size={10} fill="currentColor" aria-hidden="true" /> {item.rating}
-            </span>
-          )}
-        </div>
-        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-3">
-          <MapPin size={10} className="shrink-0" aria-hidden="true" />
-          <span className="truncate">{item.address || '-'}</span>
-        </div>
-        <div className="mt-1 flex items-center gap-3 text-[11px]">
-          {costDisplay && <span className="font-mono font-semibold tabular text-accent">{costDisplay}</span>}
-          {distDisplay && <span className="text-ink-3">{distDisplay}</span>}
-        </div>
-      </div>
-    </a>
-  )
-}
-
-export function PlaceListCard({
-  agentName,
-  eyebrow,
-  city,
-  keyword,
-  unit,
-  summary,
-  items,
-  count,
-  sources,
-  emptyText,
-  error,
-}: {
-  agentName: string
-  eyebrow: string
-  city: string
-  keyword: string
-  unit: string
-  summary: string
-  items: PlaceItem[]
-  count: number
-  sources?: { title: string; url: string }[]
-  emptyText: string
-  error?: unknown
-}) {
+export function PlaceListCard({ data, kind }: { data: Record<string, unknown>; kind: 'restaurant' | 'scenic' }) {
+  const results = asRecord(data.results ?? data)
+  const raw = results[kind === 'restaurant' ? 'restaurants' : 'attractions']
+  const places = Array.isArray(raw) ? raw.map(asRecord) : []
+  const scenic = kind === 'scenic'
+  const label = scenic ? '景点清单' : '餐饮清单'
+  const unit = scenic ? '个' : '家'
+  const city = evidenceText(results.city)
+  const keyword = evidenceText(results.keyword) || (scenic ? '景点' : '餐饮')
+  const title = city && !keyword.startsWith(city) ? `${city} · ${keyword}` : keyword
+  const count = typeof results.count === 'number' && results.count > 0 ? results.count : places.length
+  const summary = evidenceText(results.summary)
+  const error = evidenceText(data.error)
+  const sources = evidenceSources(results.sources, data.sources)
   const [expanded, setExpanded] = useState(false)
-  const shown = expanded ? items : items.slice(0, 5)
-  const countDisplay = count >= 600 ? '共 600+ ' + unit : count > 0 ? '共 ' + count + ' ' + unit : ''
-  const titleKeyword = city && keyword.startsWith(city) ? keyword : city + keyword
+  const id = useId()
+  const shown = expanded ? places : places.slice(0, 5)
 
-  return (
-    <CardShell agentName={agentName}>
-      <div className="border-b border-rule px-4 py-3">
-        <div className="font-mono text-[10px] tracking-[0.14em] text-accent">{eyebrow}</div>
-        <h4 className="mt-1 text-[15px] font-semibold text-ink">
-          {titleKeyword}搜索
-          {countDisplay && <span className="ml-2 text-[11px] font-normal text-ink-3">{countDisplay}</span>}
-        </h4>
-      </div>
-
-      <div className="px-4 py-3">
-        {summary && <p className="mb-2 text-[12px] leading-6 text-ink-2">{summary}</p>}
-
-        {items.length > 0 && (
-          <div>
-            {shown.map((item) => <PlaceRow key={item.id} item={item} />)}
-            {items.length > 5 && (
-              <button
-                type="button"
-                onClick={() => setExpanded((v) => !v)}
-                className="mt-2 text-[11px] font-semibold text-accent hover:underline"
-              >
-                {expanded ? '收起' : '查看全部 ' + items.length + ' ' + unit}
-              </button>
-            )}
-          </div>
-        )}
-
-        {count === 0 && !items.length && (
-          <div className="py-6 text-center text-[12px] text-ink-3">{emptyText}</div>
-        )}
-
-        {error != null && <p className="text-[12px] text-err">{String(error)}</p>}
-
-        {sources && sources.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5 border-t border-rule pt-2.5">
-            {sources.map((s, i) => (
-              <a
-                key={i}
-                href={s.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded-[2px] border border-rule px-2 py-1 text-[10px] text-ink-3 hover:text-accent"
-              >
-                <ExternalLink size={9} aria-hidden="true" /> {s.title}
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
-    </CardShell>
-  )
+  return <FlightResult agent={scenic ? 'scenic_search' : 'restaurant_search'} kind={label} title={title}
+    meta={count > 0 ? <span>共 {count >= 600 ? '600+' : count} {unit}</span> : undefined}>
+    <EvidenceBand label="地点" status={sources.length ? '地点资料来源' : '来源未提供'} tone="neutral" sources={sources}>
+      {places.length > 0 && <p>评分、距离和参考费用以来源为准；营业时间和现场价格请另行核验。</p>}
+    </EvidenceBand>
+    {summary && <p className="fdr-summary">{summary}</p>}
+    {error && error !== summary && <p className="fdr-summary" data-error>{error}</p>}
+    {!places.length && !summary && !error && <p className="fdr-empty">{scenic
+      ? '未找到相关景点信息，请尝试更换城市或关键词' : '未找到相关餐厅信息，请尝试更换城市或菜系关键词'}</p>}
+    {places.length > 0 && <div className="fdr-section-head">
+      <h4>地点与地址 <small>显示 {shown.length} / {places.length} {unit}</small></h4>
+      {places.length > 5 && <ResultDisclosure open={expanded} controls={id} onToggle={() => setExpanded(!expanded)}>
+        {expanded ? '收起地点' : `查看全部 ${places.length} ${unit}`}
+      </ResultDisclosure>}
+    </div>}
+    <ol className="fdr-hotels" id={id}>{shown.map((place, index) => {
+      const name = evidenceText(place.name) || '地点名称未提供'
+      const url = amapMarker(place.location, name)
+      const photo = publicLink(place.photo)
+      const rating = Number(place.rating)
+      const distance = Number(place.distance)
+      const price = mapReference(place.cost)
+      return <li key={index} className="fdr-hotel fdr-place">
+        <PlacePhoto url={photo} key={photo || index} />
+        <div className="fdr-hotel-name">
+          <h5>{name}</h5>
+          <p>{evidenceText(place.address) || '地址未提供'}</p>
+          <p className="fdr-hotel-meta">
+            {Number.isFinite(rating) && rating > 0 && <span>评分 {String(place.rating)}</span>}
+            {Number.isFinite(distance) && distance > 0 && <span>距搜索点 {distance >= 1000 ? `${(distance / 1000).toFixed(1)} km` : `${Math.round(distance)} m`}</span>}
+          </p>
+          {url && <a className="fdr-inline-link" href={url} target="_blank" rel="noopener noreferrer" aria-label={`在高德打开：${name}`}>
+            <MapPin size={14} aria-hidden="true" /> 在高德打开
+          </a>}
+        </div>
+        {price.kind !== 'missing' && <div className="fdr-hotel-price" data-unknown={price.kind !== 'reference' || undefined}>
+          <strong>{price.kind === 'reference' ? <>参考 <span className="fdr-price-number">{price.raw}</span></> : '费用待核验'}</strong>
+          <small>{price.kind === 'unclear' ? `来源原文：${price.raw}` : scenic ? '不是门票报价' : '不是实付金额'}</small>
+        </div>}
+      </li>
+    })}</ol>
+  </FlightResult>
 }

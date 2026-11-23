@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Volume2, Square, Loader2, TriangleAlert } from 'lucide-react'
+import { RouteStrip } from './RouteStrip'
 import { Markdown } from '../Markdown'
 import type { Message } from '../../api/types'
 import { ResultDashboard } from '../Results/ResultDashboard'
@@ -8,10 +9,15 @@ import { ProactiveQuestion } from './ProactiveQuestion'
 const FollowUpSuggestions = lazy(() =>
   import('./FollowUpSuggestions').then((m) => ({ default: m.FollowUpSuggestions })),
 )
+const SaveCandidate = lazy(() => import('../Personal/SaveCandidate'))
 import { useTTSPlayer } from '../../hooks/useTTSPlayer'
 import { useNarrate } from '../../hooks/useNarrate'
 import { useChatStore } from '../../store/chatStore'
 import { extractTTSTexts } from '../../utils/ttsText'
+import { getVisibleMessageContent } from '../../utils/resultPresentation'
+import { asRecord, unwrapResultData } from '../../utils/resultData'
+import { isExpenseConfirmation } from '../../utils/expenseEvidence'
+import type { ProposalActions } from '../Results/TripPlanCard'
 import type { SuggestionContext } from '../../api/suggestionEngine'
 
 const FAST_PATH = new Set([
@@ -29,15 +35,15 @@ function useTimer(startedAt: number | undefined, isRunning: boolean): number {
   useEffect(() => {
     if (!startedAt) return
     if (isRunning) {
-      setElapsed(Math.floor((Date.now() - startedAt) / 1000))
       intervalRef.current = setInterval(() => {
         setElapsed(Math.floor((Date.now() - startedAt) / 1000))
       }, 1000)
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current)
-      setElapsed(Math.floor((Date.now() - startedAt) / 1000))
     }
+    const frame = requestAnimationFrame(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)))
     return () => {
+      cancelAnimationFrame(frame)
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
   }, [startedAt, isRunning])
@@ -50,26 +56,40 @@ export function MessageBubble({
   isRunning = false,
   isLatest = false,
   onSend,
+  onRetry,
+  proposalRequestState,
+  pendingExpense,
+  canSelectProposal,
   userMessage = '',
 }: {
   msg: Message
   isRunning?: boolean
   isLatest?: boolean
   onSend?: (text: string) => void
+  onRetry?: () => void
+  proposalRequestState?: ProposalActions['requestState']
+  pendingExpense?: string
+  canSelectProposal?: boolean
   userMessage?: string
 }) {
   const isUser = msg.role === 'user'
   const hasResults = Boolean(msg.agentResults && msg.agentResults.length > 0)
+  const candidate = !isRunning && msg.orchestrationResult?.candidate_ref && msg.orchestrationResult
+  const savePanelId = candidate ? `save-candidate-${msg.id}` : undefined
+  const plan = msg.orchestrationResult?.trip_plan
   const elapsed = useTimer(msg.startedAt, isRunning)
   const { status, activeMessageId, play, stop } = useTTSPlayer()
   const { narrate } = useNarrate()
   const [generating, setGenerating] = useState(false)
   const ttsBusy = activeMessageId === msg.id && status !== 'idle'
-  const time = new Date(msg.timestamp).toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const time = msg.timestamp > 0 ? new Date(msg.timestamp).toLocaleString('zh-CN', {
+    ...(msg.historical ? { month: 'numeric', day: 'numeric' } : {}),
+    hour: '2-digit', minute: '2-digit',
+  }) : ''
   const isError = !isUser && msg.isError === true
+  const isConfirmationInput = isUser && isExpenseConfirmation(msg.content)
+  const visibleContent = isConfirmationInput ? '确认费用操作' : getVisibleMessageContent(msg)
+  const speechText = msg.narrationText || msg.content || (msg.agentResults ? extractTTSTexts(msg.agentResults) : '')
 
   const handlePlay = async () => {
     if (ttsBusy) {
@@ -87,7 +107,7 @@ export function MessageBubble({
     if (!fallback) return
 
     const intentionType = msg.intention?.intents?.[0]?.type
-    if (FAST_PATH.has(intentionType || '')) {
+    if (msg.historical || msg.intention?.trip_request || FAST_PATH.has(intentionType || '')) {
       play(msg.id, fallback, { intention: intentionType })
       return
     }
@@ -98,6 +118,7 @@ export function MessageBubble({
         intention: intentionType,
         resultData: msg.agentResults,
       })
+      if (!useChatStore.getState().messages.some((row) => row.id === msg.id)) return
       const textToPlay = narrated || fallback
       if (narrated) {
         useChatStore.getState().patchMessage(msg.id, { narrationText: narrated })
@@ -108,20 +129,30 @@ export function MessageBubble({
     }
   }
 
+  const confirmation = isLatest && !isUser && !isRunning && !msg.historical && onSend
+    ? msg.agentResults?.flatMap((result) => {
+      if (result.status !== 'success' || !['expense_tracking', 'expense_tracker'].includes(result.agent_name)) return []
+      const data = unwrapResultData(result.data)
+      return data.action === 'preview' && isExpenseConfirmation(data.confirmation_command) ? [data.confirmation_command] : []
+    })[0]
+    : undefined
+  const freshExpenseReceipt = isLatest && !isRunning && !msg.historical &&
+    msg.orchestrationResult?.status === 'completed' && isExpenseConfirmation(userMessage)
+  const successfulResults = msg.agentResults?.filter((result) => result.status === 'success') ?? []
   const suggestionCtx: SuggestionContext | null =
-    isLatest && !isUser && !isRunning && hasResults && onSend
+    isLatest && !isUser && !isRunning && successfulResults.length > 0 && onSend && !confirmation
       ? {
           userMessage,
           intention: msg.intention || null,
-          agentResults: msg.agentResults || [],
+          agentResults: successfulResults,
           persona: {},
         }
       : null
 
   const proactiveQuestion: string = (() => {
     if (!isLatest || isUser || isRunning || !hasResults) return ''
-    for (const r of msg.agentResults!) {
-      const d = r.data as Record<string, unknown>
+    for (const r of successfulResults) {
+      const d = unwrapResultData(r.data)
       const pq = d.proactive_question
       if (pq && typeof pq === 'string' && pq.trim()) return pq.trim()
       const inner = d.data as Record<string, unknown> | undefined
@@ -132,15 +163,15 @@ export function MessageBubble({
     return ''
   })()
 
-  if (!isUser && isRunning && !hasResults && !msg.content) return null
+  if (!isUser && isRunning && !msg.activity && !hasResults && !msg.content) return null
 
   if (isUser) {
     return (
       <div className="px-4 py-2.5 md:px-6" data-message-role="user">
         <div className="mx-auto flex max-w-[760px] justify-end">
           <div className="max-w-[560px]">
-            <div className="whitespace-pre-wrap rounded-[2px] border border-rule bg-paper-sunken px-3.5 py-2.5 text-sm leading-7 text-ink">
-              {msg.content}
+            <div className="whitespace-pre-wrap rounded-[2px] border border-rule bg-paper-sunken px-3.5 py-2.5 text-sm leading-7 text-ink [overflow-wrap:anywhere]">
+              {visibleContent}
             </div>
             <div className="mt-1 text-right font-mono text-[10px] tabular text-ink-3">{time}</div>
           </div>
@@ -152,7 +183,7 @@ export function MessageBubble({
   return (
     <div className="px-4 py-2.5 md:px-6" data-message-role="assistant">
       <div className="mx-auto max-w-[760px]">
-        <div className="mb-1.5 flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="message-meta mb-1.5 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-mono text-[10px] tracking-[0.14em] text-accent">ALIGO / 行程文件</span>
           <span className="font-mono text-[10px] tabular text-ink-3">{time}</span>
           {msg.startedAt && (
@@ -160,7 +191,7 @@ export function MessageBubble({
               {isRunning ? '处理中 ' + elapsed + 's' : '用时 ' + elapsed + 's'}
             </span>
           )}
-          {!isRunning && !isError && (msg.content || msg.narrationText) && (
+          {!isRunning && !isError && speechText && (
             <button
               type="button"
               onClick={handlePlay}
@@ -180,9 +211,10 @@ export function MessageBubble({
           )}
         </div>
 
-        {msg.content && !isError && (
+        {msg.activity && <div className="mb-2"><RouteStrip message={msg} current={isRunning || isLatest} /></div>}
+        {visibleContent && !isError && (
           <div className="markdown max-w-[680px]">
-            <Markdown>{msg.content}</Markdown>
+            <Markdown>{visibleContent}</Markdown>
           </div>
         )}
 
@@ -195,10 +227,10 @@ export function MessageBubble({
             <p className="min-w-0 flex-1 text-[12px] leading-5 text-err [overflow-wrap:anywhere]">
               {msg.content}
             </p>
-            {onSend && userMessage && (
+            {(onRetry || (onSend && userMessage)) && (
               <button
                 type="button"
-                onClick={() => onSend(userMessage)}
+                onClick={onRetry ?? (() => onSend?.(userMessage))}
                 aria-label="重试上一条消息"
                 className="shrink-0 rounded-[2px] border border-err/40 px-2 py-1 text-[10px] font-semibold text-err hover:bg-err/10"
               >
@@ -208,26 +240,48 @@ export function MessageBubble({
           </div>
         )}
 
-        {!isRunning && hasResults && (
-          <div className="mt-3">
-            <ResultDashboard results={msg.agentResults!} />
+        {hasResults && (
+          <div className="mt-3" data-result-stack data-first-display={!msg.historical}>
+            {msg.historical && <p className="mb-1 text-[11px] text-ink-3">历史结果 · 显示当时的信息</p>}
+            <ResultDashboard results={msg.agentResults!} expense={{
+              confirmation: confirmation && onSend ? { command: confirmation, submit: () => onSend(confirmation) } : undefined,
+              pending: pendingExpense,
+              fresh: freshExpenseReceipt,
+            }} proposal={{
+              historical: msg.historical,
+              requestState: proposalRequestState,
+              confirmedOptionId: msg.confirmedOptionId,
+              savePanelId,
+              onSelect: canSelectProposal && isLatest && !isRunning && plan && onSend ? (index, optionId) => {
+                const item = Array.isArray(plan.alternatives) && asRecord(plan.alternatives[index - 1])
+                if (item && item.id === optionId && item.status === 'validated') onSend(`选择方案${index}`)
+              } : undefined,
+            }} />
           </div>
         )}
 
-        {ttsBusy && !isError && (msg.narrationText || msg.content) && (
+        {msg.historyWarning && <p role="status" className="mt-2 border-l-2 border-warn px-3 text-xs text-ink-2">{msg.historyWarning}</p>}
+
+        {candidate && (
+          <Suspense fallback={null}>
+            <SaveCandidate id={savePanelId} result={candidate} confirmedOptionId={msg.confirmedOptionId} />
+          </Suspense>
+        )}
+
+        {ttsBusy && !isError && speechText && (
           <div className="mt-2 flex items-start gap-2 rounded-[2px] border border-rule bg-paper-sunken px-3 py-2 text-[11px] text-ink-2">
             <span className="mt-0.5 flex h-3 items-end gap-0.5 text-accent" aria-hidden="true">
               <span className="h-1.5 w-0.5 animate-pulse bg-current" />
               <span className="h-3 w-0.5 animate-pulse bg-current" />
               <span className="h-2 w-0.5 animate-pulse bg-current" />
             </span>
-            <span className="line-clamp-2">{msg.narrationText || msg.content}</span>
+            <span>正在朗读这条回复</span>
           </div>
         )}
 
-        {proactiveQuestion && onSend && (
+        {proactiveQuestion && (
           <div className="mt-3">
-            <ProactiveQuestion question={proactiveQuestion} onSend={onSend} />
+            <ProactiveQuestion question={proactiveQuestion} />
           </div>
         )}
 

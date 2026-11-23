@@ -2,20 +2,28 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="description" content="Aligo 智能旅行助手：规划差旅行程、查询差旅政策、管理偏好与费用。" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#f7f3ec" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#101418" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f4ec" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Aligo 智能旅行助手</title>
+    <title>ALIGO 差旅航图台</title>
     <script>
       try {
         var savedTheme = localStorage.getItem('aligo-theme');
         var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         var isDark = savedTheme ? savedTheme === 'dark' : prefersDark;
         if (isDark) document.documentElement.classList.add('dark');
+        document.querySelector('meta[name="theme-color"]').content = isDark ? '#101b20' : '#f5f4ec';
+        var choice = localStorage.getItem('aligo-motion');
+        document.documentElement.dataset.motion = choice === 'static' ? 'static' :
+          choice === 'reduced' || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'standard';
       } catch (e) {}
+    </script>
+    <script>
+      // Start the credentialed handshake while the shell downloads; do not store identity here.
+      window.__aligoIdentityResponse = fetch('/api/identity', { method: 'POST', credentials: 'include' });
+      window.__aligoIdentityResponse.catch(() => {});
     </script>
   </head>
   <body>

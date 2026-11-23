@@ -1,154 +1,82 @@
-import { CardShell } from './CardShell'
-import { CompactReceipt, CompactReceiptHero } from './CompactReceipt'
-import { ExpenseCategoryIcon, expenseIcon, getAgentColor } from '../Icons'
-import { Receipt, Trash2 } from 'lucide-react'
+import { asRecord } from '../../utils/resultData'
+import { currencyCode, expenseTotals, originalAmount } from '../../utils/expenseEvidence'
+import { evidenceSources, evidenceText } from '../../utils/flightEvidence'
+import { EvidenceBand, FlightResult } from './FlightResult'
 
-const accent = getAgentColor('expense_tracker')
+type ExpenseItem = Record<string, unknown>
+const records = (value: unknown) => Array.isArray(value) ? value.map(asRecord).filter(item => Object.keys(item).length) : []
 
-interface ExpenseItem {
-  category?: string
-  amount?: number
-  description?: string
-  date?: string
+function Items({ items, label }: { items: ExpenseItem[]; label: string }) {
+  return <ul className="fdr-expense-lines" aria-label={label}>
+    {items.map((item, index) => <li key={index}>
+      <div><strong>{evidenceText(item.description) || evidenceText(item.category) || '费用明细'}</strong>
+        <small>{[evidenceText(item.date), item.description && evidenceText(item.category)].filter(Boolean).join(' · ')}</small>
+      </div>
+      <b>{originalAmount(item.amount, item.currency)}</b>
+    </li>)}
+  </ul>
 }
 
-interface Summary {
-  total?: number
-  count?: number
-  by_category?: Record<string, number>
-  items?: ExpenseItem[]
+function Totals({ values, label }: { values: ReturnType<typeof expenseTotals>; label: string }) {
+  return <div className="fdr-expense-totals">
+    <h4>{label} <small>保留原币，不换算</small></h4>
+    <ul>{values.map(({ display }, index) => <li key={index}>
+      <strong>{display}</strong>
+    </li>)}</ul>
+  </div>
 }
 
-function RecordView({ expense, totalAfter, answer }: { expense?: ExpenseItem; totalAfter?: number; answer?: string }) {
-  if (!expense) {
-    return (
-      <CompactReceipt accentColor={accent} eyebrow="ALIGO / EXPENSE" title="费用记录" badge="已记录">
-        <p className="py-2 text-center text-[13px] text-ink-2">{answer || '费用已记录'}</p>
-      </CompactReceipt>
-    )
-  }
+export function ExpenseCard({ data, onConfirm, fresh = false, submitting = false }: {
+  data: Record<string, unknown>; onConfirm?: () => void; fresh?: boolean; submitting?: boolean
+}) {
+  const action = data.action
+  const answer = evidenceText(data.answer)
+  const summary = asRecord(data.summary)
+  const expense = asRecord(data.expense)
+  const items = records(data.expenses)
+  const lines = items.length ? items : Object.keys(expense).length ? [expense] : []
+  const pending = action === 'preview'
+  const failed = action === 'error' || action === 'unknown'
+  const committed = action === 'record' || action === 'update' || action === 'delete'
+  const query = !pending && !committed && !failed
+  const fallbackSource = pending ? '当前会话的操作预览' : failed ? '本次账本操作提示' : '当前费用账本'
+  const sources = evidenceSources([{ title: fallbackSource }], data.sources, summary.sources)
+  const operation = data.operation === 'update' ? '修改费用' : data.operation === 'delete' ? '删除费用' : '新增费用'
+  const title = pending ? operation : action === 'delete' ? '费用已删除' : action === 'update' ? '费用已修改'
+    : action === 'record' ? '费用已记录' : failed ? '费用操作未确认成功' : '费用汇总'
+  const totals = query ? expenseTotals(summary.totals_by_currency, { amount: summary.total, currency: summary.currency })
+    : expenseTotals(data.totals_by_currency, { amount: data.total_after, currency: data.total_currency ?? expense.currency })
+  const categories = asRecord(summary.by_category_by_currency)
+  const onlyCurrency = totals.length === 1 ? totals[0].currency : ''
+  const flat = asRecord(summary.by_category)
+  const categoryGroups = Object.keys(categories).length ? Object.entries(categories)
+    : Object.keys(flat).length && onlyCurrency && currencyCode(summary.currency) === onlyCurrency ? [[onlyCurrency, flat] as const] : []
+  const recent = records(summary.items).slice(-5).reverse()
 
-  const icon = expenseIcon(expense.category)
-  const label = expense.description
-    ? (expense.category || '其他') + ' · ' + expense.description
-    : (expense.category || '其他')
-
-  return (
-    <CompactReceipt
-      accentColor={accent}
-      eyebrow="ALIGO / EXPENSE"
-      title="费用已记录"
-      badge="已记录"
-      footer={totalAfter != null ? '累计报销' : undefined}
-      footerSecondary={totalAfter != null ? '¥ ' + totalAfter.toFixed(2) : undefined}
-    >
-      <CompactReceiptHero
-        icon={icon}
-        label={label}
-        value={'¥ ' + (expense.amount || 0).toFixed(2)}
-        accentColor={accent}
-      />
-    </CompactReceipt>
-  )
-}
-
-function QueryView({ summary, answer }: { summary?: Summary; answer?: string }) {
-  if (!summary || summary.count === 0) {
-    return (
-      <div className="py-6 text-center">
-        <Receipt size={28} className="mx-auto mb-2 text-ink-3 opacity-50" aria-hidden="true" />
-        <p className="text-[12px] text-ink-3">{answer || '暂无费用记录'}</p>
-      </div>
-    )
-  }
-
-  const categories = Object.entries(summary.by_category || {}).sort(([, a], [, b]) => b - a)
-
-  return (
-    <div>
-      <div className="flex items-baseline justify-between border-b border-rule pb-2">
-        <span className="font-mono text-[26px] font-semibold tabular text-accent">
-          {'¥'}{(summary.total || 0).toFixed(2)}
-        </span>
-        <span className="text-[11px] text-ink-3">{summary.count} 笔支出</span>
-      </div>
-
-      {categories.length > 0 && (
-        <div className="border-b border-rule py-2">
-          {categories.map(([cat, amt]) => {
-            const pct = summary.total ? Math.round((amt / summary.total) * 100) : 0
-            return (
-              <div key={cat} className="flex items-center gap-2 py-1 text-[11px]">
-                <ExpenseCategoryIcon kind={cat} size={12} className="w-4 shrink-0 text-ink-3" />
-                <span className="w-10 shrink-0 text-ink-2">{cat}</span>
-                <div className="h-1 flex-1 overflow-hidden bg-paper-sunken">
-                  <div className="h-full bg-accent" style={{ width: pct + '%' }} />
-                </div>
-                <span className="w-14 text-right font-mono tabular text-ink">{'¥'}{amt.toFixed(0)}</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {summary.items && summary.items.length > 0 && (
-        <div>
-          <div className="pt-2 font-mono text-[9px] tracking-[0.12em] text-ink-3">RECENT</div>
-          {summary.items.slice(-5).reverse().map((item, i) => (
-            <div key={i} className="flex items-center gap-2 border-b border-rule py-1.5 text-[11px] last:border-0">
-              <ExpenseCategoryIcon kind={item.category} size={12} className="shrink-0 text-ink-3" />
-              <span className="flex-1 truncate text-ink-2">{item.description || item.category}</span>
-              <span className="font-mono tabular text-ink">{'¥'}{(item.amount || 0).toFixed(0)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {answer && <p className="mt-2 text-[11px] leading-5 text-ink-3">{answer}</p>}
-    </div>
-  )
-}
-
-function DeleteView({ answer }: { answer?: string }) {
-  return (
-    <CompactReceipt accentColor="var(--err)" eyebrow="ALIGO / EXPENSE" title="费用已删除" badge="已删除">
-      <div className="flex items-center gap-2 py-1">
-        <Trash2 size={14} className="text-err" aria-hidden="true" />
-        <p className="text-[13px] text-ink-2">{answer || '已删除费用记录'}</p>
-      </div>
-    </CompactReceipt>
-  )
-}
-
-export function ExpenseCard({ data }: { data: Record<string, unknown> }) {
-  const action = data.action as string
-
-  if (action === 'record') {
-    return (
-      <RecordView
-        expense={data.expense as ExpenseItem | undefined}
-        totalAfter={data.total_after as number | undefined}
-        answer={data.answer as string | undefined}
-      />
-    )
-  }
-
-  if (action === 'delete') {
-    return <DeleteView answer={data.answer as string | undefined} />
-  }
-
-  return (
-    <CardShell agentName="expense_tracker">
-      <div className="border-b border-rule px-4 py-3">
-        <div className="font-mono text-[10px] tracking-[0.14em] text-accent">ALIGO / EXPENSE</div>
-        <h4 className="mt-1 text-[15px] font-semibold text-ink">费用汇总</h4>
-      </div>
-      <div className="px-4 py-3">
-        <QueryView
-          summary={data.summary as Summary | undefined}
-          answer={data.answer as string | undefined}
-        />
-      </div>
-    </CardShell>
-  )
+  return <FlightResult agent="expense_tracker" kind="费用回执" title={title}
+    meta={query && typeof summary.count === 'number' ? <span>{summary.count} 笔</span> : undefined}>
+    <EvidenceBand
+      label={pending ? '预览' : committed ? '已确认' : failed ? '未确认' : '账本查询'}
+      status={pending ? submitting ? '已提交确认 · 等待账本回执' : onConfirm ? '待确认 · 账本未修改' : '预览快照 · 当时未写入'
+        : committed ? '账本已更新' : failed ? '未收到成功回执' : '按原币分别显示'}
+      sources={sources} tone={committed ? 'confirmed' : pending || failed ? 'warning' : 'neutral'}
+      live={submitting || fresh && committed} stamp={fresh && committed}>
+      {pending && !onConfirm && !submitting && <p>当前不能在此确认，请以最新回执为准。</p>}
+    </EvidenceBand>
+    {lines.length > 0 && !query && !failed && <Items items={lines} label={pending && operation !== '新增费用' ? '原账本记录' : '费用原币明细'} />}
+    {query && summary.count !== 0 && totals.length > 0 && <Totals values={totals} label="各币种汇总" />}
+    {committed && totals.length > 0 && <Totals values={totals} label="操作后累计支出" />}
+    {query && summary.count !== 0 && categoryGroups.map(([currency, group]) => currencyCode(currency) && <div key={currency} className="fdr-expense-category">
+      <h4>{currency} · 按类别</h4>
+      <Items label={`${currency} 分类明细`} items={Object.entries(asRecord(group)).map(([category, amount]) => ({ category, amount, currency }))} />
+    </div>)}
+    {query && recent.length > 0 && <div className="fdr-expense-category"><h4>最近明细</h4><Items items={recent} label="最近费用" /></div>}
+    {answer && <p className="fdr-summary whitespace-pre-wrap" data-error={failed || undefined}>{answer}</p>}
+    {!answer && query && summary.count === 0 && <p className="fdr-empty">暂无费用记录。</p>}
+    {!answer && query && summary.count !== 0 && !totals.length && !recent.length && <p className="fdr-empty">未返回可核对的费用金额。</p>}
+    {pending && onConfirm && <div className="fdr-expense-actions">
+      <span>仅在你主动确认后提交。</span>
+      <button type="button" onClick={onConfirm}>确认这项费用操作</button>
+    </div>}
+  </FlightResult>
 }

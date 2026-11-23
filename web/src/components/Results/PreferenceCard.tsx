@@ -1,26 +1,6 @@
-import { CardShell } from './CardShell'
+import { EvidenceBand, FlightResult } from './FlightResult'
 import { PreferenceTypeIcon } from '../Icons'
-
-const TYPE_LABELS: Record<string, string> = {
-  hotel_brand: '酒店品牌',
-  hotel_brands: '酒店品牌',
-  hotel: '酒店偏好',
-  airline: '航空公司',
-  airlines: '航空公司',
-  seat: '座位偏好',
-  seat_preference: '座位偏好',
-  food: '餐饮偏好',
-  dietary: '饮食偏好',
-  transport: '出行方式',
-  home: '常住城市',
-  home_location: '常驻地',
-  city: '偏好城市',
-  favorite_city: '心仪城市',
-  budget: '预算偏好',
-  travel_preference: '旅行方式',
-  weather_preference: '天气偏好',
-  trip_style: '旅行风格',
-}
+import { preferenceLabel } from '../../utils/preferenceLabels'
 
 export function PreferenceCard({ data }: { data: Record<string, unknown> }) {
   const raw = data.preferences as unknown
@@ -31,11 +11,8 @@ export function PreferenceCard({ data }: { data: Record<string, unknown> }) {
     | undefined
 
   return (
-    <CardShell agentName="preference">
-      <div className="border-b border-rule px-4 py-3">
-        <div className="font-mono text-[10px] tracking-[0.14em] text-accent">ALIGO / PREFERENCES</div>
-        <h4 className="mt-1 text-[15px] font-semibold text-ink">偏好已保存</h4>
-      </div>
+    <FlightResult agent="preference" kind="偏好回执" title={prefList?.length ? '偏好已保存' : '偏好结果'}>
+      {prefList?.length ? <EvidenceBand label="已保存" status="保存不等于授权用于规划" tone="confirmed" /> : null}
 
       <div className="px-4 py-2">
         {!prefList || prefList.length === 0 ? (
@@ -45,7 +22,7 @@ export function PreferenceCard({ data }: { data: Record<string, unknown> }) {
             <div key={i} className="flex items-start gap-3 border-b border-rule py-2.5 last:border-0">
               <PreferenceTypeIcon kind={p.type} className="mt-1 shrink-0 text-ink-3" />
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] tracking-[0.06em] text-ink-3">{TYPE_LABELS[p.type] || p.type}</div>
+                <div className="text-[10px] tracking-[0.06em] text-ink-3">{preferenceLabel(p.type)}</div>
                 <div className="mt-0.5 text-[13px] leading-6 text-ink">
                   {Array.isArray(p.value) ? p.value.join('、') : p.value}
                 </div>
@@ -57,6 +34,6 @@ export function PreferenceCard({ data }: { data: Record<string, unknown> }) {
           ))
         )}
       </div>
-    </CardShell>
+    </FlightResult>
   )
 }

@@ -44,8 +44,11 @@ from context.session_focus_state import SessionFocusState
 from utils.circuit_breaker import CircuitBreaker, CircuitOpenError
 from utils.llm_resilience import retry_with_backoff, run_health_check as check_llm_health
 from utils.llm_failover import build_chat_model
+from utils.expense_commands import expense_execution, parse_expense_command
+from utils.provider_http import provider_resources
+from utils.search_executor import close_search_executor
 from agents.intention_agent import IntentionAgent
-from agents.orchestration_agent import OrchestrationAgent
+from agents.orchestration_agent import OrchestrationAgent, normalized_schedule
 
 
 def _is_pg(memory_manager) -> bool:
@@ -174,11 +177,13 @@ class AligoCLI:
         with self.console.status("思考中...", spinner="dots"):
             from agentscope.message import Msg
 
-            long_term_summary = await self._get_long_term_summary(user_input)
+            # Keep task context local. Historical data stays available via explicit lookups.
+            lt = self.memory_manager.long_term
+            prefs = await self.memory_manager._maybe_await(lt.get_preference)
             recent_context = self.memory_manager.short_term.get_recent_context(n_turns=5)
             context_messages = []
-            if long_term_summary:
-                context_messages.append(mk_msg("system", long_term_summary, role="system"))
+            if isinstance(prefs, dict) and prefs.get("home_location"):
+                context_messages.append(mk_msg("system", f"[用户偏好] home_location: {prefs['home_location']}", role="system"))
 
             # 注入当前会话焦点提示，帮助意图识别消解"附近"等指代
             focus_hint = self.focus_state.build_focus_hint()
@@ -210,14 +215,21 @@ class AligoCLI:
             if intention_data is None:
                 self.console.print("❌ 无法理解您的需求，请重新描述", style="bold red")
                 return
+            intention_data.pop("_prepared_trip", None)  # Only local structured input may enter that path.
 
         # 更新会话焦点状态，并将焦点信息注入意图数据
+        intention_data["agent_schedule"] = normalized_schedule(intention_data)
         self.focus_state.update_from_intention(intention_data)
         intention_data["session_focus"] = {
             "focus_city": self.focus_state.focus_city,
             "last_search_city": self.focus_state.last_search_city,
             "current_trip_destination": self.focus_state.current_trip_destination,
         }
+        parsed_expense = parse_expense_command(user_input)
+        history_message = "确认费用操作" if parsed_expense and parsed_expense["kind"] == "confirm" else user_input
+        intention_data["original_query"] = history_message
+        if isinstance(prefs, dict):
+            intention_data["preferences_snapshot"] = prefs
         intention_result = mk_msg("IntentionAgent", intention_data)
 
         intents = intention_data.get("intents", [])
@@ -226,7 +238,7 @@ class AligoCLI:
             self.console.print(f"🔍 意图: {', '.join(intent_types)}", style="dim")
 
         # ===== 阶段2：编排执行 =====
-        await self.memory_manager.add_message_async("user", user_input)
+        await self.memory_manager.add_message_async("user", history_message)
 
         result_queue = asyncio.Queue()
         self.orchestrator.result_queue = result_queue
@@ -237,12 +249,13 @@ class AligoCLI:
         async def run_orchestrator():
             nonlocal orchestration_result
             try:
-                orchestration_result = await retry_with_backoff(
-                    lambda: self.orchestrator.reply(intention_result),
-                    max_retries=max_retries,
-                    base_delay_sec=rc.get("retry_base_delay_sec", 1.0),
-                    max_delay_sec=rc.get("retry_max_delay_sec", 30.0),
-                )
+                with expense_execution(user_input, self.memory_manager.session_id):
+                    orchestration_result = await retry_with_backoff(
+                        lambda: self.orchestrator.reply(intention_result),
+                        max_retries=max_retries,
+                        base_delay_sec=rc.get("retry_base_delay_sec", 1.0),
+                        max_delay_sec=rc.get("retry_max_delay_sec", 30.0),
+                    )
                 if self.circuit_breaker:
                     self.circuit_breaker.record_success()
             except Exception as e:
@@ -289,6 +302,9 @@ class AligoCLI:
 
         elapsed = time.time() - start_time
         self.console.print(f"\n[dim]完成 ({elapsed:.1f}s)[/dim]")
+        for result in result_data.get("results", []):
+            if isinstance(result.get("data"), dict):
+                result["data"].pop("confirmation_command", None)
         await self.memory_manager.add_message_async("assistant", json.dumps(result_data, ensure_ascii=False))
 
     def _display_results(self, result_data: Optional[dict]):
@@ -344,6 +360,12 @@ class AligoCLI:
 
         if status != "success":
             self.console.print(f"✓ {display_name} ({status})", style="dim")
+            return
+
+        if agent_name in {"expense_tracking", "expense_tracker"} and data.get("action") == "preview":
+            self.console.print(str(data.get("answer", "")), markup=False)
+            if command := data.get("confirmation_command"):
+                self.console.print(f"确认时请输入：{command}", markup=False)
             return
 
         if agent_name == "event_collection":
@@ -639,7 +661,14 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1].strip().lower() == "health":
         exit(run_health_check_standalone())
     cli = AligoCLI()
-    asyncio.run(cli.run())
+    async def run():
+        async with provider_resources():
+            try:
+                await cli.run()
+            finally:
+                close_search_executor()
+
+    asyncio.run(run())
 
 
 if __name__ == "__main__":

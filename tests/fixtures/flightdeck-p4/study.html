@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>差旅规划首页 · 首次使用对照</title>
+<style>
+  :root { color-scheme: light; color:#152c33; background:#f5f4ec; font:15px/1.55 "Microsoft YaHei",system-ui,sans-serif; }
+  body { margin:0; }
+  header, main, form { max-width:70rem; margin:auto; padding:0 16px; }
+  header { padding-top:12px; }
+  h1,h2 { margin:0 0 6px; }
+  h1 { font-size:21px; }
+  p { margin:0 0 8px; }
+  button { min-height:44px; padding:0 12px; background:#11616a; color:white; border:0; border-radius:5px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  :focus-visible { outline:2px solid #11616a; outline-offset:4px; }
+  iframe { display:block; width:100%; height:max(660px,calc(100dvh - 96px)); border:0; border-block:1px solid #cdd5cf; }
+  form { padding-block:24px; }
+  fieldset { margin:0 0 12px; border:1px solid #cdd5cf; }
+  label { display:block; min-height:36px; }
+  pre { white-space:pre-wrap; }
+</style>
+<header>
+  <h1>差旅规划首页 · 首次使用对照</h1>
+  <p>练习任务：周三从北京到上海出差三天，总预算 2400 元。请用你通常的方式开始规划。只使用示例资料，不填个人信息。</p>
+  <div id="welcome">
+    <p>测试仅在本机进行，不联系真实查询或订票服务。每人只做一版；答卷只在下载时保存到本地。</p>
+    <button id="start" type="button">开始练习</button>
+  </div>
+  <button id="understood" type="button" hidden>我知道这个页面要怎么用</button>
+</header>
+<div id="workspace" hidden></div>
+<form id="answers" hidden>
+  <h2>提交后回答两题</h2>
+  <fieldset>
+    <legend>首页的北京到上海航图表示什么？</legend>
+    <label><input type="radio" name="map" value="live" required>实际给我计算出的实时路线</label>
+    <label><input type="radio" name="map" value="illustration">说明用途的示例航图</label>
+    <label><input type="radio" name="map" value="unsure">不清楚</label>
+  </fieldset>
+  <fieldset>
+    <legend>点「规划行程」示例时，是否已经发出规划请求？</legend>
+    <label><input type="radio" name="example" value="sent" required>已经发出</label>
+    <label><input type="radio" name="example" value="draft">只是把内容填进输入框</label>
+    <label><input type="radio" name="example" value="unsure">不清楚</label>
+  </fieldset>
+  <button>下载匿名结果</button>
+  <p id="notice" role="status"></p>
+</form>
+<script>
+  const arm = new URLSearchParams(location.search).get('arm')
+  const start = document.querySelector('#start'), button = document.querySelector('#understood')
+  const workspace = document.querySelector('#workspace'), form = document.querySelector('#answers')
+  let frame, facts, understood = null
+  const trial = crypto.randomUUID()
+  if (!['a', 'b'].includes(arm)) {
+    start.disabled = true
+    document.querySelector('#welcome p').textContent = '请使用组织者分发的单次测试入口。'
+  }
+  start.onclick = () => {
+    frame = document.createElement('iframe')
+    frame.title = '差旅助手首页'
+    frame.src = '/?p4=' + arm
+    workspace.hidden = false
+    workspace.append(frame)
+    document.querySelector('#welcome').hidden = true
+    button.hidden = false
+    button.disabled = true
+  }
+  addEventListener('message', event => {
+    if (event.source !== frame?.contentWindow || event.origin !== location.origin ||
+        event.data?.kind !== 'flightdeck-study') return
+    facts = event.data
+    button.disabled = facts.ready === null || understood !== null
+    if (facts.submit !== null) form.hidden = false
+  })
+  button.onclick = () => {
+    understood = Math.max(0, Math.round(frame.contentWindow.performance.now() - facts.ready))
+    button.disabled = true
+    button.textContent = '已记录理解时点'
+  }
+  form.onsubmit = event => {
+    event.preventDefault()
+    const values = new FormData(form)
+    const row = {
+      trial, arm, understood_ms: understood, first_submit_ms: Math.max(0, Math.round(facts.submit - facts.ready)),
+      quiz_correct: Number(values.get('map') === 'illustration') + Number(values.get('example') === 'draft'),
+      motion_exposed: facts.exposed, motion_eligible: facts.motionEligible,
+    }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(row, null, 2)],{type:'application/json'}))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'p4-home-study.json'
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+    document.querySelector('#notice').textContent = '已请求下载。不会上传答卷。'
+  }
+</script>

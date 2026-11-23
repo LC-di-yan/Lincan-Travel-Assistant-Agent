@@ -5,6 +5,7 @@
 测试短期记忆和长期记忆的功能
 """
 import sys
+import pytest
 import os
 from pathlib import Path
 
@@ -34,6 +35,8 @@ def print_section(title):
     print("=" * 80 + "\n")
 
 
+@pytest.mark.integration
+@pytest.mark.usefixtures("live_model")
 async def test_memory_system():
     """测试记忆系统"""
 

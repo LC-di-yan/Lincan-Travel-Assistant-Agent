@@ -1,50 +1,48 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { fetchHistory } from '../../api/client'
 import { useChatStore } from '../../store/chatStore'
 import type { TripRecord, FrequentDestination } from '../../api/types'
 
-export function HistoryPanel() {
+export function HistoryPanel({ personalAvailable = false }: { personalAvailable?: boolean }) {
   const userId = useChatStore((s) => s.userId)
   const sessionId = useChatStore((s) => s.sessionId)
   const [trips, setTrips] = useState<TripRecord[]>([])
   const [frequent, setFrequent] = useState<FrequentDestination[]>([])
   const [stats, setStats] = useState<Record<string, unknown>>({})
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  const load = async () => {
-    setLoading(true)
-    try {
-      const data = await fetchHistory(userId, sessionId)
+  const load = useCallback(() => fetchHistory(userId, sessionId)
+    .then((data) => {
       setTrips(data.trips || [])
       setFrequent(data.frequent_destinations || [])
       setStats(data.statistics || {})
-    } catch {
-      /* keep last state */
-    }
-    setLoading(false)
-  }
+    })
+    .catch(() => { /* 保留上次加载的数据 */ })
+    .finally(() => setLoading(false)), [userId, sessionId])
 
-  useEffect(() => { load() }, [userId, sessionId])
+  useEffect(() => { void load() }, [load])
 
   return (
     <div className="p-4">
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
           <div className="font-mono text-[9px] tracking-[0.16em] text-accent">ALIGO / HISTORY</div>
-          <h4 className="mt-1 text-[13px] font-semibold text-ink">历史行程</h4>
+          <h4 className="mt-1 text-[13px] font-semibold text-ink">旧对话的行程摘要</h4>
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={() => { setLoading(true); void load() }}
           disabled={loading}
           aria-label="刷新历史"
           title="刷新历史"
-          className="flex h-10 w-10 items-center justify-center rounded-[2px] text-ink-3 hover:bg-paper-sunken hover:text-ink"
+          className="flex size-11 items-center justify-center rounded-input text-ink-3 hover:bg-paper-sunken hover:text-ink"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
         </button>
       </div>
+      <p className="mb-3 text-xs text-ink-3">摘要不是日历安排，也不是已完成的行程。</p>
+      {personalAvailable && <a href="#/personal/trips?view=agenda" className="mb-2 inline-flex min-h-11 items-center text-xs font-semibold text-route underline">查看已安排议程</a>}
 
       <div className="grid grid-cols-2 border-y border-rule">
         <div className="border-r border-rule py-2.5 text-center">
@@ -82,7 +80,7 @@ export function HistoryPanel() {
       ) : trips.length === 0 ? (
         <div className="py-8 text-center">
           <p className="text-[12px] text-ink-2">暂无行程记录</p>
-          <p className="mt-1 text-[10px] text-ink-3">完成一次行程后会自动归档</p>
+          <p className="mt-1 text-[10px] text-ink-3">这里仅显示已有的旧对话摘要。</p>
         </div>
       ) : (
         <div>

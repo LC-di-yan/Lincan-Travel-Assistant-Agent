@@ -10,16 +10,19 @@ load_dotenv()
 LLM_CONFIG = {
     "api_key": os.environ.get("ALIGO_API_KEY", ""),
     "model_name": os.environ.get("ALIGO_MODEL_NAME", "glm-5.2-fast-preview"),
-    "base_url": os.environ.get("ALIGO_BASE_URL", "https://ws-qvg9u4gn3ewyjs3t.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"),
+    "base_url": (os.environ.get("ALIGO_BASE_URL") or "https://example.invalid/v1"),
     "temperature": 0.7,
     "max_tokens": 2048,  # 默认值，各场景通过 SCENARIO_TOKENS 覆盖
 }
 
+# Optional model on the same provider for the legacy text-generating planner.
+ITINERARY_MODEL_NAME = os.environ.get("ALIGO_ITINERARY_MODEL_NAME", "").strip()
+
 
 def _env_list(name: str):
-    """取逗号分隔的环境变量，去掉空项。"""
+    """保留占位空项；三个列表必须用相同的原始下标配对。"""
     raw = os.environ.get(name, "")
-    return [x.strip() for x in raw.split(",") if x.strip()]
+    return [x.strip() for x in raw.split(",")]
 
 
 # 备用模型通道（主通道 401/403/429/5xx 时自动切换，见 utils/llm_failover.py）
@@ -30,15 +33,17 @@ _fb_bases = _env_list("ALIGO_FALLBACK_BASE_URLS")
 _fb_models = _env_list("ALIGO_FALLBACK_MODEL_NAMES")
 _fb_keys = _env_list("ALIGO_FALLBACK_API_KEYS")
 for _i, (_b, _m) in enumerate(zip(_fb_bases, _fb_models), start=1):
+    if not _b or not _m:
+        continue
     LLM_FALLBACKS.append({
         "name": f"fallback{_i}",
         "base_url": _b,
         "model_name": _m,
-        "api_key": _fb_keys[_i - 1] if len(_fb_keys) >= _i else LLM_CONFIG["api_key"],
+        "api_key": (_fb_keys[_i - 1] if len(_fb_keys) >= _i else "") or LLM_CONFIG["api_key"],
     })
 
-# 启动时探活一次（消耗极少 token），日志里直接看出哪条通道可用
-LLM_PROBE_ON_STARTUP = os.environ.get("ALIGO_LLM_PROBE_ON_STARTUP", "1").strip() not in ("0", "false", "False")
+# 默认不探活；配置启动探活后记录哪条通道可用
+LLM_PROBE_ON_STARTUP = os.environ.get("ALIGO_LLM_PROBE_ON_STARTUP", "0").strip() not in ("0", "false", "False")
 
 # 按场景 token 预算 — 减少 LLM 输出 token 数以提速
 SCENARIO_TOKENS = {
@@ -87,7 +92,7 @@ TTS_CONFIG = {
 # 用 GLM-5.2（思考模型，流式输出 reasoning + content，仅透传 content）
 NARRATION_CONFIG = {
     "api_key": os.environ.get("NARRATION_API_KEY", ""),
-    "base_url": os.environ.get("NARRATION_BASE_URL", "https://tokenrhythm.studio/v1"),
+    "base_url": (os.environ.get("NARRATION_BASE_URL") or "https://example.invalid/v1"),
     "model": os.environ.get("NARRATION_MODEL", "glm-5.2"),
     "max_tokens": 1500,  # 思考阶段 600-1000 tokens，正式文案 50-150 tokens
     "temperature": 0.7,
@@ -115,7 +120,7 @@ AMAP_CONFIG = {
 DECISION_CONFIG = {
     "mode": os.environ.get("ALIGO_DECISION_MODE", "off"),
     "api_key": os.environ.get("NEOHOUSE_API_KEY", ""),
-    "base_url": os.environ.get("NEOHOUSE_BASE_URL", "https://tokenrhythm.studio/v1"),
+    "base_url": (os.environ.get("NEOHOUSE_BASE_URL") or "https://example.invalid/v1"),
     "model": os.environ.get("NEOHOUSE_MODEL", "NeoHorse-Jev-4B"),
     "timeout": float(os.environ.get("ALIGO_DECISION_TIMEOUT", "8")),
     "shadow_dir": os.environ.get("ALIGO_DECISION_SHADOW_DIR", ""),

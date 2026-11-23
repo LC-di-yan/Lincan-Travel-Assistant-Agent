@@ -1,16 +1,22 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { useChatStore } from '../../store/chatStore'
 import { sendChatMessage, createSession, abortActiveRequest } from '../../api/client'
+import { LEGACY_CONVERSATION, notifyConversationsChanged } from '../../api/conversations'
 import { uid } from '../../store/chatStore'
 import { MessageBubble } from './MessageBubble'
-import { RouteStrip } from './RouteStrip'
+import { selectionSource } from '../../utils/selectionReceipt'
+import { isExpenseConfirmation } from '../../utils/expenseEvidence'
+import { mergeSchedule, mergeResults, publicTask, type TurnActivity } from '../../utils/agentActivity'
+import { ActivityAnnouncement } from './RouteStrip'
 import { InputBar } from './InputBar'
-import { ArrowUpRight } from 'lucide-react'
+import { BriefHeading } from './BriefHero'
+import { RouteChart } from '../Illustrations/RouteChart'
 import { useTTSPlayer } from '../../hooks/useTTSPlayer'
 import { useTTSPrefs } from '../../hooks/useTTSPrefs'
 import { useNarrate } from '../../hooks/useNarrate'
 import { extractTTSTexts } from '../../utils/ttsText'
-import type { OrchestrationResult } from '../../api/types'
+import type { AgentResult, OrchestrationResult } from '../../api/types'
+import type { PlanLink } from '../../api/personal'
 
 // 简单意图：文案短且结构化，直接用 extractTTSTexts，不调 LLM
 const FAST_PATH_INTENTS = new Set([
@@ -36,40 +42,53 @@ const PROGRESS_SKIP_INTENTS = new Set([
   'memory_query',
 ])
 
-export function ChatPanel() {
+export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBusy, olderError, reducedMotion, visible }: {
+  reducedMotion: boolean
+  visible: boolean
+  readOnly: boolean
+  switching: boolean
+  onStartNew: () => void
+  loadOlder?: () => Promise<void>
+  olderBusy: boolean
+  olderError: string
+}) {
   const messages = useChatStore((s) => s.messages)
+  const activeSession = useChatStore((s) => s.sessionId)
+  const pendingPlan = useChatStore((s) => s.pendingPlan)
   const isProcessing = useChatStore((s) => s.isProcessing)
-  const currentIntention = useChatStore((s) => s.currentIntention)
-  const currentAgents = useChatStore((s) => s.currentAgents)
-  const runningAgents = useChatStore((s) => s.runningAgents)
+  const brief = messages.length === 0 && !switching && !readOnly
   const scrollRef = useRef<HTMLDivElement>(null)
+  const anchoredResult = useRef<string | null>(null)
+  const olderAnchor = useRef<{ firstId: string; height: number; top: number } | null>(null)
   const [atBottom, setAtBottom] = useState(true)
-  const [showJump, setShowJump] = useState(false)
+  const showJump = !atBottom && messages.length > 0
   const [offline, setOffline] = useState(() => !navigator.onLine)
   // 当前在途请求对应的 AI 消息 id（供「停止生成」精确定位）
   const activeAssistantIdRef = useRef<string | null>(null)
-  const { play } = useTTSPlayer()
+  const { play, stop } = useTTSPlayer()
   const { prefs } = useTTSPrefs()
   const { narrate, narrateProgress } = useNarrate()
   const autoPlayRef = useRef(prefs.autoPlay)
   useEffect(() => { autoPlayRef.current = prefs.autoPlay }, [prefs.autoPlay])
+  useEffect(() => () => { activeAssistantIdRef.current = null; stop() }, [stop])
 
   // 进度播报节流状态（用 ref 避免 re-render）
   const taskStartRef = useRef<number>(0)
   const lastProgressTimeRef = useRef<number>(0)
+  const progressInFlightRef = useRef<symbol | null>(null)
   const progressCountRef = useRef<number>(0)
   const completionNarratingRef = useRef<boolean>(false)
   const playedExecutingRef = useRef<Set<string>>(new Set())
 
   // 触发进度播报的统一入口（带节流）
-  const maybePlayProgress = async (
+  const maybePlayProgress = useCallback(async (
     milestone: 'thinking' | 'skill_selected' | 'skill_executing' | 'skill_complete',
     skill?: string,
   ) => {
     if (!autoPlayRef.current) return
     if (completionNarratingRef.current) return
     // 简单意图跳过
-    const intentionType = useChatStore.getState().currentIntention?.intents?.[0]?.type
+    const intentionType = useChatStore.getState().messages.at(-1)?.intention?.intents?.[0]?.type
     if (intentionType && PROGRESS_SKIP_INTENTS.has(intentionType)) return
     // 长任务门控：未达到阈值不播
     if (taskStartRef.current && Date.now() - taskStartRef.current < LONG_TASK_THRESHOLD_MS) return
@@ -80,78 +99,84 @@ export function ChatPanel() {
     // skill_executing 同一 skill 只播一次
     if (milestone === 'skill_executing' && skill && playedExecutingRef.current.has(skill)) return
 
-    const text = await narrateProgress({ milestone, skill })
+    const source = activeAssistantIdRef.current
+    if (!source || progressInFlightRef.current) return
+    const ticket = Symbol()
+    progressInFlightRef.current = ticket
+    let text: string | null
+    try {
+      text = await narrateProgress({ milestone, skill })
+    } finally {
+      if (progressInFlightRef.current === ticket) progressInFlightRef.current = null
+    }
     if (!text) return
 
     // 再次检查（narrateProgress 期间状态可能变化）
+    if (!source || source !== activeAssistantIdRef.current) return
     if (completionNarratingRef.current) return
-    if (!autoPlayRef.current) return
+    if (!autoPlayRef.current || !useChatStore.getState().isProcessing) return
 
     lastProgressTimeRef.current = now
     progressCountRef.current += 1
     if (milestone === 'skill_executing' && skill) playedExecutingRef.current.add(skill)
     // 用临时 ID 播放，避免和完成播报冲突
-    play(`progress-${Date.now()}`, text, {})
-  }
+    void play(`progress-${Date.now()}`, text, {})
+  }, [narrateProgress, play])
 
-  const scrollToBottom = (smooth = true) => {
+  const scrollToBottom = useCallback((smooth = true) => {
     const el = scrollRef.current
     if (!el) return
-    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
-    setAtBottom(true)
-    setShowJump(false)
-  }
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth && !reducedMotion ? 'smooth' : 'auto' })
+  }, [reducedMotion])
 
   const onScroll = () => {
     const el = scrollRef.current
     if (!el) return
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80
     setAtBottom(near)
-    if (near) setShowJump(false)
   }
 
   useEffect(() => {
     if (messages.length === 0) return
-
-    if (isProcessing) {
-      if (atBottom) scrollToBottom(false)
-      else setShowJump(true)
+    const anchor = olderAnchor.current
+    const pane = scrollRef.current
+    if (anchor && pane && messages[0]?.id !== anchor.firstId) {
+      olderAnchor.current = null
+      pane.scrollTop = anchor.top + pane.scrollHeight - anchor.height
       return
     }
 
-    const last = messages[messages.length - 1]
-    if (last?.role === 'assistant' && atBottom) {
-      const container = scrollRef.current
-      const nodes = container?.querySelectorAll<HTMLElement>('[data-message-role="user"]')
-      const el = nodes?.[nodes.length - 1]
-      if (container && el) {
-        const top = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
-        container.scrollTo({ top: Math.max(0, top - 8), behavior: 'auto' })
-        return
+    if (!atBottom || !pane) return
+    const last = messages.at(-1)
+    // Follow the first readable result, not the growing bottom of a long reply.
+    // Once the reader has landed here, later packets must not move the page.
+    if (last?.role === 'assistant' && !last.historical && last.agentResults?.length) {
+      if (anchoredResult.current !== last.id) {
+        const first = pane.lastElementChild?.querySelector('[data-result-stack]')
+        if (first) {
+          anchoredResult.current = last.id
+          const top = first.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop
+          pane.scrollTop = Math.min(top - 12, pane.scrollHeight - pane.clientHeight)
+        }
       }
+      return
     }
-
-    if (atBottom) scrollToBottom(false)
-    else setShowJump(true)
+    scrollToBottom(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, isProcessing])
 
-  const handleSend = async (text: string) => {
+  const handleSend = useCallback(async (text: string, retryId?: string, retryPlan?: PlanLink) => {
     const store = useChatStore.getState()
 
-    if (store.isProcessing) return
+    if (!navigator.onLine || !text.trim() || switching || store.sessionId === LEGACY_CONVERSATION || store.isProcessing) return
 
-    // 关键：先中断上一轮可能仍在途的流。
-    // 行程规划类请求要跑 20~45 秒，用户此时点「清空对话」或刷新后继续提问，
-    // 旧流若不掐断，它的回调会继续写「最后一条 AI 消息」，表现成已读乱回。
+    // Stop any previous stream before starting another turn.
     abortActiveRequest()
 
-    if (!store.sessionId) {
-      const session = await createSession(store.userId)
-      store.setSessionId(session.session_id)
-    }
-
+    const selection = !retryId && !store.pendingPlan ? selectionSource(store.messages.at(-1), text, store.sessionId) : undefined
     const userMessageId = uid()
+    const planLink = retryId ? retryPlan : store.pendingPlan ?? undefined
+    const requestId = retryId ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
     // 本轮请求专属的 AI 消息 id，所有回调只认这个 id
     const assistantMessageId = uid()
 
@@ -159,11 +184,20 @@ export function ChatPanel() {
       id: userMessageId,
       role: 'user',
       content: text,
+      requestId,
+      planLink,
       timestamp: Date.now(),
     })
 
+    let activity: TurnActivity = { phase: 'submitted', schedule: [], started: [] }
+    let results: AgentResult[] = []
+    const updateActivity = (patch: Partial<TurnActivity>) => {
+      activity = { ...activity, ...patch }
+      store.patchMessage(assistantMessageId, { activity })
+    }
+
     store.addMessage({
-      id: assistantMessageId,
+      id: assistantMessageId, activity,
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
@@ -172,59 +206,90 @@ export function ChatPanel() {
     activeAssistantIdRef.current = assistantMessageId
 
     store.setProcessing(true)
-    store.setCurrentIntention(null)
-    requestAnimationFrame(() => scrollToBottom(false))
-    store.resetAgentResults()
-    store.clearRunningAgents()
+    if (!retryId) store.setPendingPlan(null)
+    setAtBottom(true)
 
     // 重置进度播报状态
     taskStartRef.current = Date.now()
     lastProgressTimeRef.current = 0
+    progressInFlightRef.current = null
     progressCountRef.current = 0
     completionNarratingRef.current = false
     playedExecutingRef.current = new Set()
 
+    const isCurrent = () => activeAssistantIdRef.current === assistantMessageId && useChatStore.getState().messages.some((message) => message.id === assistantMessageId)
+    let listed = false
     try {
-      await sendChatMessage(store.userId, text, store.sessionId, {
-        onThinking: (data) => {
-          store.setThinkingStatus(data.status)
+      let sessionId = store.sessionId
+      if (!sessionId) {
+        const session = await createSession()
+        if (!isCurrent()) return
+        sessionId = session.session_id
+        store.setSessionId(sessionId)
+      }
+      await sendChatMessage(store.userId, text, sessionId, {
+        onThinking: () => {
+          if (!isCurrent()) return
+          updateActivity({ phase: 'receiving' })
+          if (!listed) {
+            listed = true
+            notifyConversationsChanged()
+          }
         },
         onIntention: (data) => {
-          store.setCurrentIntention(data)
+          if (!isCurrent()) return
+          updateActivity({ phase: 'receiving', schedule: (data.agent_schedule ?? []).map(publicTask) })
           store.patchMessage(assistantMessageId, { intention: data })
           // 意图确定 → skill_selected 进度播报
-          void maybePlayProgress('skill_selected')
+          if (!data.trip_request) void maybePlayProgress('skill_selected')
         },
-        onDispatching: () => {
-          store.setThinkingStatus('dispatching')
+        onDispatching: ({ agents }) => {
+          if (!isCurrent()) return
+          updateActivity({ phase: 'receiving', schedule: mergeSchedule(activity.schedule, (agents ?? []).map(publicTask)) })
         },
         onAgentStart: (data) => {
-          store.addRunningAgent(data.agent_name)
+          if (!isCurrent()) return
+          if (!data.node_id || !activity.started.some(row => row.node_id === data.node_id)) {
+            updateActivity({ phase: 'receiving', started: [...activity.started, publicTask(data)] })
+          }
           // 子 agent 开始 → skill_executing 进度播报
-          void maybePlayProgress('skill_executing', data.agent_name)
+          if (!data.node_id) void maybePlayProgress('skill_executing', data.agent_name)
         },
         onAgentResult: (data) => {
-          store.addAgentResult(data)
-          store.appendAgentResultById(assistantMessageId, data)
-          store.removeRunningAgent(data.agent_name)
+          if (!isCurrent()) return
+          if (activity.phase === 'submitted') updateActivity({ phase: 'receiving' })
+          results = mergeResults(results, [data])
+          store.patchMessage(assistantMessageId, { agentResults: results })
           // 子 agent 完成 → skill_complete 进度播报（仅 success）
-          if (data.status === 'success') {
+          if (data.status === 'success' && !data.node_id) {
             void maybePlayProgress('skill_complete', data.agent_name)
           }
         },
         onComplete: async (data: OrchestrationResult) => {
-          store.setOrchestrationResult(data)
+          if (!isCurrent()) return
+          updateActivity({ phase: 'finished' })
+          if (selection && selection.optionId === data.selected_proposal && selection.session === useChatStore.getState().sessionId &&
+              data.status === 'completed') {
+            const { sourceMessageId, optionId, number } = selection
+            store.patchMessage(sourceMessageId, { confirmedOptionId: optionId })
+            store.patchMessage(assistantMessageId, { selectionReceipt: { sourceMessageId, optionId, number } })
+          }
+          results = mergeResults(results, data.results, true)
+          store.setProcessing(false)
           store.patchMessage(assistantMessageId, {
-            agentResults: data.results,
+            agentResults: results,
             orchestrationResult: data,
+            historyWarning: data.history_warning,
           })
-          const fallbackText = extractTTSTexts(data.results)
+          notifyConversationsChanged()
+          const fallbackText = extractTTSTexts(results)
           if (fallbackText) {
             store.patchMessage(assistantMessageId, { content: fallbackText })
           }
           // 费用记录成功后通知侧边栏刷新
           for (const r of data.results) {
-            if (r.agent_name === 'expense_tracking' && r.status === 'success') {
+            if (['expense_tracking', 'expense_tracker'].includes(r.agent_name) && r.status === 'success'
+              && ['record', 'delete', 'update'].includes(String(r.data.action))) {
               window.dispatchEvent(new CustomEvent('expense-updated'))
             }
             if (r.agent_name === 'preference' && r.status === 'success') {
@@ -243,37 +308,54 @@ export function ChatPanel() {
 
           // 简单意图走快路径（不调 LLM）；复杂意图调 narrate，失败回退 fallbackText
           let textToPlay = fallbackText
-          if (!FAST_PATH_INTENTS.has(intentionType || '')) {
+          if (!data.trip_plan && data.status !== 'cancelled' && !data.selected_proposal && !FAST_PATH_INTENTS.has(intentionType || '')) {
             const narrated = await narrate({
               intention: intentionType,
-              resultData: data.results,
+              resultData: results,
             })
-            if (narrated) {
+            if (narrated && isCurrent()) {
               textToPlay = narrated
               // 存到 message，手动播放按钮可复用
               store.patchMessage(assistantMessageId, { narrationText: narrated })
             }
           }
-          play(assistantMsgId, textToPlay, { intention: intentionType })
+          if (isCurrent() && autoPlayRef.current) void play(assistantMsgId, textToPlay, { intention: intentionType })
         },
         onClarification: (data) => {
-          store.patchMessage(assistantMessageId, { content: data.question })
-          store.setThinkingStatus('')
+          if (!isCurrent()) return
+          store.patchMessage(assistantMessageId, { content: data.question, historyWarning: data.history_warning })
+          updateActivity({ phase: 'clarification' }); store.setProcessing(false)
+          notifyConversationsChanged()
         },
         onError: (data) => {
-          store.patchMessage(assistantMessageId, { content: String(data.message ?? '处理失败'), isError: true })
+          if (!isCurrent()) return
+          updateActivity({ phase: data.interrupted ? 'interrupted' : 'error' })
+          store.setProcessing(false)
+          store.patchMessage(assistantMessageId, {
+            content: String(data.message ?? '处理失败'), isError: true, historyWarning: data.history_warning,
+          })
+          notifyConversationsChanged()
         },
-      })
+      }, requestId, planLink?.ref)
     } catch (err) {
-      store.patchMessage(assistantMessageId, {
-        content: '连接失败: ' + (err instanceof Error ? err.message : String(err)),
-        isError: true,
-      })
+      // Session creation can reject after the user has already cancelled this turn.
+      if (isCurrent()) {
+        updateActivity({ phase: activity.phase === 'receiving' ? 'interrupted' : 'error' })
+        store.patchMessage(assistantMessageId, {
+          content: '连接失败: ' + (err instanceof Error ? err.message : String(err)),
+          isError: true,
+        })
+      }
     } finally {
-      store.setProcessing(false)
-      store.setThinkingStatus('')
+      if (isCurrent()) {
+        store.setProcessing(false)
+        if (['receiving', 'submitted'].includes(activity.phase)) {
+          updateActivity({ phase: 'interrupted' })
+          store.patchMessage(assistantMessageId, { content: '连接中断，未收到完整回复。', isError: true })
+        }
+      }
     }
-  }
+  }, [maybePlayProgress, narrate, play, switching])
 
   useEffect(() => {
     const onOnline = () => setOffline(false)
@@ -287,124 +369,91 @@ export function ChatPanel() {
   }, [])
 
   const handleCancel = () => {
-    abortActiveRequest()
     const store = useChatStore.getState()
+    if (!store.isProcessing) return
+    abortActiveRequest()
+    stop()
     store.setProcessing(false)
-    store.setThinkingStatus('')
-    store.updateLastAssistant({ content: '已停止生成' })
+    const msg = store.messages.find(row => row.id === activeAssistantIdRef.current)
+    if (msg?.activity) store.patchMessage(msg.id, { activity: { ...msg.activity, phase: 'cancelled' },
+      content: msg.intention?.trip_request ? '本轮查询已取消；已收到的部分结果仍可查看。' : '已停止生成',
+    })
+    activeAssistantIdRef.current = null
+    notifyConversationsChanged()
+  }
+
+  const handleLoadOlder = () => {
+    const el = scrollRef.current
+    if (el && messages[0]) olderAnchor.current = { firstId: messages[0].id, height: el.scrollHeight, top: el.scrollTop }
+    void loadOlder?.()
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="relative flex min-h-0 flex-1 flex-col">
+    <main className="flight-shell" aria-label="差旅航图台"><div className={brief ? 'deck-layout brief-mode' : 'deck-layout chat-mode'}>
+      {brief && <BriefHeading />}
+      {brief && <RouteChart />}
+      <div className="message-pane" hidden={brief}>
         <div
           ref={scrollRef}
           onScroll={onScroll}
           role="log"
           aria-label="对话消息"
-          aria-live="polite"
+          aria-live={visible && !messages.at(-1)?.historical ? 'polite' : 'off'}
           /* 流式生成期间置 busy：读屏软件等生成结束再整段播报，
              避免逐 token 朗读造成噪音风暴 */
           aria-busy={isProcessing}
           className="flex-1 overflow-y-auto py-2"
         >
-          {messages.length === 0 && (
-            <div className="flex h-full items-center justify-center px-4 py-10">
-              <div className="w-full max-w-[760px]">
-                <div className="font-mono text-[10px] tracking-[0.18em] text-accent">ALIGO / 行程文件</div>
-                <h1 className="mt-3 font-display text-[30px] leading-[1.18] text-ink md:text-[38px]">
-                  把行程，
-                  <br />
-                  做成一份文件。
-                </h1>
-                <p className="mt-3 max-w-[460px] text-sm leading-7 text-ink-2">
-                  告诉我出差的时间、地点和预算，我会排好行程、查差旅政策、记住你的偏好。
-                </p>
-
-                <div className="mt-7 border-t border-rule">
-                  {[
-                    { n: '01', title: '明天北京 → 上海，3 天，预算 2000', meta: '行程规划', q: '明天从北京去上海出差3天，预算2000' },
-                    { n: '02', title: '上海住宿标准是多少？', meta: '差旅政策', q: '上海住宿标准是多少？' },
-                    { n: '03', title: '记一笔打车费 50 元', meta: '费用记录', q: '记一笔打车费50元' },
-                  ].map((item) => (
-                    <button
-                      key={item.n}
-                      type="button"
-                      onClick={() => handleSend(item.q)}
-                      className="group flex w-full items-baseline gap-3 border-b border-rule py-3 text-left hover:bg-paper-sunken"
-                    >
-                      <span className="font-mono text-[10px] text-accent">{item.n}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-ink">{item.title}</span>
-                        <span className="mt-0.5 block text-[11px] text-ink-3">{item.meta}</span>
-                      </span>
-                      <ArrowUpRight
-                        size={14}
-                        className="text-ink-3 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-                        aria-hidden="true"
-                      />
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {['北京天气怎么样？', '100 美元多少人民币', '我住酒店喜欢汉庭', '查询差旅记录'].map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => handleSend(q)}
-                      className="rounded-[2px] border border-rule-strong px-2.5 py-1.5 text-[11px] text-ink-2 hover:bg-paper-sunken hover:text-ink"
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-6 font-mono text-[10px] tracking-[0.04em] text-ink-3">
-                  ENTER 发送 · SHIFT+ENTER 换行
-                </div>
-              </div>
+          {loadOlder && (
+            <div className="px-4 py-1 text-center">
+              <button type="button" onClick={handleLoadOlder} disabled={olderBusy || switching}
+                className="min-h-11 rounded-[2px] px-3 text-xs font-medium text-accent underline hover:bg-paper-sunken disabled:opacity-50">
+                {olderBusy ? '正在加载…' : olderError || '加载更早的消息'}
+              </button>
             </div>
           )}
-
           {messages.map((msg, i) => {
             const isLastAssistant =
               msg.role === 'assistant' &&
               i === messages.length - 1 &&
               isProcessing
-            let userMessage = ''
+            let userMessage: typeof msg | undefined
             if (msg.role === 'assistant') {
               for (let j = i - 1; j >= 0; j--) {
                 if (messages[j].role === 'user') {
-                  userMessage = messages[j].content
+                  userMessage = messages[j]
                   break
                 }
               }
             }
+            const next = messages[i + 1]
+            const reply = messages[i + 2]
+            const pendingExpense = msg.role === 'assistant' && !msg.historical && isProcessing &&
+              next?.role === 'user' && reply?.role === 'assistant' && i + 2 === messages.length - 1 && isExpenseConfirmation(next.content)
+              ? next.content : undefined
+            const requested = next?.role === 'user' && !next.planLink
+              ? selectionSource(msg, next.content, activeSession)
+              : undefined
+            const proposalRequestState = requested && reply?.role === 'assistant' &&
+                reply.selectionReceipt?.sourceMessageId !== msg.id
+              ? isProcessing && i + 2 === messages.length - 1 ? 'pending' : 'unconfirmed'
+              : undefined
             return (
               <MessageBubble
                 key={msg.id}
                 msg={msg}
                 isRunning={isLastAssistant}
-                isLatest={i === messages.length - 1 && !isProcessing}
-                onSend={handleSend}
-                userMessage={userMessage}
+                isLatest={!msg.historical && i === messages.length - 1 && !isProcessing}
+                proposalRequestState={proposalRequestState}
+                pendingExpense={pendingExpense}
+                canSelectProposal={!!activeSession && !pendingPlan}
+                onSend={msg.historical || switching ? undefined : handleSend}
+                userMessage={userMessage?.content}
+                onRetry={!msg.historical && !switching && userMessage ? () => handleSend(userMessage.content, userMessage.requestId, userMessage.planLink) : undefined}
               />
             )
           })}
 
-          {isProcessing && (
-            <div className="px-4 pb-2 md:px-6">
-              <div className="mx-auto max-w-[760px]">
-                <RouteStrip
-                  intention={currentIntention}
-                  results={currentAgents}
-                  running={runningAgents}
-                  onCancel={handleCancel}
-                />
-              </div>
-            </div>
-          )}
         </div>
 
         {showJump && (
@@ -413,18 +462,23 @@ export function ChatPanel() {
             onClick={() => scrollToBottom(true)}
             className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-[2px] border border-rule-strong bg-paper-raised px-3 py-1.5 text-[11px] text-ink shadow-sm hover:bg-paper-sunken"
           >
-            新消息 ↓
+            回到底部 ↓
           </button>
         )}
       </div>
 
-      {offline && (
-        <div className="border-t border-warn/30 bg-warning-light px-4 py-2 text-[11px] text-warn">
-          当前处于离线状态，恢复网络后再发送。
-        </div>
-      )}
-
-      <InputBar onSend={handleSend} onCancel={handleCancel} disabled={isProcessing} />
-    </div>
+      {readOnly
+        ? <div className="flex flex-wrap items-center justify-between gap-x-3 border-t border-rule bg-paper-sunken px-4 py-2 text-sm text-ink-2">
+            <span>早期未分开保存的记录仅供查看。新建对话可继续使用。</span>
+            <button type="button" onClick={onStartNew} disabled={switching}
+              className="min-h-11 px-2 font-semibold text-accent hover:bg-paper disabled:opacity-50">新建对话</button>
+          </div>
+        : <InputBar onSend={handleSend} onCancel={handleCancel} disabled={isProcessing} blocked={switching}
+            brief={brief} visible={visible} offline={offline} examples={!pendingPlan}
+            notice={pendingPlan && <div role="status" className="plan-notice">
+              <span>将基于「{pendingPlan.title}」第 {pendingPlan.ref.version} 版调整。请描述想改什么。</span>
+              <button type="button" onClick={() => useChatStore.getState().setPendingPlan(null)}>取消引用</button>
+            </div>} />}
+    </div><ActivityAnnouncement /></main>
   )
 }

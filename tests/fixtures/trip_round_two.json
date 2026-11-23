@@ -1,0 +1,12 @@
+[
+  {"id":"weather","turns":["上海明天的天气怎么样？"],"routes":["information_query"]},
+  {"id":"one_way","turns":["帮我查询明天广州到上海的高铁信息"],"routes":["train_ticket"]},
+  {"id":"full","turns":["下周一从广州去上海出差，周三下午返回，1人，总预算3000元，会议地点是上海世博中心，会议时间周二10:00-12:00，酒店尽量靠近会议地点，最好不要太早出发。"],"routes":["outbound","inbound","hotels","weather","commute","proposal"],"budget":3000},
+  {"id":"revision","turns":["下周一从广州去上海出差，周三下午返回，1人，总预算3000元，会议地点是上海世博中心，会议时间周二10:00-12:00，酒店尽量靠近会议地点，最好不要太早出发。","预算改为2500元"],"routes":["outbound","inbound","hotels","weather","commute","proposal"],"budget":2500},
+  {"id":"rail_down","turns":["下周一从广州去上海出差，周三下午返回，1人，总预算3000元，会议地点是上海世博中心，会议时间周二10:00-12:00"],"routes":["outbound","inbound","hotels","weather","commute","proposal"],"fault":"rail"},
+  {"id":"hotel_down","turns":["下周一从广州去上海出差，周三下午返回，1人，总预算3000元，会议地点是上海世博中心，会议时间周二10:00-12:00"],"routes":["outbound","inbound","hotels","weather","commute","proposal"],"fault":"hotel"},
+  {"id":"over_budget","turns":["下周一从广州去上海出差，周三下午返回，1人，总预算3000元，会议地点是上海世博中心，会议时间周二10:00-12:00"],"routes":["outbound","inbound","hotels","weather","commute","proposal"],"fault":"budget"},
+  {"id":"time_conflict","turns":["下周一从广州去上海出差，周三下午返回，1人，总预算3000元，会议地点是上海世博中心，会议时间周一10:00-12:00"],"routes":["outbound","inbound","hotels","weather","commute","proposal"],"fault":"time"},
+  {"id":"repeat","turns":["下周一从广州去上海出差，周三下午返回，1人，总预算3000元，会议地点是上海世博中心，会议时间周二10:00-12:00","按这个方案重新规划"],"routes":["outbound","inbound","hotels","weather","commute","proposal"],"budget":3000},
+  {"id":"conversation","turns":["帮我规划一次广州到上海的三天出差，预算3000元","下周一出发","2人，会议地点是上海世博中心，会议时间周二10:00-12:00","返程改到周三下午，酒店尽量靠近会议地点","取消酒店靠近会议地点的要求，预算改为2500元"],"routes":["outbound","inbound","hotels","weather","commute","proposal"],"budget":2500}
+]

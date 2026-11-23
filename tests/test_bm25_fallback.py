@@ -21,8 +21,8 @@ def test_exact_policy_terms_rank():
     # 纯词面能稳定命中的：唯一数字串 / 专有词
     top = [r["text"] for r in bm.search("增值税发票", top_k=5)]
     assert any("增值税发票" in t for t in top), top[:2]
-    top2 = [r["text"] for r in bm.search("400-800-8888", top_k=5)]
-    assert any("400-800-8888" in t for t in top2)
+    top2 = [r["text"] for r in bm.search("示例票据校验编号", top_k=5)]
+    assert any("示例票据校验编号" in t for t in top2)
 
 
 def test_empty_and_noise_queries():

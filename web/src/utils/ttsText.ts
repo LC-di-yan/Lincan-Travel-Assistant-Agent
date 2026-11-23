@@ -1,4 +1,9 @@
 import type { AgentResult } from '../api/types'
+import { asRecord, unwrapResultData } from './resultData'
+
+function firstText(...values: unknown[]): string {
+  return values.find((value) => typeof value === 'string' && value.trim()) as string || ''
+}
 
 /** 有些 Agent 的 answer 字段本身就是一段 JSON，取出其中的自然语言。 */
 function unwrapAnswer(value: unknown): string {
@@ -24,46 +29,49 @@ function unwrapAnswer(value: unknown): string {
  */
 export function extractTTSText(result: AgentResult): string {
   if (result.status === 'error') {
-    const errDetail = (result.data as any)?.error || (result.data as any)?.message || ''
+    const detail = unwrapResultData(result.data)
+    const errDetail = firstText(detail.error, detail.message, detail.answer)
+    if (result.agent_name === 'train_ticket' && detail.availability_status) {
+      return errDetail || firstText(asRecord(detail.results).message, asRecord(detail.results).summary) || '铁路数据暂时不可用。'
+    }
     return errDetail ? `${result.agent_name} 执行失败：${errDetail}` : `${result.agent_name} 执行失败`
   }
 
-  const d = (result.data as Record<string, unknown>) || {}
-  const inner = (d.data || d) as Record<string, unknown>
+  const inner = unwrapResultData(result.data)
   const agent = result.agent_name
 
   switch (agent) {
     case 'itinerary_planning': {
-      const it = (inner.itinerary || inner) as Record<string, unknown>
-      const title = (it.title as string) || '行程规划'
-      const duration = (it.duration as string) || ''
+      const it = inner.itinerary ? asRecord(inner.itinerary) : inner
+      const title = firstText(it.title)
+      const duration = firstText(it.duration)
       const plans = Array.isArray(it.daily_plans) ? it.daily_plans : []
-      const complete = inner.planning_complete !== false
+      const complete = inner.planning_complete !== false && it.planning_complete !== false
+      if (complete && !title) return firstText(inner.answer, inner.message, inner.error, it.error) || '行程结果尚不完整，请补充更多信息。'
       const summary = complete
         ? `已为您规划好${duration || ''}行程：${title}，共 ${plans.length} 天，请查看详情。`
-        : `行程规划未完成：${(inner.error as string) || '请补充更多信息'}`
+        : `行程规划未完成：${firstText(inner.error, it.error) || '请补充更多信息'}`
       return summary
     }
 
     case 'information_query': {
-      const results = (inner.results || inner) as Record<string, unknown>
-      const summary = (results.summary as string) || (inner.summary as string) || (inner.message as string) || (inner.answer as string)
-      return summary as string || ''
+      const results = inner.results ? asRecord(inner.results) : inner
+      return firstText(results.summary, results.message, inner.summary, inner.message, inner.answer)
     }
 
     case 'rag_knowledge':
     case 'memory_query':
     case 'visa_info': {
-      const answer = inner.answer ?? inner.content ?? inner.result ?? inner.summary
+      const answer = firstText(inner.answer, inner.content, inner.result, inner.message, inner.summary)
       return unwrapAnswer(answer)
     }
 
     case 'expense_tracker':
     case 'expense_tracking': {
-      const answer = (inner.answer as string) || (inner.message as string)
-      if (answer) return answer as string
-      const expense = inner.expense as Record<string, unknown> | undefined
-      if (expense) {
+      const answer = firstText(inner.answer, inner.message)
+      if (answer) return answer
+      const expense = asRecord(inner.expense)
+      if (Object.keys(expense).length) {
         const category = expense.category || '其他'
         const amount = expense.amount
         return `已记录${category} ${amount} 元`
@@ -73,30 +81,31 @@ export function extractTTSText(result: AgentResult): string {
 
     case 'currency_converter':
     case 'currency_conversion': {
-      const answer = (inner.answer as string) || (inner.result as string) || (inner.message as string)
-      return answer as string || ''
+      const answer = firstText(inner.answer, inner.result, inner.message)
+      if (answer) return answer
+      if (typeof inner.amount === 'number' && typeof inner.result === 'number' && firstText(inner.from) && firstText(inner.to)) {
+        return `${inner.amount} ${inner.from} 约等于 ${inner.result} ${inner.to}`
+      }
+      return ''
     }
 
     case 'preference': {
-      const answer = (inner.answer as string) || (inner.message as string)
-      return answer as string || '偏好已更新'
+      return firstText(inner.answer, inner.message) || '偏好已更新'
     }
 
     case 'translation': {
-      const translated = (inner.translated_text as string) || (inner.translation as string) || (inner.result as string) || (inner.answer as string)
-      return translated as string || ''
+      return firstText(inner.translated_text, inner.translation, inner.result, inner.answer)
     }
 
     case 'event_collection': {
-      const summary = (inner.summary as string) || (inner.message as string)
-      return summary as string || ''
+      return firstText(inner.summary, inner.message)
     }
 
     case 'hotel_search':
     case 'restaurant_search':
     case 'scenic_search': {
-      const results = (inner.results || inner) as Record<string, unknown>
-      const summary = (results.summary as string) || (inner.summary as string) || (inner.message as string)
+      const results = inner.results ? asRecord(inner.results) : inner
+      const summary = firstText(results.summary, inner.summary, inner.message)
       const count = (results.count as number) ?? (inner.count as number) ?? 0
       if (summary) return summary
       if (count > 0) return `找到 ${count} 条结果，请查看详情`
@@ -104,13 +113,12 @@ export function extractTTSText(result: AgentResult): string {
     }
 
     case 'train_ticket': {
-      const summary = (inner.summary as string) || (inner.message as string)
-      return summary as string || ''
+      return firstText(asRecord(inner.results).summary, inner.summary, inner.message, inner.answer)
     }
 
     default: {
       // 兜底：尝试常见字段
-      const raw = inner.answer ?? inner.content ?? inner.result ?? inner.message ?? inner.summary ?? inner.description ?? inner.text
+      const raw = firstText(inner.answer, inner.content, inner.result, inner.message, inner.summary, inner.description, inner.text)
       return unwrapAnswer(raw)
     }
   }

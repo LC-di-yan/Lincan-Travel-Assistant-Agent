@@ -4,17 +4,16 @@
 
 依赖：
 - AMAP_API_KEY 需在 .env 中配置
-- 无需额外 pip 依赖（使用 subprocess + curl）
+- 复用 HTTPX 高德地图连接
 """
 from agents.base import SkillAgentBase
+from utils.provider_http import amap_json
+from utils.hotel_budget import filter_hotel_budget, label_hotel_prices, parse_hotel_budget
 from agentscope.message import Msg
 from typing import Optional, Union, List, Dict, Any
-import asyncio
 import json
 import logging
 import re
-import subprocess
-from urllib.parse import quote
 
 from utils.skill_loader import SkillLoader
 from utils.as_compat import mk_msg, msg_text
@@ -165,7 +164,7 @@ class PlaceSearchAgent(SkillAgentBase):
             query_type = "景点搜索"
         else:
             query_type = "酒店搜索"
-        logger.info(f"{query_type} query: {user_query}")
+        logger.info("POI query type=%s", query_type)
 
         try:
             city = self._extract_city(user_query, context)
@@ -189,17 +188,19 @@ class PlaceSearchAgent(SkillAgentBase):
                 result = await self._scenic_search(city, params)
             else:
                 params = self._extract_search_params(user_query, city)
+                if original_budget := parse_hotel_budget(context.get("original_query") or ""):
+                    params["price_range"] = original_budget
                 result = await self._hotel_search(city, params)
 
             self._add_proactive_question(result, city, is_restaurant, is_scenic)
 
             return mk_msg(self.name, result)
         except Exception as e:
-            logger.error(f"{query_type} failed: {e}")
+            logger.warning("POI query failed (%s)", type(e).__name__)
             return mk_msg(self.name, {
                 "query_type": query_type,
                 "query_success": False,
-                "results": {"message": f"搜索失败: {str(e)}"},
+                "results": {"message": "地图搜索暂不可用，请稍后再试。"},
             })
 
     def _add_proactive_question(self, result: Dict, city: str, is_restaurant: bool = False, is_scenic: bool = False) -> None:
@@ -290,11 +291,7 @@ class PlaceSearchAgent(SkillAgentBase):
             "citylimit": "true",
         }
 
-        query_str = "&".join(f"{k}={quote(str(v))}" for k, v in query_params.items())
-        full_url = f"{url}?{query_str}"
-
-        loop = asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, self._curl_get, full_url)
+        data = await amap_json(url, query_params)
 
         if data.get("status") != "1":
             raise ValueError(f"POI 搜索接口返回错误: {data.get('info', '未知错误')}")
@@ -420,11 +417,7 @@ class PlaceSearchAgent(SkillAgentBase):
             "key": api_key, "keywords": params["keywords"], "city": city,
             "offset": "15", "page": "1", "extensions": "all", "citylimit": "true",
         }
-        query_str = "&".join(f"{k}={quote(str(v))}" for k, v in query_params.items())
-        full_url = f"{url}?{query_str}"
-
-        loop = asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, self._curl_get, full_url)
+        data = await amap_json(url, query_params)
 
         if data.get("status") != "1":
             raise ValueError(f"POI 搜索接口返回错误: {data.get('info', '未知错误')}")
@@ -602,18 +595,7 @@ class PlaceSearchAgent(SkillAgentBase):
             star_map = {"一": "1", "二": "2", "三": "3", "四": "4", "五": "5"}
             params["star"] = star_map.get(star_str, star_str)
 
-        # 提取价格区间
-        price_match = re.search(r"(\d+)\s*[-–—到至]\s*(\d+)\s*元?", query)
-        if price_match:
-            params["price_range"] = f"{price_match.group(1)}-{price_match.group(2)}"
-        else:
-            price_match = re.search(r"(\d+)\s*元?\s*(左右|以内|以下)", query)
-            if price_match:
-                amount = price_match.group(1)
-                if "以内" in price_match.group(2) or "以下" in price_match.group(2):
-                    params["price_range"] = f"0-{amount}"
-                else:
-                    params["price_range"] = f"{int(amount) * 0.7:.0f}-{int(amount) * 1.3:.0f}"
+        params["price_range"] = parse_hotel_budget(query)
 
         return params
 
@@ -642,11 +624,7 @@ class PlaceSearchAgent(SkillAgentBase):
             "citylimit": "true",
         }
 
-        query_str = "&".join(f"{k}={quote(str(v))}" for k, v in query_params.items())
-        full_url = f"{url}?{query_str}"
-
-        loop = asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, self._curl_get, full_url)
+        data = await amap_json(url, query_params)
 
         if data.get("status") != "1":
             raise ValueError(f"POI 搜索接口返回错误: {data.get('info', '未知错误')}")
@@ -661,15 +639,8 @@ class PlaceSearchAgent(SkillAgentBase):
         if params.get("price_range") and pois:
             pois = self._filter_by_price(pois, params["price_range"])
 
-        return await self._build_result(city, params["keywords"], count, pois)
-
-    @staticmethod
-    def _curl_get(full_url: str) -> dict:
-        r = subprocess.run(
-            ["curl", "-s", "--compressed", full_url],
-            capture_output=True, text=True, timeout=20, encoding="utf-8",
-        )
-        return json.loads(r.stdout)
+        result = await self._build_result(city, params["keywords"], count, pois)
+        return label_hotel_prices(result, params.get("price_range"), count)
 
     # ── 后过滤 ──
 
@@ -697,24 +668,7 @@ class PlaceSearchAgent(SkillAgentBase):
 
     @staticmethod
     def _filter_by_price(pois: List[Dict], price_range: str) -> List[Dict]:
-        """按价格区间过滤。高德 biz_ext.cost 如 '298-598'。"""
-        parts = price_range.split("-")
-        min_p = int(parts[0]) if parts[0] else 0
-        max_p = int(parts[1]) if len(parts) > 1 and parts[1] else 99999
-        filtered = []
-        for p in pois:
-            cost_str = ((p.get("biz_ext") or {}).get("cost") or "")
-            if cost_str:
-                costs = cost_str.replace("￥", "").replace("¥", "").split("-")
-                try:
-                    avg = (int(costs[0]) + int(costs[-1])) / 2
-                    if min_p <= avg <= max_p:
-                        filtered.append(p)
-                        continue
-                except (ValueError, IndexError):
-                    pass
-            filtered.append(p)
-        return filtered if filtered else pois
+        return filter_hotel_budget(pois, price_range)
 
     # ── 结果构建 ──
 

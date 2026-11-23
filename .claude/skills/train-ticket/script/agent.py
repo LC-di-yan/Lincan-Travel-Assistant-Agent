@@ -12,15 +12,16 @@
 from agents.base import SkillAgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List, Dict, Any
+import asyncio
 import json
 import logging
 import re
 import time
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from cache.decorators import cached
 from utils.as_compat import mk_msg, msg_text
+from utils.train_intent import without_transfer_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,9 @@ STATIONS_CACHE_TTL = 86400  # 24小时
 # 查询结果缓存
 _query_cache = {}
 QUERY_CACHE_TTL = 600  # 10分钟
+STATION_LOOKUP_TIMEOUT_SEC = 8.0
+TICKET_REQUEST_TIMEOUT_SEC = 15.0
+OFFICIAL_RAIL_SITE = "https://www.12306.cn/"
 
 # ── 相对日期词 ────────────────────────────────────────────────
 # 用户常说「明早」「今晚」「后天上午」，以前只认「明天/后天/今天」，
@@ -72,17 +76,27 @@ def _day_word_to_date(word: str) -> str:
 
 
 def _normalize_date_str(value: str) -> str:
-    """把各种日期写法统一成 YYYY-MM-DD；已经是标准格式则原样返回。"""
+    """把明确日期统一成 YYYY-MM-DD；未知或无效日期不猜测成今天。"""
     v = (value or "").strip()
     if not v:
         return ""
-    if re.match(r"^\d{4}-\d{2}-\d{2}$", v):
-        return v
     if v in _DAY_WORD_OFFSETS:
         return _day_word_to_date(v)
     if re.match(r"^\d{1,2}月\d{1,2}[日号]$", v):
-        return _convert_chinese_month_day(v)
-    return v
+        v = _convert_chinese_month_day(v)
+    elif re.match(r"^\d{1,2}$", v):
+        day = int(v)
+        now = datetime.now()
+        month = now.month + (day < now.day)
+        year = now.year + (month > 12)
+        month = 1 if month > 12 else month
+        v = f"{year}-{month:02d}-{day:02d}"
+    if not re.fullmatch(r"\d{4}-\d{1,2}-\d{1,2}", v):
+        return ""
+    try:
+        return datetime.strptime(v, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        return ""
 
 
 def _detect_period(text: str) -> str:
@@ -115,7 +129,7 @@ def _load_stations() -> Dict[str, Dict]:
     try:
         import httpx
         url = "https://kyfw.12306.cn/otn/resources/js/framework/station_name.js"
-        resp = httpx.get(url, timeout=10.0, headers={"User-Agent": "Mozilla/5.0"})
+        resp = httpx.get(url, timeout=5.0, headers={"User-Agent": "Mozilla/5.0"})
         resp.raise_for_status()
 
         # 解析站点数据：@bjb|北京北|VAP|beijingbei|bjb|0
@@ -181,8 +195,9 @@ class TrainTicketAgent(SkillAgentBase):
         self.name = name
         self.model = model
 
-    @cached("train_ticket", ttl=300)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
+        # 不缓存整轮回复：追问和接口错误必须可重新执行，相对日期也须每天重新归一化。
+        # 成功余票结果由 _query_tickets 按完整实体缓存。
         print(f"[TRAIN-TICKET] reply() called", flush=True)
         if x is None:
             print(f"[TRAIN-TICKET] x is None", flush=True)
@@ -191,19 +206,30 @@ class TrainTicketAgent(SkillAgentBase):
         # 解析输入（统一经 msg_text 取文本；content 恒为 str）
         content = msg_text(x) if not isinstance(x, list) else msg_text(x[-1])
         print(f"[TRAIN-TICKET] input_text length: {len(content)}", flush=True)
+        context = {}
         try:
             data = json.loads(content)
-            context = data.get("context", {})
-            user_query = context.get("rewritten_query", "") or content
-            fast_params = data.get("fast_train_ticket")
-            print(f"[TRAIN-TICKET] parsed - user_query: {user_query}, fast_params: {fast_params}", flush=True)
+            if not isinstance(data, dict):
+                data = {}
+            context = data.get("context") or {}
+            if not isinstance(context, dict):
+                context = {}
+            user_query = context.get("rewritten_query") or data.get("query") or content
+            fast_params = self._context_travel_params(data, context)
         except json.JSONDecodeError:
             user_query = content
             fast_params = None
             print(f"[TRAIN-TICKET] JSON parse failed, using raw content", flush=True)
 
         # 分析查询意图
+        original = context.get("original_query") or ""
+        original_type = self._detect_query_type(original)
+        explicit_rail_question = not re.search(r"酒店|餐厅|机票|航班|费用|记账", original)
         query_type = self._detect_query_type(user_query)
+        if explicit_rail_question and original_type in {"price", "route_stations", "transfer"}:
+            query_type = original_type
+        elif explicit_rail_question and query_type == "transfer" and without_transfer_preferences(original) != original:
+            query_type = original_type
         print(f"[TRAIN-TICKET] query_type: {query_type}", flush=True)
 
         try:
@@ -212,24 +238,69 @@ class TrainTicketAgent(SkillAgentBase):
             elif query_type == "route_stations":
                 result = await self._query_route_stations(user_query)
             elif query_type == "transfer":
-                result = await self._query_transfer(user_query)
+                if fast_params:
+                    result = await self._query_transfer(user_query, fast_params)
+                else:
+                    result = await self._query_transfer(user_query)
             elif query_type == "price":
-                result = await self._query_price(user_query)
+                if re.search(r"余票|有票|班次|车次和|车次及", context.get("original_query") or user_query) and fast_params:
+                    result = await self._query_tickets(user_query, fast_params)
+                    if result.get("query_success"):
+                        result = {**result, "availability_status": "partial",
+                                  "answer": result["answer"] + "；票价暂不可查询，请在12306核验。"}
+                else:
+                    result = await self._query_price(user_query)
             else:
                 result = await self._query_tickets(user_query, fast_params)
-            print(f"[TRAIN-TICKET] result: {json.dumps(result, ensure_ascii=False)[:200]}", flush=True)
         except Exception as e:
-            logger.error(f"Train ticket query failed: {e}")
-            print(f"[TRAIN-TICKET] exception: {e}", flush=True)
+            logger.warning("Train query failed (%s)", type(e).__name__)
             result = {
                 "query_type": query_type,
                 "query_success": False,
-                "results": {"message": f"查询失败: {str(e)}"}
+                "results": {"message": "铁路信息查询失败，请稍后再试。"},
             }
 
+        result.setdefault("availability_status", "success" if result.get("query_success") else "failure")
+        result.setdefault("price_status", "unavailable")
         final_content = json.dumps(result, ensure_ascii=False)
         print(f"[TRAIN-TICKET] returning content length: {len(final_content)}", flush=True)
         return mk_msg(self.name, final_content)
+
+    @staticmethod
+    def _context_travel_params(data: Dict, context: Dict) -> Dict[str, Any]:
+        """逐字段使用明确实体，防止部分 fast 参数遮蔽已知目的地或日期。"""
+        sources = [
+            data.get("fast_train_ticket"), context.get("fast_train_ticket"),
+            context.get("key_entities"), data.get("key_entities"),
+        ]
+        aliases = {
+            "from": ("from", "origin", "from_city"),
+            "to": ("to", "destination", "to_city"),
+            "date": ("date", "start_date", "departure_date"),
+            "period": ("period",),
+        }
+        params = {}
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            for field, keys in aliases.items():
+                if params.get(field):
+                    continue
+                for key in keys:
+                    value = source.get(key)
+                    if isinstance(value, str) and value.strip():
+                        params[field] = value.strip()
+                        break
+            if not params.get("train_types") and isinstance(source.get("train_types"), (list, tuple)):
+                train_types = []
+                for value in source["train_types"]:
+                    if isinstance(value, str):
+                        value = value.strip().upper()
+                        if re.fullmatch(r"[GDCZTK]", value) and value not in train_types:
+                            train_types.append(value)
+                if train_types:
+                    params["train_types"] = train_types
+        return params
 
     def _detect_query_type(self, query: str) -> str:
         """检测查询类型"""
@@ -239,7 +310,7 @@ class TrainTicketAgent(SkillAgentBase):
             return "search_station"
         if re.search(r"(经停|停靠|经过|路过).*站", q):
             return "route_stations"
-        if re.search(r"(换乘|转车|中转)", q):
+        if re.search(r"(换乘|转车|中转)", without_transfer_preferences(q)):
             return "transfer"
         if re.search(r"(票价|多少钱|价格)", q):
             return "price"
@@ -247,7 +318,6 @@ class TrainTicketAgent(SkillAgentBase):
 
     async def _query_tickets(self, query: str, fast_params: Optional[Dict] = None) -> Dict[str, Any]:
         """查询余票"""
-        import asyncio
         try:
             import httpx
         except ImportError:
@@ -258,24 +328,57 @@ class TrainTicketAgent(SkillAgentBase):
             }
 
         # 提取出发地、目的地、日期
-        if fast_params:
-            from_city = fast_params.get("from", "")
-            to_city = fast_params.get("to", "")
-            date_str = fast_params.get("date", "")
+        params = self._context_travel_params({"fast_train_ticket": fast_params}, {})
+        if all(params.get(field) for field in ("from", "to", "date")):
+            from_city, to_city, date_str = "", "", ""
         else:
             from_city, to_city, date_str = self._extract_travel_params(query)
+        from_city = params.get("from") or from_city
+        to_city = params.get("to") or to_city
+        date_str = params.get("date") or date_str
 
-        if not from_city or not to_city:
+        missing = []
+        if not from_city:
+            missing.append("出发地")
+        if not to_city:
+            missing.append("目的地")
+        if not date_str:
+            missing.append("出发日期")
+        if missing:
+            question = f"请问{'、'.join(missing)}是什么？"
             return {
                 "query_type": "余票查询",
                 "query_success": False,
-                "answer": "请说明出发地和目的地，如：北京到上海的高铁",
-                "results": {"message": "请说明出发地和目的地，如：北京到上海的高铁"}
+                "needs_clarification": True,
+                "missing_info": missing,
+                "answer": question,
+                "results": {"message": question, "from": from_city, "to": to_city, "date": date_str}
+            }
+
+        date_str = _normalize_date_str(date_str)
+        if not date_str:
+            question = "请提供有效的出发日期，如：明天或2026-11-20。"
+            return {
+                "query_type": "余票查询",
+                "query_success": False,
+                "needs_clarification": True,
+                "missing_info": ["出发日期"],
+                "answer": question,
+                "results": {"message": question, "from": from_city, "to": to_city}
             }
 
         # 获取站点编码
-        from_code = _get_station_code(from_city)
-        to_code = _get_station_code(to_city)
+        try:
+            from_code, to_code = await asyncio.wait_for(
+                asyncio.to_thread(lambda: (_get_station_code(from_city), _get_station_code(to_city))),
+                timeout=STATION_LOOKUP_TIMEOUT_SEC,
+            )
+        except asyncio.TimeoutError:
+            return {
+                "query_type": "余票查询", "query_success": False,
+                "answer": "车站信息查询超时，请稍后再试",
+                "results": {"message": "车站信息查询超时，请稍后再试"}
+            }
 
         if not from_code:
             return {
@@ -292,44 +395,14 @@ class TrainTicketAgent(SkillAgentBase):
                 "results": {"message": f"未找到目的地: {to_city}"}
             }
 
-        # 统一日期写法（明早 / 今晚 / 7月31日 → YYYY-MM-DD）
-        date_str = _normalize_date_str(date_str) or date_str
-
-        # 处理日期
-        if not date_str:
-            date_str = datetime.now().strftime("%Y-%m-%d")
-        elif date_str in ["明天", "明日"]:
-            date_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-        elif date_str in ["后天"]:
-            date_str = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
-        elif re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
-            # 已是标准格式
-            pass
-        elif re.match(r"^\d{1,2}月\d{1,2}[日号]$", date_str):
-            date_str = self._convert_chinese_date(date_str)
-        elif re.match(r"^\d{1,2}$", date_str):
-            # 只有日期，补全月份和年份
-            day = int(date_str)
-            now = datetime.now()
-            if day < now.day:
-                # 如果日期已过，认为是下个月
-                next_month = now.month + 1
-                if next_month > 12:
-                    next_month = 1
-                    date_str = f"{now.year + 1}-{next_month:02d}-{day:02d}"
-                else:
-                    date_str = f"{now.year}-{next_month:02d}-{day:02d}"
-            else:
-                date_str = f"{now.year}-{now.month:02d}-{day:02d}"
-        else:
-            # 兜底：尝试用通用方法解析
-            date_str = self._convert_chinese_date(date_str) or datetime.now().strftime("%Y-%m-%d")
-
-        # 时段偏好（早班/晚班）：fast 参数优先，其次从原话里判断
-        period = (fast_params or {}).get("period") or _detect_period(query)
+        # 车型、时段均使用合并后的实体，不能因改写文本没有原关键词而丢失。
+        period = params.get("period") or _detect_period(query)
+        if period not in ("morning", "afternoon", "evening"):
+            period = ""
+        train_types = sorted(params.get("train_types", []))
 
         # 检查缓存
-        cache_key = f"tickets:{from_code}:{to_code}:{date_str}:{period}"  # 时段也要进 key，否则「明早」的筛选结果会被「明天」复用
+        cache_key = f"tickets:{from_code}:{to_code}:{date_str}:{period}:{','.join(train_types)}"
         cached = _get_cached(cache_key)
         if cached:
             print(f"[TRAIN-TICKET] returning cached result", flush=True)
@@ -344,11 +417,11 @@ class TrainTicketAgent(SkillAgentBase):
             "purpose_codes": "ADULT"
         }
         print(f"[TRAIN-TICKET] calling 12306 API: {url}", flush=True)
-        print(f"[TRAIN-TICKET] params: {params}", flush=True)
 
         try:
-            async with httpx.AsyncClient(
-                timeout=15.0,
+            # Cookie 初始化和余票请求共享总时限，不能各等一次完整超时。
+            async with asyncio.timeout(TICKET_REQUEST_TIMEOUT_SEC), httpx.AsyncClient(
+                timeout=httpx.Timeout(10.0, connect=4.0),
                 follow_redirects=True,
                 headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -369,13 +442,13 @@ class TrainTicketAgent(SkillAgentBase):
                 data = resp.json()
                 print(f"[TRAIN-TICKET] response data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}", flush=True)
         except Exception as e:
-            logger.warning(f"12306 API request failed: {e}")
-            print(f"[TRAIN-TICKET] API exception: {e}", flush=True)
+            logger.warning("12306 request failed (%s)", type(e).__name__)
             return {
                 "query_type": "余票查询",
                 "query_success": False,
+                "availability_status": "failure",
                 "answer": "12306接口暂时不可用，请稍后再试",
-                "results": {"message": f"12306接口暂时不可用: {e}"}
+                "results": {"message": "12306接口暂时不可用，请稍后再试"}
             }
 
         # 解析结果
@@ -388,15 +461,20 @@ class TrainTicketAgent(SkillAgentBase):
                     "results": {"message": "查询失败，请稍后再试"}
                 }
 
-            station_map = data["data"].get("map", {})
-            results = data["data"].get("result", [])
+            payload = data["data"]
+            station_map = payload.get("map", {})
+            results = payload.get("result")
+            if not isinstance(results, list) or not isinstance(station_map, dict):
+                raise ValueError("invalid rail response layout")
             print(f"[TRAIN-TICKET] station_map keys: {list(station_map.keys())[:5]}", flush=True)
             print(f"[TRAIN-TICKET] results count: {len(results)}", flush=True)
 
             trains = []
-            for item in results[:15]:  # 最多显示15条
+            for item in results:  # 先筛全部返回车次，再限制展示条数，避免漏掉后面的匹配车次。
+                if not isinstance(item, str):
+                    continue
                 parts = item.split("|")
-                if len(parts) < 32:
+                if len(parts) < 33:
                     continue
 
                 train_no = parts[3]  # 车次
@@ -447,57 +525,77 @@ class TrainTicketAgent(SkillAgentBase):
                     "no_seat": no_seat
                 })
 
-            # 「明早」这类诉求：优先只留上午发车的车次；没有则保留全部并说明
-            period_filtered = False
+            if results and not trains:
+                raise ValueError("no rail rows could be decoded")
+            decode_partial = len(trains) != len(results)
             total_before = len(trains)
-            if trains and period == "morning":
-                morning = [t for t in trains if (t.get("depart_time") or "99:99") < "12:00"]
-                if morning:
-                    trains = morning
-                    # 只有真的筛掉了车次才标注「上午」，否则所有车次本来就在上午
-                    period_filtered = len(morning) < total_before
-            elif trains and period == "evening":
-                evening = [t for t in trains if (t.get("depart_time") or "00:00") >= "17:00"]
-                if evening:
-                    trains = evening
-                    period_filtered = len(evening) < total_before
+            if train_types:
+                trains = [t for t in trains if t["train_no"][:1] in train_types]
+            period_bounds = {
+                "morning": ("00:00", "12:00"),
+                "afternoon": ("12:00", "17:00"),
+                "evening": ("17:00", "24:00"),
+            }
+            if period in period_bounds:
+                lower, upper = period_bounds[period]
+                trains = [t for t in trains if lower <= (t.get("depart_time") or "") < upper]
+            matched_total = len(trains)
+            trains = trains[:15]
 
             # 构建摘要
             summary_parts = [f"{from_city}→{to_city} ({date_str})"]
             if trains:
-                label = {"morning": "上午", "evening": "晚间"}.get(period) if period_filtered else ""
-                summary_parts.append(f"共{len(trains)}趟{label + '列车' if label else '列车'}")
+                period_label = {"morning": "上午", "afternoon": "下午", "evening": "晚间"}.get(period, "")
+                type_labels = {"G": "高铁", "D": "动车", "C": "城际", "K": "快速", "T": "特快", "Z": "直达"}
+                type_label = "/".join(type_labels[t] for t in train_types)
+                summary_parts.append(f"共{matched_total}趟{period_label}{type_label}列车")
+                if matched_total > len(trains):
+                    summary_parts.append(f"展示前{len(trains)}趟")
                 # 列出前3趟
                 for t in trains[:3]:
                     summary_parts.append(f"{t['train_no']} {t['depart_time']}-{t['arrive_time']} 二等座{t['second_class']}")
+            elif total_before and (train_types or period):
+                summary_parts.append("未找到符合所选车型或时段的列车，不代表其他车次无余票")
             else:
                 summary_parts.append("暂无余票")
+            if decode_partial:
+                summary_parts.append("部分车次数据无法读取，结果不完整")
 
             summary_text = "；".join(summary_parts)
             result = {
                 "query_type": "余票查询",
                 "query_success": True,
+                "availability_status": "partial" if decode_partial else "success",
+                "price_status": "unavailable",
                 "answer": summary_text,
                 "proactive_question": f"需要我帮你看看{to_city}的住宿和天气吗？",
                 "results": {
                     "summary": summary_text,
                     "trains": trains,
                     "total": len(trains),
+                    "matched_total": matched_total,
+                    "unfiltered_total": total_before,
+                    "train_types": train_types,
+                    "period": period,
                     "date": date_str,
+                    "queried_at": datetime.fromtimestamp(time.time(), tz=timezone.utc).isoformat(),
+                    "sources": [{"title": "铁路12306", "url": OFFICIAL_RAIL_SITE}],
                     "from": from_city,
                     "to": to_city
                 }
             }
 
             # 缓存结果
-            _set_cached(cache_key, result)
+            if not decode_partial:
+                _set_cached(cache_key, result)
             return result
 
         except Exception as e:
-            logger.error(f"Parse 12306 response failed: {e}")
+            logger.warning("Rail data parse failed (%s)", type(e).__name__)
             return {
                 "query_type": "余票查询",
                 "query_success": False,
+                "availability_status": "failure",
                 "answer": "数据解析失败，请稍后再试",
                 "results": {"message": "数据解析失败"}
             }
@@ -510,7 +608,12 @@ class TrainTicketAgent(SkillAgentBase):
             return {
                 "query_type": "票价查询",
                 "query_success": False,
-                "results": {"message": "请说明车次，如：G1次列车多少钱"}
+                "availability_status": "unavailable",
+                "price_status": "unavailable",
+                "results": {
+                    "message": "当前未接入官方票价，请在12306按车次、日期和席别查询。",
+                    "sources": [{"title": "铁路12306", "url": OFFICIAL_RAIL_SITE}],
+                }
             }
 
         train_no = match.group(1)
@@ -520,10 +623,12 @@ class TrainTicketAgent(SkillAgentBase):
 
         return {
             "query_type": "票价查询",
-            "query_success": True,
+            "query_success": False,
+            "availability_status": "unavailable",
+            "price_status": "unavailable",
             "results": {
-                "summary": f"{train_no}次列车票价查询",
-                "message": "票价查询功能正在开发中，请访问12306官网查询",
+                "message": f"暂未获取 {train_no} 次列车的官方票价，请前往12306核验。",
+                "sources": [{"title": "铁路12306", "url": OFFICIAL_RAIL_SITE}],
                 "train_no": train_no,
                 "from": from_city,
                 "to": to_city
@@ -571,17 +676,23 @@ class TrainTicketAgent(SkillAgentBase):
 
         return {
             "query_type": "经停站查询",
-            "query_success": True,
+            "query_success": False,
+            "availability_status": "unavailable",
             "results": {
-                "summary": f"{train_no}次列车经停站查询",
-                "message": "经停站查询功能正在开发中，请访问12306官网查询",
+                "message": "暂未获取经停站信息，请前往12306查询。",
+                "sources": [{"title": "铁路12306", "url": OFFICIAL_RAIL_SITE}],
                 "train_no": train_no
             }
         }
 
-    async def _query_transfer(self, query: str) -> Dict[str, Any]:
+    async def _query_transfer(self, query: str, fast_params: Optional[Dict] = None) -> Dict[str, Any]:
         """中转换乘查询"""
-        from_city, to_city, date_str = self._extract_travel_params(query)
+        params = self._context_travel_params({"fast_train_ticket": fast_params}, {})
+        if not all(params.get(key) for key in ("from", "to", "date")):
+            for key, value in zip(("from", "to", "date"), self._extract_travel_params(query)):
+                if value and not params.get(key):
+                    params[key] = value
+        from_city, to_city, date_str = (params.get(key, "") for key in ("from", "to", "date"))
 
         if not from_city or not to_city:
             return {
@@ -592,12 +703,14 @@ class TrainTicketAgent(SkillAgentBase):
 
         return {
             "query_type": "中转换乘",
-            "query_success": True,
+            "query_success": False,
+            "availability_status": "unavailable",
             "results": {
-                "summary": f"{from_city}→{to_city}中转换乘方案",
-                "message": "中转换乘查询功能正在开发中，请访问12306官网查询",
+                "message": "暂未获取中转换乘方案，请前往12306查询。",
+                "sources": [{"title": "铁路12306", "url": OFFICIAL_RAIL_SITE}],
                 "from": from_city,
-                "to": to_city
+                "to": to_city,
+                "date": _normalize_date_str(date_str),
             }
         }
 

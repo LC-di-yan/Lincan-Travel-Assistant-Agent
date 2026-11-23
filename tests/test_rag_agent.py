@@ -11,6 +11,7 @@
   python tests/test_rag_agent.py
 """
 import sys
+import pytest
 import os
 import asyncio
 import json
@@ -35,6 +36,8 @@ _spec.loader.exec_module(_mod)
 RAGKnowledgeAgent = _mod.RAGKnowledgeAgent
 
 
+@pytest.mark.integration
+@pytest.mark.usefixtures("live_model")
 async def test_rag_agent():
     """测试RAG知识库智能体"""
 

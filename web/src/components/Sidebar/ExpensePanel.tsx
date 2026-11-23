@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react'
 import { fetchExpenses } from '../../api/client'
 import { useChatStore } from '../../store/chatStore'
 import { ExpenseCategoryIcon } from '../Icons'
+import { originalAmount } from '../../utils/expenseEvidence'
 
 interface ExpenseItem {
   id?: string
@@ -10,30 +11,31 @@ interface ExpenseItem {
   amount?: number
   description?: string
   date?: string
+  currency?: string
 }
 
-export function ExpensePanel() {
+export function ExpensePanel({ personalAvailable = false }: { personalAvailable?: boolean }) {
   const userId = useChatStore((s) => s.userId)
   const sessionId = useChatStore((s) => s.sessionId)
   const [expenses, setExpenses] = useState<ExpenseItem[]>([])
-  const [meta, setMeta] = useState({ total: 0, count: 0 })
-  const [loading, setLoading] = useState(false)
+  const [meta, setMeta] = useState<{ totals: Record<string, number>; count: number }>({ totals: {}, count: 0 })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [updated, setUpdated] = useState('')
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await fetchExpenses(userId, sessionId)
+  const load = useCallback(() => fetchExpenses(userId, sessionId)
+    .then((data) => {
       const list = (data.expenses || []) as ExpenseItem[]
       setExpenses(list)
+      setError(false)
+      setUpdated(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }))
       setMeta({
-        total: typeof data.total === 'number' ? data.total : list.reduce((s, e) => s + (e.amount || 0), 0),
+        totals: data.totals_by_currency || {},
         count: typeof data.count === 'number' ? data.count : list.length,
       })
-    } catch {
-      /* keep last state */
-    }
-    setLoading(false)
-  }, [userId, sessionId])
+    })
+    .catch(() => setError(true))
+    .finally(() => setLoading(false)), [userId, sessionId])
 
   useEffect(() => { load() }, [load])
 
@@ -43,15 +45,7 @@ export function ExpensePanel() {
     return () => window.removeEventListener('expense-updated', handler)
   }, [load])
 
-  const listTotal = expenses.reduce((sum, e) => sum + (e.amount || 0), 0)
-  const total = meta.count > 0 ? meta.total : listTotal
   const count = meta.count > 0 ? meta.count : expenses.length
-  const byCategory: Record<string, number> = {}
-  for (const e of expenses) {
-    const cat = e.category || '其他'
-    byCategory[cat] = (byCategory[cat] || 0) + (e.amount || 0)
-  }
-  const categories = Object.entries(byCategory).sort(([, a], [, b]) => b - a)
 
   return (
     <div className="p-4">
@@ -62,15 +56,18 @@ export function ExpensePanel() {
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={() => { setLoading(true); void load() }}
           disabled={loading}
           aria-label="刷新费用"
           title="刷新费用"
-          className="flex h-10 w-10 items-center justify-center rounded-[2px] text-ink-3 hover:bg-paper-sunken hover:text-ink"
+          className="flex size-11 items-center justify-center rounded-input text-ink-3 hover:bg-paper-sunken hover:text-ink"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
         </button>
       </div>
+      {personalAvailable && <a href="#/personal/expenses" className="inline-flex min-h-11 items-center text-xs font-semibold text-route underline">查看完整账本</a>}
+      {error && <p role="alert" className="mb-2 text-xs text-err">账本读取失败。{updated ? '屏幕上仅保留上次结果。' : '不能据此判断没有费用。'}</p>}
+      {updated && <p className="text-xs text-ink-3">上次读取：{updated}（北京时间）</p>}
 
       <div className="border-y border-rule py-3">
         {loading && expenses.length === 0 ? (
@@ -78,32 +75,15 @@ export function ExpensePanel() {
             <div className="skeleton mx-auto mb-1.5 h-6 w-28" />
             <div className="skeleton mx-auto h-3 w-16" />
           </>
-        ) : (
+        ) : updated ? (
           <>
-            <div className="font-mono text-[24px] font-semibold tabular text-accent">{'¥'}{total.toFixed(2)}</div>
+            {Object.entries(meta.totals).map(([currency, total]) => <div key={currency} className="break-words font-mono text-[20px] font-semibold tabular text-route">{originalAmount(total, currency)}</div>)}
+            {Object.keys(meta.totals).length === 0 && count > 0 && <p className="text-xs text-ink-3">未返回按币种汇总。</p>}
+            {Object.keys(meta.totals).length > 1 && <p className="text-[10px] text-ink-3">按原币种分别汇总，未换算汇率</p>}
             <div className="mt-1 text-[10px] text-ink-3">{count} 笔支出</div>
           </>
-        )}
+        ) : null}
       </div>
-
-      {categories.length > 0 && (
-        <div className="border-b border-rule py-3">
-          <div className="mb-2 font-mono text-[9px] tracking-[0.14em] text-ink-3">BY CATEGORY</div>
-          {categories.map(([cat, amt]) => {
-            const pct = total > 0 ? Math.round((amt / total) * 100) : 0
-            return (
-              <div key={cat} className="flex items-center gap-2 py-1 text-[11px]">
-                <ExpenseCategoryIcon kind={cat} size={12} className="w-4 shrink-0 text-ink-3" />
-                <span className="w-10 shrink-0 text-ink-2">{cat}</span>
-                <div className="h-1 flex-1 bg-paper-sunken">
-                  <div className="h-full bg-accent" style={{ width: pct + '%' }} />
-                </div>
-                <span className="w-14 text-right font-mono tabular text-ink">{'¥'}{amt.toFixed(0)}</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
 
       {loading && expenses.length === 0 ? (
         <div className="space-y-3 pt-3">
@@ -114,7 +94,7 @@ export function ExpensePanel() {
             </div>
           ))}
         </div>
-      ) : expenses.length === 0 ? (
+      ) : expenses.length === 0 ? (!error &&
         <div className="py-8 text-center">
           <p className="text-[12px] text-ink-2">暂无费用记录</p>
           <p className="mt-1 text-[10px] text-ink-3">在对话里说「记一笔打车费 50」试试</p>
@@ -127,8 +107,9 @@ export function ExpensePanel() {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-ink-2">{item.description || item.category}</div>
                 {item.date && <div className="font-mono text-[9px] text-ink-3">{item.date}</div>}
+                {item.id && <div className="select-all break-all font-mono text-[9px] text-ink-3" title="费用编号">编号：{item.id}</div>}
               </div>
-              <span className="whitespace-nowrap font-mono tabular text-ink">{'¥'}{(item.amount || 0).toFixed(2)}</span>
+              <span className="font-mono tabular text-ink">{originalAmount(item.amount, item.currency)}</span>
             </div>
           ))}
         </div>

@@ -1,13 +1,18 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Markdown } from '../Markdown'
-import { CardShell } from './CardShell'
+import { EvidenceBand, FlightResult } from './FlightResult'
+import { evidenceSources, evidenceText } from '../../utils/flightEvidence'
+import { asRecord } from '../../utils/resultData'
 import { getAgentLabel } from '../Icons'
 
 export function KnowledgeCard({ data, agentName }: { data: Record<string, unknown>; agentName?: string }) {
   const [showSources, setShowSources] = useState(false)
   const rawAnswer = (data.answer || data.content || data.result || data.message) as string | undefined
-  const sources = data.sources as { document?: string; similarity?: number; content?: string }[] | undefined
+  const sources = Array.isArray(data.sources) ? data.sources.map(asRecord) : []
+  const entries = sources.map((row, i) => ({
+    title: evidenceText(row.document) || evidenceText(row.title) || `文档 ${i + 1}`, url: row.url, content: evidenceText(row.content),
+  }))
   const label = agentName ? getAgentLabel(agentName) : '知识库回答'
 
   let answer = rawAnswer
@@ -28,11 +33,8 @@ export function KnowledgeCard({ data, agentName }: { data: Record<string, unknow
   if (!answer) return null
 
   return (
-    <CardShell agentName={agentName}>
-      <div className="border-b border-rule px-4 py-3">
-        <div className="font-mono text-[10px] tracking-[0.14em] text-accent">ALIGO / KNOWLEDGE</div>
-        <h4 className="mt-1 text-[15px] font-semibold text-ink">{label}</h4>
-      </div>
+    <FlightResult agent={agentName || 'knowledge'} kind="KNOWLEDGE" title={label}>
+      {entries.length > 0 && <EvidenceBand label="证据" status="本轮参考资料" tone="neutral" sources={evidenceSources(entries)} />}
 
       <div className="px-4 py-3">
         <div className="markdown max-w-none overflow-x-auto break-words">
@@ -52,15 +54,12 @@ export function KnowledgeCard({ data, agentName }: { data: Record<string, unknow
             </button>
             {showSources && (
               <div className="mt-2">
-                {sources.map((s, i) => (
+                {entries.map((s, i) => (
                   <div key={i} className="border-b border-rule py-2 text-[11px] last:border-0">
                     <div className="flex items-baseline gap-2">
-                      <span className="font-medium text-ink">{s.document || '文档 ' + (i + 1)}</span>
-                      {s.similarity != null && (
-                        <span className="font-mono tabular text-accent">{'相似度 ' + (s.similarity * 100).toFixed(1) + '%'}</span>
-                      )}
+                      <span className="font-medium text-ink">{s.title}</span>
                     </div>
-                    {s.content && <p className="mt-1 line-clamp-2 leading-5 text-ink-3">{s.content}</p>}
+                    {s.content && <p className="mt-1 whitespace-pre-wrap leading-5 text-ink-3">{s.content}</p>}
                   </div>
                 ))}
               </div>
@@ -68,6 +67,6 @@ export function KnowledgeCard({ data, agentName }: { data: Record<string, unknow
           </div>
         )}
       </div>
-    </CardShell>
+    </FlightResult>
   )
 }
