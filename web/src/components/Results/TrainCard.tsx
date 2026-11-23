@@ -1,115 +1,70 @@
-import { CardShell } from './CardShell'
+import { useId, useState } from 'react'
+import { asRecord } from '../../utils/resultData'
+import { activityTime, beijingQueryTime, evidenceSources, evidenceText, seatStatus } from '../../utils/flightEvidence'
+import { EvidenceBand, FlightResult, ResultDisclosure } from './FlightResult'
 
-type Train = {
-  train_no?: string
-  train_type?: string
-  from_station?: string
-  to_station?: string
-  depart_time?: string
-  arrive_time?: string
-  duration?: string
-  second_class?: string
-  first_class?: string
-  business?: string
-  hard_sleeper?: string
-  soft_sleeper?: string
-  hard_seat?: string
-  no_seat?: string
-}
-
-function SeatChip({ label, value }: { label: string; value?: string }) {
-  const v = (value || '').trim()
-  const has = v && v !== '无' && v !== '--' && v !== '*'
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-[2px] border px-1.5 py-0.5 text-[11px] ${
-        has ? 'border-rule bg-paper text-ink' : 'border-rule/60 bg-transparent text-ink-3'
-      }`}
-    >
-      <span className="text-ink-2">{label}</span>
-      <span className={has ? 'font-medium' : ''}>{has ? v : '无'}</span>
-    </span>
-  )
-}
+const RAIL = 'https://www.12306.cn/'
+const SHOW = 3
+const seats = [
+  ['second_class', '二等座'], ['first_class', '一等座'], ['business', '商务座'],
+  ['hard_sleeper', '硬卧'], ['soft_sleeper', '软卧'], ['hard_seat', '硬座'], ['no_seat', '无座'],
+] as const
 
 export function TrainCard({ data }: { data: Record<string, unknown> }) {
-  const results = ((data.results as Record<string, unknown>) || data) as Record<string, unknown>
-  const trains = (results.trains || []) as Train[]
-  const date = (results.date as string) || ''
-  const from = (results.from as string) || ''
-  const to = (results.to as string) || ''
-  const summary = (results.summary as string) || (data.answer as string) || ''
-  const total = (results.total as number) || trains.length
-  const expanded = Boolean(results.expanded || data.expanded)
+  const results = asRecord(data.results ?? data)
+  const unavailable = data.availability_status === 'unavailable'
+  const failed = data.availability_status === 'failure' || (data.query_success === false && !unavailable)
+  const partial = data.availability_status === 'partial'
+  const isAvailability = Array.isArray(results.trains) && !unavailable && !failed
+  const trains = isAvailability ? (results.trains as unknown[]).map(asRecord) : []
+  const from = evidenceText(results.from)
+  const to = evidenceText(results.to)
+  const date = evidenceText(results.date)
+  const total = typeof results.total === 'number' && results.total >= trains.length ? results.total : trains.length
+  const summary = evidenceText(results.summary) || evidenceText(data.answer)
+  const timestamp = evidenceText(results.queried_at)
+  const beijing = beijingQueryTime(timestamp)
+  const sources = evidenceSources(results.sources, data.sources)
+  const hasRailSource = sources.some(source => /12306/i.test(source.title) || source.url?.includes('12306.cn'))
+  const shownSources = isAvailability && !hasRailSource ? [...sources, { title: '铁路12306', url: RAIL }] : sources
+  const expandedByRequest = Boolean(results.expanded || data.expanded)
+  const [expanded, setExpanded] = useState(false)
+  const id = useId()
+  const shown = expanded || expandedByRequest ? trains : trains.slice(0, SHOW)
 
-  return (
-    <CardShell agentName="train_ticket">
-      <div className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-3">
-        <div>
-          <div className="mono-label text-[10px] tracking-[0.18em] text-ink-3">ALIGO / RAIL</div>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-[15px] font-medium text-ink">
-              {from && to ? `${from} → ${to}` : '火车票'}
-            </span>
-            {date && (
-              <span className="mono-label rounded-[2px] border border-rule px-1.5 py-0.5 text-[11px] text-ink-2">
-                {date}
-              </span>
-            )}
-          </div>
+  return <FlightResult agent="train_ticket" kind="铁路车票" title={from && to ? `${from} → ${to}` : '铁路查询'}
+    meta={<>{date && <span>{date}</span>}
+      <span>{unavailable ? '数据暂不可用' : failed ? '查询失败' : partial ? '部分数据可用' : '铁路查询结果'}</span>
+      {isAvailability && <span>{total} 趟</span>}</>}>
+    <EvidenceBand label="待核验" status="官方票价未核验" sources={shownSources}>
+      {isAvailability && <p>{beijing ? `查询时间 ${beijing}（北京时间）；`
+        : timestamp ? `查询时间原文：${timestamp}；` : ''}席别数据并非价格或订票凭证。</p>}
+      <a className="fdr-inline-link" href={RAIL} target="_blank" rel="noopener noreferrer">前往12306核验</a>
+    </EvidenceBand>
+    {summary && <p className="fdr-summary">{summary}</p>}
+    {trains.length === 0 && !summary && <p className="fdr-empty">{isAvailability ? '本次未查到符合条件的车次。' : '暂无可核验数据。'}</p>}
+    {trains.length > 0 && <div className="fdr-section-head">
+      <h4>车次与席别 <small>{expandedByRequest ? '已展开结果' : `显示 ${shown.length} / ${trains.length} 趟`}</small></h4>
+      {!expandedByRequest && trains.length > SHOW && <ResultDisclosure controls={id} open={expanded}
+        onToggle={() => setExpanded(!expanded)}>{expanded ? '收起车次' : `展开其余 ${trains.length - SHOW} 趟`}</ResultDisclosure>}
+    </div>}
+    <ul className="fdr-trains" id={id}>{shown.map((train, index) => {
+      const trainNo = evidenceText(train.train_no)
+      return <li key={index} className="fdr-train">
+        <div className="fdr-train-id"><strong>{trainNo || '车次未提供'}</strong>
+          <small>{[evidenceText(train.train_type), evidenceText(train.duration)].filter(Boolean).join(' · ')}</small>
         </div>
-        <div className="text-right">
-          <div className="text-[13px] text-ink">{total} 趟</div>
-          <div className="text-[11px] text-ink-3">{expanded ? '已展开全部' : '12306 实时余票'}</div>
+        <div className="fdr-train-track" aria-label="出发至到达">
+          <div><span>出发</span><strong>{activityTime(train.depart_time) || '时刻待核验'}</strong><small>{evidenceText(train.from_station) || '车站未提供'}</small></div>
+          <i aria-hidden="true" />
+          <div><span>到达</span><strong>{activityTime(train.arrive_time) || '时刻待核验'}</strong><small>{evidenceText(train.to_station) || '车站未提供'}</small></div>
         </div>
-      </div>
-
-      {trains.length === 0 ? (
-        <div className="px-4 py-6 text-[13px] text-ink-2">
-          {summary || '该日期暂无余票，可以换个日期或看看其他交通方式。'}
-        </div>
-      ) : (
-        <ul
-          className={
-            expanded
-              ? 'divide-y divide-rule/70'
-              : 'max-h-[520px] divide-y divide-rule/70 overflow-y-auto'
-          }
-        >
-          {trains.map((t, i) => (
-            <li key={`${t.train_no}-${i}`} className="px-4 py-3">
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="text-[14px] font-medium text-ink">{t.train_no}</span>
-                <span className="text-[11px] text-ink-3">{t.train_type}</span>
-                <span className="text-[13px] text-ink">
-                  {t.depart_time} → {t.arrive_time}
-                </span>
-                <span className="text-[11px] text-ink-3">{t.duration}</span>
-                <span className="text-[11px] text-ink-3">
-                  {t.from_station} → {t.to_station}
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <SeatChip label="二等座" value={t.second_class} />
-                <SeatChip label="一等座" value={t.first_class} />
-                <SeatChip label="商务座" value={t.business} />
-                {(t.hard_sleeper && t.hard_sleeper !== '无') && (
-                  <SeatChip label="硬卧" value={t.hard_sleeper} />
-                )}
-                {(t.soft_sleeper && t.soft_sleeper !== '无') && (
-                  <SeatChip label="软卧" value={t.soft_sleeper} />
-                )}
-                {(t.hard_seat && t.hard_seat !== '无') && <SeatChip label="硬座" value={t.hard_seat} />}
-                {(t.no_seat && t.no_seat !== '无') && <SeatChip label="无座" value={t.no_seat} />}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {summary && trains.length > 0 && !expanded && (
-        <div className="border-t border-rule px-4 py-2 text-[11px] text-ink-3">{summary}</div>
-      )}
-    </CardShell>
-  )
+        <dl className="fdr-seats">{seats.map(([key, name], i) => {
+          const value = seatStatus(train[key])
+          if (i > 2 && (!value.known || value.text === '无')) return null
+          return <div key={key} data-unknown={!value.known || undefined}><dt>{name}</dt><dd>{value.text}</dd></div>
+        })}</dl>
+      </li>
+    })}</ul>
+  </FlightResult>
 }

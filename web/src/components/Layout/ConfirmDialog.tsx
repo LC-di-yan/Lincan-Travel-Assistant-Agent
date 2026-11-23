@@ -25,10 +25,18 @@ export function ConfirmDialog({
   const descId = useId()
   const ref = useRef<HTMLDivElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const submitted = useRef(false)
 
   useEffect(() => {
     if (!open) return
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    submitted.current = false
     cancelRef.current?.focus()
+    return () => { if (trigger?.isConnected) trigger.focus() }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
@@ -67,7 +75,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="w-full max-w-sm rounded-[2px] border border-rule bg-paper-raised p-5 shadow-lg"
+        className="w-full max-w-sm rounded-card border border-rule border-t-[3px] border-t-route bg-paper-raised p-5 shadow-lg"
       >
         <h2 id={titleId} className="font-display text-xl text-ink">{title}</h2>
         <p id={descId} className="mt-2 text-sm leading-6 text-ink-2">{description}</p>
@@ -82,7 +90,7 @@ export function ConfirmDialog({
           </button>
           <button
             type="button"
-            onClick={() => { onConfirm(); onClose() }}
+            onClick={() => { if (submitted.current) return; submitted.current = true; onConfirm(); onClose() }}
             className={`h-11 rounded-[2px] px-4 text-sm font-semibold text-paper ${danger ? 'bg-err hover:opacity-90' : 'bg-accent hover:bg-accent-hover'}`}
           >
             {confirmLabel}

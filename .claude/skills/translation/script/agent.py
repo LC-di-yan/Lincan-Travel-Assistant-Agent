@@ -8,8 +8,9 @@ from agentscope.message import Msg
 from typing import Optional, Union, List
 import json
 import logging
-import requests
-from urllib.parse import quote
+import asyncio
+import httpx
+from utils.provider_http import provider_client
 
 from utils.llm_response import extract_llm_json
 from utils.as_compat import mk_msg, msg_text, as_messages
@@ -106,22 +107,20 @@ class TranslationAgent(SkillAgentBase):
 
         # Call MyMemory API
         try:
-            result = self._translate(text, source_lang, target_lang)
+            result = await self._translate(text, source_lang, target_lang)
         except Exception as e:
-            logger.error(f"Translation API failed: {e}")
-            result = {"action": "error", "answer": f"翻译失败: {str(e)}"}
+            logger.warning("Translation API failed (%s)", type(e).__name__)
+            result = {"action": "error", "answer": "翻译服务暂不可用，请稍后再试。"}
 
         return mk_msg(self.name, result)
 
-    def _translate(self, text: str, source_lang: str, target_lang: str) -> dict:
+    async def _translate(self, text: str, source_lang: str, target_lang: str) -> dict:
         """调用 MyMemory API 翻译"""
         langpair = f"{source_lang}|{target_lang}"
-        encoded_text = quote(text[:500])  # MyMemory limit
-        url = f"{API_BASE}?q={encoded_text}&langpair={quote(langpair)}"
-
-        resp = requests.get(url, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
+        async with asyncio.timeout(15), provider_client("translation", timeout=httpx.Timeout(12, connect=3, pool=2)) as client:
+            resp = await client.get(API_BASE, params={"q": text[:500], "langpair": langpair})
+            resp.raise_for_status()
+            data = resp.json()
 
         translated = data.get("responseData", {}).get("translatedText", "")
         match_quality = data.get("responseData", {}).get("match", 0)

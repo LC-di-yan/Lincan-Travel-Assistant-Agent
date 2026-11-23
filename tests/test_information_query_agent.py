@@ -17,6 +17,7 @@
   此测试需要网络连接。如果网络受限或API服务不可达，测试可能失败。
 """
 import sys
+import pytest
 import os
 import asyncio
 import json
@@ -41,6 +42,8 @@ _spec.loader.exec_module(_mod)
 InformationQueryAgent = _mod.InformationQueryAgent
 
 
+@pytest.mark.integration
+@pytest.mark.usefixtures("live_model")
 async def test_information_query_agent():
     """测试信息查询智能体"""
 

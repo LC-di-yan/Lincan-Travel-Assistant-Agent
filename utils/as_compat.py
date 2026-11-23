@@ -208,6 +208,9 @@ def chat_text(resp: Any, fallback: str = "") -> str:
     t = _safe_getattr(resp, "text")
     if isinstance(t, str) and t.strip():
         return t
+    content = _safe_getattr(resp, "content")
+    if isinstance(content, list) and not content:
+        return fallback
     if _safe_getattr(resp, "get_text_content") is not None or _safe_getattr(resp, "content") is not None:
         return msg_text(resp, fallback=fallback)
     if isinstance(resp, dict):
@@ -231,7 +234,7 @@ def build_chat_model(cfg: dict, stream: bool = False, **overrides: Any):
         **(cfg.get("overrides") or {}),
         **{k: v for k, v in overrides.items() if k in ("max_tokens", "temperature", "top_p")},
     }
-    client_kwargs = cfg.get("client_kwargs") or {}
+    client_kwargs = dict(cfg.get("client_kwargs") or {})
     api_key = cfg.get("api_key")
     model_name = overrides.get("model", cfg.get("model_name"))
     base_url = cfg.get("base_url")
@@ -240,6 +243,14 @@ def build_chat_model(cfg: dict, stream: bool = False, **overrides: Any):
     major = int(getattr(agentscope, "__version__", "1").split(".")[0])
     if major >= 2:
         from agentscope.credential import OpenAICredential
+        from utils.provider_http import shared_client
+
+        if "http_client" not in client_kwargs:
+            # Preserve the SDK per-model timeout. The lifecycle owns the shared
+            # HTTP transport; models retain their own formatter/failover state.
+            client = shared_client(f"openai:{base_url}", follow_redirects=True)
+            if client is not None:
+                client_kwargs["http_client"] = client
 
         params_kwargs = {}
         if generate_kwargs.get("max_tokens") is not None:

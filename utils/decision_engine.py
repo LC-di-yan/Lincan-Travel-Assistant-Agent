@@ -61,7 +61,7 @@ class DecisionEngine:
     def __init__(
         self,
         api_key: str,
-        base_url: str = "https://tokenrhythm.studio/v1",
+        base_url: str = "https://example.invalid/v1",
         model: str = "NeoHorse-Jev-4B",
         mode: str = "shadow",
         timeout: float = 8.0,
@@ -95,7 +95,7 @@ class DecisionEngine:
         return cls.from_config({
             "mode": os.environ.get("ALIGO_DECISION_MODE", "off"),
             "api_key": os.environ.get("NEOHOUSE_API_KEY", ""),
-            "base_url": os.environ.get("NEOHOUSE_BASE_URL", "https://tokenrhythm.studio/v1"),
+            "base_url": os.environ.get("NEOHOUSE_BASE_URL", "https://example.invalid/v1"),
             "model": os.environ.get("NEOHOUSE_MODEL", "NeoHorse-Jev-4B"),
             "timeout": float(os.environ.get("ALIGO_DECISION_TIMEOUT", "8")),
             "backend": os.environ.get("ALIGO_DECISION_BACKEND", "custom"),
@@ -111,7 +111,7 @@ class DecisionEngine:
             return None
         return cls(
             api_key=key,
-            base_url=cfg.get("base_url") or "https://tokenrhythm.studio/v1",
+            base_url=cfg.get("base_url") or "https://example.invalid/v1",
             model=cfg.get("model") or "NeoHorse-Jev-4B",
             mode=mode,
             timeout=float(cfg.get("timeout") or 8.0),

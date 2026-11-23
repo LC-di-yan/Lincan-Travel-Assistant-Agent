@@ -23,12 +23,12 @@ logger = logging.getLogger(__name__)
 # 形如 8-9折 / 4小时 / 500元 / 30个自然日；含区间（8-9折、7-14天）
 UNIT_NUM_RE = re.compile(
     r"\d[\d,，]*(?:\.\d+)?\s*(?:[-—~至到]\s*\d[\d,，]*(?:\.\d+)?)?\s*"
-    r"(?:元|万元|小时|天|日|个工作日|工作日|自然日|公里|千米|%|％|折|分钟|个月|人|座|米|公斤|斤|次|周)"
+    r"(?:元|万元|小时|天|日|个工作日|个自然日|工作日|自然日|公里|千米|%|％|折|分钟|个月|人|座|米|公斤|斤|次|周)"
 )
 
 
 def _norm_num(tok: str) -> str:
-    return tok.replace(",", "").replace("，", "").replace(" ", "")
+    return re.sub(r"[\s,，]", "", tok)
 
 
 def _norm_text(t: str) -> str:
@@ -51,10 +51,10 @@ def verify_numbers(answer: str, source_text: str) -> List[str]:
     规则：整串（含单位，如 3天 / 500元 / 8-9折）必须逐字出现在原文里，
     防止 500→1500 这类编造和 30个自然日→3天 这类单位改写。
     """
-    src = _norm_text(source_text)
+    source_numbers = set(extract_check_numbers(source_text))
     bad = []
     for tok in extract_check_numbers(answer):
-        if tok and tok not in src:
+        if tok and tok not in source_numbers:
             bad.append(tok)
     return bad
 

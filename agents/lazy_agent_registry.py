@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
 from agents.base import SkillAgentBase
+from utils.json_store import atomic_write_json, file_transaction, validate_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,8 @@ class LazyAgentRegistry:
         self.memory_manager = memory_manager
         self._pool = db_pool
         self._cache_layer = cache_layer
-        self._user_id = user_id
+        self._user_id = validate_user_id(user_id)
+        self.CONFIG_PATH = type(self).CONFIG_PATH.parent / "plugins" / f"{self._user_id}.json"
 
         # 技能目录路径 (基于项目根目录)
         self.skills_root = Path(__file__).resolve().parent.parent / ".claude" / "skills"
@@ -68,12 +70,16 @@ class LazyAgentRegistry:
 
     def _load_config_sync(self) -> Dict[str, Any]:
         """同步加载插件配置（JSON 文件模式）"""
-        if self.CONFIG_PATH.exists():
+        path = self.CONFIG_PATH
+        if not path.exists() and getattr(self, "_user_id", None):
+            # 旧全局配置只作为初始默认值，后续修改保存在用户自己的文件中。
+            path = type(self).CONFIG_PATH
+        if path.exists():
             try:
-                with open(self.CONFIG_PATH, 'r', encoding='utf-8') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            except Exception:
-                pass
+            except (OSError, ValueError) as exc:
+                raise ValueError("插件配置无法读取，请检查配置文件") from exc
         return {}
 
     async def _load_config_async(self) -> Dict[str, Any]:
@@ -86,18 +92,32 @@ class LazyAgentRegistry:
             return {r["plugin_name"]: {"enabled": r["enabled"]} for r in rows}
         return self._load_config_sync()
 
+    async def refresh_config(self):
+        """每轮使用持久配置，保证其他会话和重启后的插件状态一致。"""
+        self._plugin_config = await self._load_config_async()
+        for name in list(self.cache):
+            skill = self._resolve_agent_name(name)
+            if skill and not self.is_plugin_enabled(skill):
+                del self.cache[name]
+
+    def _invalidate_skill(self, skill_name):
+        for name in list(getattr(self, "cache", {})):
+            if self._resolve_agent_name(name) == skill_name:
+                del self.cache[name]
+
     def _save_config_sync(self):
         """同步保存插件配置（JSON 文件模式）"""
         try:
             self.CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.CONFIG_PATH, 'w', encoding='utf-8') as f:
-                json.dump(self._plugin_config, f, ensure_ascii=False, indent=2)
+            atomic_write_json(self.CONFIG_PATH, self._plugin_config)
         except Exception as e:
             logger.error(f"Failed to save plugin config: {e}")
+            raise
 
     async def _save_config_async(self, skill_name: str, enabled: bool):
         """异步保存单个插件配置（PG 模式）"""
         if self._pool:
+            await self._pool.execute("INSERT INTO users(user_id) VALUES($1) ON CONFLICT DO NOTHING", self._user_id)
             await self._pool.execute(
                 """
                 INSERT INTO plugin_config(user_id, plugin_name, enabled)
@@ -117,17 +137,19 @@ class LazyAgentRegistry:
 
     def set_plugin_enabled(self, skill_name: str, enabled: bool):
         """设置插件启用状态（同步版本，JSON 模式）"""
-        if skill_name not in self._plugin_config:
-            self._plugin_config[skill_name] = {}
-        self._plugin_config[skill_name]["enabled"] = enabled
-        self._save_config_sync()
+        with file_transaction(self.CONFIG_PATH):
+            self._plugin_config = self._load_config_sync()
+            self._plugin_config.setdefault(skill_name, {})["enabled"] = enabled
+            self._save_config_sync()
+        if not enabled:
+            self._invalidate_skill(skill_name)
 
     async def set_plugin_enabled_async(self, skill_name: str, enabled: bool):
         """设置插件启用状态（异步版本，PG 模式）"""
-        if skill_name not in self._plugin_config:
-            self._plugin_config[skill_name] = {}
-        self._plugin_config[skill_name]["enabled"] = enabled
         await self._save_config_async(skill_name, enabled)
+        self._plugin_config.setdefault(skill_name, {})["enabled"] = enabled
+        if not enabled:
+            self._invalidate_skill(skill_name)
 
     def get_all_plugins(self) -> list:
         """获取所有插件信息"""
@@ -136,7 +158,7 @@ class LazyAgentRegistry:
             plugins.append({
                 "name": skill_name,
                 "enabled": self.is_plugin_enabled(skill_name),
-                "loaded": skill_name in self.cache,
+                "loaded": any(self._resolve_agent_name(name) == skill_name for name in self.cache),
             })
         return plugins
 
@@ -188,16 +210,32 @@ class LazyAgentRegistry:
 
         return None
 
+    def _model_for_skill(self, skill_name: str):
+        if skill_name != "plan-trip":
+            return self.model
+        from config import ITINERARY_MODEL_NAME, LLM_CONFIG, LLM_FALLBACKS, SYSTEM_CONFIG
+
+        if not ITINERARY_MODEL_NAME or ITINERARY_MODEL_NAME == LLM_CONFIG["model_name"]:
+            return self.model
+        from utils.llm_failover import build_chat_model
+
+        return build_chat_model(
+            {**LLM_CONFIG, "model_name": ITINERARY_MODEL_NAME},
+            LLM_FALLBACKS,
+            timeout=float(SYSTEM_CONFIG.get("timeout", 60)),
+        )
+
     def __getitem__(self, agent_name: str):
         """获取智能体 (懒加载)"""
-        if agent_name in self.cache:
-            return self.cache[agent_name]
-
+        if not self._pool:
+            self._plugin_config = self._load_config_sync()
         skill_name = self._resolve_agent_name(agent_name)
 
         # 检查插件是否启用
         if skill_name and not self.is_plugin_enabled(skill_name):
             raise KeyError(f"Agent '{agent_name}' is disabled")
+        if agent_name in self.cache:
+            return self.cache[agent_name]
         if not skill_name:
              raise KeyError(f"Agent '{agent_name}' not found in skills directory")
 
@@ -238,7 +276,7 @@ class LazyAgentRegistry:
             # 3. 实例化
             init_params = {
                 "name": agent_name,
-                "model": self.model,
+                "model": self._model_for_skill(skill_name),
             }
 
             sig = inspect.signature(agent_class.__init__)
@@ -264,7 +302,10 @@ class LazyAgentRegistry:
             raise
 
     def __contains__(self, agent_name: str) -> bool:
-        return self._resolve_agent_name(agent_name) is not None or agent_name in self.cache
+        if not self._pool:
+            self._plugin_config = self._load_config_sync()
+        skill = self._resolve_agent_name(agent_name)
+        return bool(skill and self.is_plugin_enabled(skill))
 
     def get(self, agent_name: str, default=None):
         try:

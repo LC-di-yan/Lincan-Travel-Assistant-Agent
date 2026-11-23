@@ -13,7 +13,8 @@ import re
 from typing import AsyncIterator, Optional
 
 import httpx
-from fastapi import APIRouter
+from utils.provider_http import provider_client
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -22,7 +23,9 @@ from utils.circuit_breaker import CircuitBreaker, CircuitOpenError
 from server.routes.tts_personas import get_persona, build_style, get_persona_meta
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+from server.auth import require_identity
+
+router = APIRouter(dependencies=[Depends(require_identity)])
 
 # TTS 专用熔断器（与 chat 的熔断器隔离，避免 TTS 失败影响主对话）
 _tts_circuit = CircuitBreaker(
@@ -120,12 +123,13 @@ async def _stream_mimo(
     )
 
     idx = 0
+    completed = False
+    incomplete_reason = False
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with provider_client("tts", timeout=timeout) as client:
             async with client.stream("POST", url, headers=headers, json=payload) as resp:
                 if resp.status_code != 200:
-                    body = await resp.aread()
-                    logger.error(f"[TTS] upstream {resp.status_code}: {body[:300]}")
+                    logger.warning("[TTS] upstream status=%s", resp.status_code)
                     yield {
                         "event": "error",
                         "data": json.dumps(
@@ -140,14 +144,22 @@ async def _stream_mimo(
                         continue
                     data_str = line[5:].strip()
                     if data_str == "[DONE]":
+                        completed = True
                         break
                     try:
                         chunk = json.loads(data_str)
                     except json.JSONDecodeError:
                         continue
+                    if chunk.get("error"):
+                        incomplete_reason = True
+                        break
                     choices = chunk.get("choices") or []
                     if not choices:
                         continue
+                    reason = choices[0].get("finish_reason")
+                    if reason:
+                        completed = reason == "stop"
+                        incomplete_reason = not completed
                     delta = choices[0].get("delta", {}) or {}
                     audio = delta.get("audio")
                     if audio and audio.get("data"):
@@ -160,16 +172,19 @@ async def _stream_mimo(
                         }
                         idx += 1
     except httpx.HTTPError as e:
-        logger.exception("[TTS] upstream connection failed")
+        logger.warning("[TTS] upstream connection failed (%s)", type(e).__name__)
         yield {
             "event": "error",
             "data": json.dumps(
-                {"message": f"TTS 连接失败: {e}"},
+                {"message": "语音连接失败，请稍后再试。"},
                 ensure_ascii=False,
             ),
         }
         return
 
+    if incomplete_reason or not completed or not idx:
+        yield {"event": "error", "data": json.dumps({"message": "语音未完整生成"})}
+        return
     yield {"event": "done", "data": "{}"}
 
 
@@ -195,8 +210,11 @@ async def tts(req: TTSRequest):
     async def _generator():
         try:
             async for evt in _stream_mimo(text, voice, style):
+                if evt["event"] == "error":
+                    _tts_circuit.record_failure()
+                elif evt["event"] == "done":
+                    _tts_circuit.record_success()
                 yield evt
-            _tts_circuit.record_success()
         except Exception as e:
             _tts_circuit.record_failure()
             logger.exception("[TTS] generator failed")

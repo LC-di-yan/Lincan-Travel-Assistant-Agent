@@ -1,0 +1,41 @@
+name: 源码检查
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHON_DOTENV_DISABLED: "1"
+      ALIGO_LLM_PROBE_ON_STARTUP: "0"
+      ALIGO_DECISION_MODE: "off"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python tools/scan_secrets.py
+      - run: python tools/check_as2_gate.py
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python scripts/build_rag_index.py
+      - run: python -m pytest -q -m "not integration"
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

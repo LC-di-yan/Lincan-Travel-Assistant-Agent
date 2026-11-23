@@ -8,6 +8,7 @@
   python tests/test_intention_agent.py
 """
 import sys
+import pytest
 import os
 import asyncio
 import json
@@ -41,6 +42,8 @@ from agents.intention_agent import IntentionAgent
 from config import LLM_CONFIG
 
 
+@pytest.mark.integration
+@pytest.mark.usefixtures("live_model")
 async def test_intention_agent():
     """测试意图识别智能体的各种场景"""
 

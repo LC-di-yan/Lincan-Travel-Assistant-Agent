@@ -72,7 +72,7 @@ function extractExtras(intention: IntentionData | null, results: AgentResult[]):
   if (entities?.date) extras.date = entities.date
   if (entities?.duration) extras.duration = entities.duration
   // other 字段有时包含城市名
-  if (entities?.other && !extras.destination) extras.destination = entities.other
+  if (entities?.other && !extras.destination) extras.destination = extractCityName(entities.other)
 
   for (const r of results) {
     const inner = getInner(r)

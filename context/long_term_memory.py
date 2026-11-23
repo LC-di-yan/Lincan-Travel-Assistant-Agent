@@ -9,12 +9,37 @@
 from typing import Dict, Any, List, Optional
 import json
 import os
-import atexit
-from datetime import datetime, date as _date
+import uuid
+from copy import deepcopy
+from functools import wraps
+from datetime import datetime, UTC, date as _date
 from pathlib import Path
 import logging
+from utils.json_store import atomic_write_json, file_transaction, validate_user_id
+from utils.expense_commands import expense_snapshot, operation_receipt, operation_state, record_entries, stage_operation
+from utils.expenses import summarize_expenses
+from . import conversation_archive as archive
 
 logger = logging.getLogger(__name__)
+
+
+def _memory_transaction(method):
+    """读写均在同一把用户文件锁内重载最新数据，不再写回旧会话快照。"""
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        with file_transaction(self.db_path):
+            self.data = self._load()
+            return deepcopy(method(self, *args, **kwargs))
+    return wrapped
+
+
+def _appended_preference(current, value, *, unique):
+    """API 首次追加保留标量；对话追加使用去重列表，兼容旧标量偏好。"""
+    if isinstance(current, list):
+        return current if unique and value in current else [*current, value]
+    if not current:
+        return [value] if unique else value
+    return current if unique and current == value else [current, value]
 
 
 class LongTermMemory:
@@ -23,20 +48,21 @@ class LongTermMemory:
     - 用户偏好（家庭地址、酒店品牌、航空公司等）
     - 历史行程记录
     - 统计信息
-    - 写回缓存：内存读写，定期/退出时 flush 到文件
+    - 用户级文件锁、每次读取最新数据、原子保存
     """
 
     def __init__(self, user_id: str, storage_path: str = "data/memory"):
-        self.user_id = user_id
-        self.storage_path = storage_path
-        self.db_path = os.path.join(storage_path, f"{user_id}.json")
-        self._dirty = False
+        self.user_id = validate_user_id(user_id)
+        root = Path(storage_path).resolve()
+        self.storage_path = str(root)
+        target = (root / f"{user_id}.json").resolve()
+        if not target.is_relative_to(root):
+            raise ValueError("记忆文件必须位于用户存储目录内")
+        self.db_path = str(target)
 
         Path(storage_path).mkdir(parents=True, exist_ok=True)
-        self.data = self._load()
-
-        # 进程退出时自动 flush
-        atexit.register(self.flush)
+        with file_transaction(self.db_path):
+            self.data = self._load()
         logger.info(f"Long-term memory initialized for user: {user_id}")
 
     def _load(self) -> Dict[str, Any]:
@@ -52,7 +78,7 @@ class LongTermMemory:
                     return data
             except Exception as e:
                 logger.error(f"Failed to load long-term memory: {e}")
-                return self._init_data()
+                raise ValueError("记忆文件无法读取，已保留原文件，请检查存储") from e
         else:
             logger.info("No existing long-term memory, creating new")
             return self._init_data()
@@ -110,9 +136,10 @@ class LongTermMemory:
             if fixed_prefs != data["preferences"]:
                 data["preferences"] = fixed_prefs
 
-        # 保存迁移后的数据
-        self.data = data
-        self._save()
+        # 迁移仅在内存进行，由下一次写事务原子保存，读取不再改写文件。
+        defaults = self._init_data()["statistics"]
+        for key, value in defaults.items():
+            data["statistics"].setdefault(key, value)
 
         return data
 
@@ -138,19 +165,24 @@ class LongTermMemory:
         """保存数据到文件"""
         try:
             self.data["updated_at"] = datetime.now().isoformat()
-            with open(self.db_path, 'w', encoding='utf-8') as f:
-                json.dump(self.data, f, ensure_ascii=False, indent=2)
-            self._dirty = False
+            atomic_write_json(self.db_path, self.data)
             logger.debug(f"Saved long-term memory to {self.db_path}")
         except Exception as e:
             logger.error(f"Failed to save long-term memory: {e}")
+            raise
 
     def flush(self):
-        """手动 flush 脏数据到文件（进程退出时自动调用）"""
-        if self._dirty:
-            self._save()
-            logger.debug(f"Flushed long-term memory for user: {self.user_id}")
+        """保留旧接口；公开写操作已经立即落盘，不再回写缓存快照。"""
 
+    @_memory_transaction
+    def personal_transaction(self, apply, *, write=False):
+        """个人中心与既有记忆/账本共用同一把锁及原子提交。"""
+        result = apply(self.data)
+        if write:
+            self._save()
+        return result
+
+    @_memory_transaction
     def save_preference(self, pref_type: str, value: Any):
         """
         保存用户偏好（列表格式）
@@ -165,17 +197,29 @@ class LongTermMemory:
 
         for pref in preferences:
             if pref.get("type") == pref_type:
-                pref["value"] = value
+                pref["value"] = deepcopy(value)
                 found = True
                 break
 
         # 如果不存在，添加新的偏好
         if not found:
-            preferences.append({"type": pref_type, "value": value})
+            preferences.append({"type": pref_type, "value": deepcopy(value)})
 
         self._save()
         logger.info(f"Saved preference: {pref_type} = {value}")
 
+    @_memory_transaction
+    def append_preference(self, pref_type: str, value: Any, *, unique: bool = False):
+        preferences = self.data["preferences"]
+        for pref in preferences:
+            if pref.get("type") == pref_type:
+                pref["value"] = _appended_preference(pref.get("value"), value, unique=unique)
+                break
+        else:
+            preferences.append({"type": pref_type, "value": _appended_preference(None, value, unique=unique)})
+        self._save()
+
+    @_memory_transaction
     def get_preference(self, pref_type: str = None) -> Any:
         """
         获取用户偏好
@@ -201,6 +245,7 @@ class LongTermMemory:
                     return pref.get("value")
             return None
 
+    @_memory_transaction
     def add_hotel_brand(self, brand: str):
         """添加酒店品牌偏好（追加到列表）"""
         # 查找 hotel_brands 偏好
@@ -226,6 +271,7 @@ class LongTermMemory:
         self._save()
         logger.info(f"Added hotel brand preference: {brand}")
 
+    @_memory_transaction
     def add_airline(self, airline: str):
         """添加航空公司偏好（追加到列表）"""
         # 查找 airlines 偏好
@@ -251,7 +297,8 @@ class LongTermMemory:
         self._save()
         logger.info(f"Added airline preference: {airline}")
 
-    def add_chat_message(self, role: str, content: str, session_id: str = None):
+    @_memory_transaction
+    def add_chat_message(self, role: str, content: str, session_id: str = None, *, presentation=None):
         """
         添加聊天消息到长期记忆
 
@@ -263,15 +310,18 @@ class LongTermMemory:
         message = {
             "role": role,
             "content": content,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "session_id": session_id
         }
+        if presentation is not None:
+            message["presentation"] = presentation
 
         self.data["chat_history"].append(message)
         self.data["statistics"]["total_messages"] += 1
         self._save()
         logger.debug(f"Added chat message to long-term memory: {role}")
 
+    @_memory_transaction
     def get_chat_history(self, limit: int = None, session_id: str = None) -> List[Dict[str, Any]]:
         """
         获取聊天历史
@@ -286,12 +336,24 @@ class LongTermMemory:
         messages = self.data["chat_history"]
 
         if session_id:
-            messages = [m for m in messages if m.get("session_id") == session_id]
+            messages = [m for m in messages if isinstance(m, dict) and m.get("session_id") == session_id]
 
         if limit:
-            return messages[-limit:]
-        return messages
+            messages = messages[-limit:]
+        # The persistent display and resumable task state are never injected
+        # into agents or the generic memory/context endpoint.
+        return [{key: value for key, value in row.items() if key != "presentation"}
+                for row in messages if isinstance(row, dict)]
 
+    @_memory_transaction
+    def list_conversations(self, *, query=None, before=None, limit=30):
+        return archive.list_json_messages(self.data["chat_history"], query, before, limit)
+
+    @_memory_transaction
+    def read_conversation(self, session_id, *, before=None, limit=50, check_exists=True):
+        return archive.read_json_messages(self.data["chat_history"], session_id, before, limit, check_exists=check_exists)
+
+    @_memory_transaction
     def save_trip_history(self, trip_info: Dict[str, Any]):
         """
         保存行程历史
@@ -319,6 +381,7 @@ class LongTermMemory:
         self._save()
         logger.info(f"Saved trip history: {trip_record['trip_id']}")
 
+    @_memory_transaction
     def get_trip_history(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
         获取历史行程
@@ -331,6 +394,7 @@ class LongTermMemory:
         """
         return self.data["trip_history"][-limit:] if limit else self.data["trip_history"]
 
+    @_memory_transaction
     def get_frequent_destinations(self, top_n: int = 5) -> List[tuple]:
         """
         获取常去目的地
@@ -345,15 +409,18 @@ class LongTermMemory:
         sorted_dest = sorted(freq.items(), key=lambda x: x[1], reverse=True)
         return sorted_dest[:top_n]
 
+    @_memory_transaction
     def increment_query_count(self):
         """增加查询计数"""
         self.data["statistics"]["total_queries"] += 1
         self._save()
 
+    @_memory_transaction
     def get_statistics(self) -> Dict[str, Any]:
         """获取统计信息"""
         return self.data["statistics"].copy()
 
+    @_memory_transaction
     def clear_history(self):
         """清空历史记录（保留偏好）"""
         self.data["chat_history"] = []
@@ -364,27 +431,74 @@ class LongTermMemory:
         self._save()
         logger.info("Cleared all history (chat + trips)")
 
+    @_memory_transaction
     def delete_all(self):
         """删除所有数据（包括文件）"""
         if os.path.exists(self.db_path):
             os.remove(self.db_path)
             logger.warning(f"Deleted long-term memory file: {self.db_path}")
+        self.data = self._init_data()
 
     # ---- 费用记录 ----
 
+    @_memory_transaction
+    def expense_operation(self, session_id, token, mode, command=None):
+        operations = self.data.setdefault("expense_operations", {})
+        key = f"{session_id}:{token}"
+        stored = operations.get(key)
+        if mode == "stage":
+            result = stage_operation(stored, command)
+            if stored is None:
+                operations[key] = result
+                self._save()
+            return result
+        current = operation_state(stored)
+        if mode != "confirm" or current["state"] != "pending":
+            return current
+        command = current["command"]
+        expenses = self.data["expenses"]
+        totals = None
+        if command["kind"] == "record":
+            entries = record_entries(command, token)
+            existing = {item.get("id") for item in expenses}
+            if any(item["id"] in existing for item in entries):
+                return {"state": "conflict"}
+            timestamp = datetime.now().isoformat()
+            expenses.extend(dict(item, timestamp=timestamp) for item in entries)
+            try:
+                totals = summarize_expenses(expenses)["totals_by_currency"]
+            except (TypeError, ValueError):
+                # A malformed legacy entry shouldn't block a validated new record.
+                pass
+        else:
+            expected = command["expected"]
+            indices = [i for i, item in enumerate(expenses) if item.get("id") == expected["id"]]
+            if len(indices) != 1 or expense_snapshot(expenses[indices[0]]) != expected:
+                return {"state": "conflict"}
+            if command["kind"] == "delete":
+                expenses.pop(indices[0])
+            else:
+                expenses[indices[0]].update(amount=command["amount"], currency=command["currency"])
+        result = {**current, "state": "committed", "receipt": operation_receipt(command, token, totals)}
+        operations[key] = result
+        self._save()
+        return result
+
+    @_memory_transaction
     def add_expense(self, expense: Dict[str, Any]):
         """添加一笔费用记录"""
-        expense.setdefault("id", f"exp_{len(self.data['expenses']) + 1}")
+        expense.setdefault("id", f"exp_{uuid.uuid4().hex[:16]}")
         expense.setdefault("timestamp", datetime.now().isoformat())
-        self.data["expenses"].append(expense)
+        self.data["expenses"].append(deepcopy(expense))
         self._save()
-        logger.info(f"Added expense: {expense.get('category')} {expense.get('amount')}")
 
+    @_memory_transaction
     def get_expenses(self, limit: int = None) -> List[Dict[str, Any]]:
         """获取费用记录"""
         expenses = self.data.get("expenses", [])
         return expenses[-limit:] if limit else expenses
 
+    @_memory_transaction
     def delete_expense(self, index: int) -> bool:
         """删除指定索引的费用记录"""
         expenses = self.data.get("expenses", [])
@@ -394,6 +508,17 @@ class LongTermMemory:
             return True
         return False
 
+    @_memory_transaction
+    def delete_expense_by_id(self, expense_id: str) -> bool:
+        expenses = self.data.get("expenses", [])
+        indices = [i for i, expense in enumerate(expenses) if expense.get("id") == expense_id]
+        if len(indices) != 1:
+            return False
+        expenses.pop(indices[0])
+        self._save()
+        return True
+
+    @_memory_transaction
     def clear_expenses(self):
         """清空所有费用记录"""
         self.data["expenses"] = []
@@ -417,7 +542,7 @@ class PostgresLongTermMemory:
     """基于 PostgreSQL 的长期记忆实现（异步接口）。"""
 
     def __init__(self, user_id: str, pool):
-        self.user_id = user_id
+        self.user_id = validate_user_id(user_id)
         self.pool = pool
         self._user_ensured = False
 
@@ -435,17 +560,34 @@ class PostgresLongTermMemory:
 
     async def save_preference(self, pref_type: str, value: Any):
         await self._ensure_user()
-        await self.pool.execute(
-            """
-            INSERT INTO preferences(user_id, pref_type, pref_value)
-            VALUES($1, $2, $3)
-            ON CONFLICT(user_id, pref_type)
-            DO UPDATE SET pref_value = $3, updated_at = NOW()
-            """,
-            self.user_id,
-            pref_type,
-            value,
-        )
+        async with self.pool.acquire() as conn, conn.transaction():
+            await conn.fetchval("SELECT 1 FROM users WHERE user_id=$1 FOR UPDATE", self.user_id)
+            await conn.execute(
+                """INSERT INTO preferences(user_id, pref_type, pref_value) VALUES($1, $2, $3)
+                   ON CONFLICT(user_id, pref_type) DO UPDATE SET pref_value=$3, updated_at=NOW()""",
+                self.user_id, pref_type, value,
+            )
+
+    async def append_preference(self, pref_type: str, value: Any, *, unique: bool = False):
+        await self._ensure_user()
+        async with self.pool.acquire() as conn, conn.transaction():
+            await conn.fetchval("SELECT 1 FROM users WHERE user_id=$1 FOR UPDATE", self.user_id)
+            initial = _appended_preference(None, value, unique=unique)
+            inserted = await conn.fetchval(
+                "INSERT INTO preferences(user_id, pref_type, pref_value) VALUES($1, $2, $3) "
+                "ON CONFLICT(user_id, pref_type) DO NOTHING RETURNING TRUE",
+                self.user_id, pref_type, initial,
+            )
+            if inserted:
+                return
+            current = await conn.fetchval(
+                "SELECT pref_value FROM preferences WHERE user_id=$1 AND pref_type=$2 FOR UPDATE",
+                self.user_id, pref_type,
+            )
+            await conn.execute(
+                "UPDATE preferences SET pref_value=$3, updated_at=NOW() WHERE user_id=$1 AND pref_type=$2",
+                self.user_id, pref_type, _appended_preference(current, value, unique=unique),
+            )
 
     async def get_preference(self, pref_type: str = None) -> Any:
         await self._ensure_user()
@@ -507,8 +649,19 @@ class PostgresLongTermMemory:
 
     # ---- 聊天 ----
 
-    async def add_chat_message(self, role: str, content: str, session_id: str = None):
+    async def add_chat_message(self, role: str, content: str, session_id: str = None, *, presentation=None):
         await self._ensure_user()
+        if presentation is not None:
+            try:
+                await self.pool.execute(
+                    """INSERT INTO chat_messages(user_id, session_id, role, content, presentation)
+                       VALUES($1,$2,$3,$4,$5)""", self.user_id, session_id, role, content, presentation,
+                )
+                return
+            except Exception as exc:
+                if getattr(exc, "sqlstate", None) != "42703":
+                    raise
+                logger.warning("PostgreSQL transcript column unavailable; saving text history. Apply migration 005.")
         await self.pool.execute(
             """
             INSERT INTO chat_messages(user_id, session_id, role, content)
@@ -527,7 +680,7 @@ class PostgresLongTermMemory:
         if session_id:
             query += " AND session_id=$2"
             params.append(session_id)
-        query += " ORDER BY created_at DESC"
+        query += " ORDER BY id DESC"
         if limit:
             query += f" LIMIT {int(limit)}"
         rows = await self.pool.fetch(query, *params)
@@ -540,6 +693,49 @@ class PostgresLongTermMemory:
             }
             for r in reversed(rows)
         ]
+
+    async def list_conversations(self, *, query=None, before=None, limit=30):
+        records = await self.pool.fetch(
+            """WITH messages AS (
+                 SELECT CASE WHEN session_id ~ '^[[:alnum:]_-]{1,32}$' THEN session_id ELSE '~legacy' END AS conversation_id,
+                        id,role,content,created_at
+                 FROM chat_messages WHERE user_id=$1 AND role IN ('user','assistant')
+               ), sessions AS (
+                 SELECT conversation_id AS id, MAX(id) AS cursor, COUNT(*) AS count,
+                        MIN(created_at) AS created_at, MAX(created_at) AS updated_at,
+                        (array_agg(left(content,96) ORDER BY id) FILTER (WHERE role='user' AND btrim(content) <> ''))[1] AS first_user,
+                        (array_agg(left(content,144) ORDER BY id DESC))[1] AS preview
+                 FROM messages
+                 GROUP BY conversation_id
+                 HAVING bool_or($2::text IS NULL OR strpos(lower(content),lower($2::text)) > 0)
+               )
+               SELECT * FROM sessions WHERE $3::bigint IS NULL OR cursor < $3
+               ORDER BY cursor DESC LIMIT $4""", self.user_id, query, before, limit + 1,
+        )
+        return archive.session_list([dict(row) for row in records], limit)
+
+    async def read_conversation(self, session_id, *, before=None, limit=50, check_exists=True):
+        scope = """user_id=$1 AND role IN ('user','assistant')
+                   AND (session_id=$2 OR ($2='~legacy' AND (session_id IS NULL OR session_id !~ '^[[:alnum:]_-]{1,32}$')))"""
+
+        def command(column):
+            return (f"SELECT id AS cursor,role,content,created_at AS timestamp,{column} FROM chat_messages WHERE {scope}"
+                    " AND ($3::bigint IS NULL OR id < $3) ORDER BY id DESC LIMIT $4")
+
+        try:
+            records = await self.pool.fetch(command("presentation"), self.user_id, session_id, before, limit + 1)
+        except Exception as exc:
+            if getattr(exc, "sqlstate", None) != "42703":
+                raise
+            records = await self.pool.fetch(command("NULL::jsonb AS presentation"),
+                                            self.user_id, session_id, before, limit + 1)
+        if not records and check_exists:
+            exists = before is not None and await self.pool.fetchval(
+                f"SELECT EXISTS(SELECT 1 FROM chat_messages WHERE {scope})", self.user_id, session_id,
+            )
+            if not exists:
+                return None
+        return archive.session_page([dict(row) for row in records], limit)
 
     # ---- 行程 ----
 
@@ -611,12 +807,77 @@ class PostgresLongTermMemory:
 
     # ---- 费用 ----
 
+    async def expense_operation(self, session_id, token, mode, command=None):
+        await self._ensure_user()
+        async with self.pool.acquire() as conn, conn.transaction():
+            # Serialize this user's proposals/commits, including a not-yet-existing operation.
+            await conn.fetchval("SELECT 1 FROM users WHERE user_id=$1 FOR UPDATE", self.user_id)
+            key = (self.user_id, session_id, token)
+            stored = await conn.fetchval(
+                "SELECT operation FROM expense_operations WHERE user_id=$1 AND session_id=$2 AND operation_id=$3", *key,
+            )
+            if mode == "stage":
+                result = stage_operation(stored, command)
+                if stored is None:
+                    await conn.execute(
+                        "INSERT INTO expense_operations(user_id, session_id, operation_id, operation) VALUES($1,$2,$3,$4)",
+                        *key, result,
+                    )
+                return result
+            current = operation_state(stored)
+            if mode != "confirm" or current["state"] != "pending":
+                return current
+            command = current["command"]
+            totals = None
+            if command["kind"] == "record":
+                entries = record_entries(command, token)
+                if await conn.fetchval(
+                    "SELECT 1 FROM expenses WHERE user_id=$1 AND expense_id=ANY($2::varchar[]) LIMIT 1",
+                    self.user_id, [item["id"] for item in entries],
+                ):
+                    return {"state": "conflict"}
+                await conn.executemany(
+                    """INSERT INTO expenses(user_id, expense_id, category, amount, currency, description, expense_date)
+                       VALUES($1,$2,$3,$4,$5,$6,$7)""",
+                    [(self.user_id, item["id"], item["category"], item["amount"], item["currency"],
+                      item["description"], _to_date(item["date"])) for item in entries],
+                )
+                totals = {row["currency"]: float(row["total"]) for row in await conn.fetch(
+                    "SELECT COALESCE(currency,'CNY') AS currency, SUM(amount) AS total FROM expenses WHERE user_id=$1 GROUP BY 1",
+                    self.user_id,
+                )}
+            else:
+                expected = command["expected"]
+                rows = await conn.fetch(
+                    """SELECT id AS row_id, expense_id AS id, amount, currency, description, category,
+                              expense_date AS date, created_at AS timestamp
+                       FROM expenses WHERE user_id=$1 AND expense_id=$2 FOR UPDATE""",
+                    self.user_id, expected["id"],
+                )
+                if len(rows) != 1:
+                    return {"state": "conflict"}
+                row = dict(rows[0])
+                if row["timestamp"] is not None:
+                    row["timestamp"] = row["timestamp"].isoformat()
+                if expense_snapshot(row) != expected:
+                    return {"state": "conflict"}
+                if command["kind"] == "delete":
+                    await conn.execute("DELETE FROM expenses WHERE id=$1 AND user_id=$2", row["row_id"], self.user_id)
+                else:
+                    await conn.execute(
+                        "UPDATE expenses SET amount=$1,currency=$2 WHERE id=$3 AND user_id=$4",
+                        command["amount"], command["currency"], row["row_id"], self.user_id,
+                    )
+            result = {**current, "state": "committed", "receipt": operation_receipt(command, token, totals)}
+            await conn.execute(
+                "UPDATE expense_operations SET operation=$4 WHERE user_id=$1 AND session_id=$2 AND operation_id=$3",
+                *key, result,
+            )
+            return result
+
     async def add_expense(self, expense: Dict[str, Any]):
         await self._ensure_user()
-        existing = await self.pool.fetchval(
-            "SELECT COUNT(*) FROM expenses WHERE user_id=$1", self.user_id
-        )
-        expense_id = expense.get("id") or f"exp_{existing + 1}"
+        expense_id = expense.get("id") or f"exp_{uuid.uuid4().hex[:16]}"
 
         await self.pool.execute(
             """
@@ -666,6 +927,19 @@ class PostgresLongTermMemory:
             """,
             self.user_id,
             index,
+        )
+        return row is not None
+
+    async def delete_expense_by_id(self, expense_id: str) -> bool:
+        await self._ensure_user()
+        row = await self.pool.fetchrow(
+            """
+            DELETE FROM expenses WHERE id = (
+                SELECT MIN(id) FROM expenses WHERE user_id=$1 AND expense_id=$2
+                HAVING COUNT(*) = 1
+            ) RETURNING id
+            """,
+            self.user_id, expense_id,
         )
         return row is not None
 

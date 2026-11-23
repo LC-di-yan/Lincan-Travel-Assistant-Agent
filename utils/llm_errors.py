@@ -119,13 +119,10 @@ def friendly_text(text: str, default: str = "") -> str:
 
 
 def describe(exc: BaseException) -> str:
-    """给日志看的一句话：状态码 + 上游业务码 + 原文截断。"""
+    """Machine-readable log summary; provider bodies may contain sensitive input."""
     code = classify(exc)
     sc = status_code(exc)
-    ucode = upstream_code(exc)
     head = f"class={code}"
     if sc:
         head += f" http={sc}"
-    if ucode:
-        head += f" upstream={ucode}"
-    return f"{head} raw={str(exc)[:300]}"
+    return head

@@ -1,48 +1,32 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Hotel, Luggage, Pin, RefreshCw, Utensils, type LucideIcon } from 'lucide-react'
 import { PreferenceTypeIcon } from '../Icons'
 import { fetchPreferences } from '../../api/client'
 import { useChatStore } from '../../store/chatStore'
+import { preferenceGroup, preferenceLabel, type PreferenceGroup } from '../../utils/preferenceLabels'
 
-const CATEGORIES: { key: string; label: string; icon: LucideIcon; keys: string[] }[] = [
+const CATEGORIES: { key: PreferenceGroup; label: string; icon: LucideIcon }[] = [
   {
     key: 'travel',
     label: '旅行偏好',
     icon: Luggage,
-    keys: ['travel_preference', 'favorite_city', 'weather_preference', 'trip_style', 'home_location'],
   },
   {
     key: 'stay',
     label: '住宿出行',
     icon: Hotel,
-    keys: ['hotel_brands', 'airlines', 'seat_preference'],
   },
   {
     key: 'life',
     label: '生活方式',
     icon: Utensils,
-    keys: ['dietary', 'budget'],
   },
   {
     key: 'other',
     label: '其他',
     icon: Pin,
-    keys: [],
   },
 ]
-
-const PREF_LABELS: Record<string, string> = {
-  hotel_brands: '酒店',
-  airlines: '航空',
-  seat_preference: '座位',
-  home_location: '常驻地',
-  dietary: '饮食',
-  budget: '预算',
-  travel_preference: '旅行方式',
-  favorite_city: '心仪城市',
-  weather_preference: '天气偏好',
-  trip_style: '风格',
-}
 
 const CAT_STYLES: Record<string, { bg: string; border: string; text: string }> = {
   travel: { bg: 'var(--accent-tint)', border: 'var(--accent)', text: 'var(--accent)' },
@@ -56,23 +40,8 @@ function getCatStyle(catKey: string) {
 }
 
 function categorize(entries: [string, unknown][]) {
-  const result: { cat: typeof CATEGORIES[number]; items: [string, unknown][] }[] = []
-  const assigned = new Set<string>()
-
-  for (const cat of CATEGORIES) {
-    const items = entries.filter(([k]) => cat.keys.includes(k))
-    if (items.length > 0) {
-      result.push({ cat, items })
-      items.forEach(([k]) => assigned.add(k))
-    }
-  }
-
-  const leftover = entries.filter(([k]) => !assigned.has(k))
-  if (leftover.length > 0) {
-    result.push({ cat: CATEGORIES[CATEGORIES.length - 1], items: leftover })
-  }
-
-  return result
+  return CATEGORIES.map((cat) => ({ cat, items: entries.filter(([key]) => preferenceGroup(key) === cat.key) }))
+    .filter(({ items }) => items.length > 0)
 }
 
 function formatValue(value: unknown): string {
@@ -80,32 +49,37 @@ function formatValue(value: unknown): string {
   return String(value)
 }
 
-export function PreferencePanel() {
+export function PreferencePanel({ personalAvailable = false }: { personalAvailable?: boolean }) {
   const userId = useChatStore((s) => s.userId)
   const sessionId = useChatStore((s) => s.sessionId)
   const [prefs, setPrefs] = useState<Record<string, unknown>>({})
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  const load = async () => {
-    setLoading(true)
-    try {
-      const data = await fetchPreferences(userId, sessionId)
-      setPrefs(data.preferences || {})
-    } catch {
-      /* keep last state */
-    }
-    setLoading(false)
-  }
+  const load = useCallback(() => fetchPreferences(userId, sessionId)
+    .then((data) => setPrefs(data.preferences || {}))
+    .catch(() => { /* 保留上次加载的数据 */ })
+    .finally(() => setLoading(false)), [userId, sessionId])
 
-  useEffect(() => { load() }, [userId, sessionId])
+  useEffect(() => { void load() }, [load])
 
   useEffect(() => {
     const handler = () => { load() }
     window.addEventListener('preference-updated', handler)
     return () => window.removeEventListener('preference-updated', handler)
-  }, [userId, sessionId])
+  }, [load])
 
-  const entries = Object.entries(prefs).filter(([, v]) => v)
+  return <>
+    {personalAvailable && <a href="#/personal/preferences" className="mx-4 mt-2 inline-flex min-h-11 items-center text-xs font-semibold text-route underline">管理规划授权</a>}
+    <PreferencePanelContent preferences={prefs} loading={loading} onRefresh={() => { setLoading(true); void load() }} />
+  </>
+}
+
+export function PreferencePanelContent({ preferences, loading, onRefresh }: {
+  preferences: Record<string, unknown>
+  loading: boolean
+  onRefresh: () => void
+}) {
+  const entries = Object.entries(preferences).filter(([, v]) => v)
   const grouped = categorize(entries)
 
   return (
@@ -120,7 +94,7 @@ export function PreferencePanel() {
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={onRefresh}
           disabled={loading}
           aria-label="刷新偏好"
           title="刷新偏好"
@@ -159,7 +133,7 @@ export function PreferencePanel() {
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {items.map(([key, value]) => {
-                    const label = PREF_LABELS[key] || key
+                    const label = preferenceLabel(key)
                     return (
                       <span
                         key={key}

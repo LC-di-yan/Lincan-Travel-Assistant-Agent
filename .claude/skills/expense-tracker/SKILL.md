@@ -1,13 +1,18 @@
 ---
 name: expense-tracker
-description: Use this skill to record, query, and summarize travel expenses. Triggers when user says "记一笔打车费50元", "午餐花了80", "费用汇总", "花了多少钱", "报销统计". Does NOT handle general trip history queries ("差旅记录", "旅行记录"). Uses ExpenseTrackerAgent with LLM to parse natural language expense entries and query expense summaries.
+description: "差旅账本：查询已记录费用、预览新增/修改/删除。示例：记一笔打车50元；费用汇总；删除上一笔费用。用户确认后才执行。价格咨询和一般行程历史不属于账本。"
 ---
 
 ## When to Use
 
-- User wants to record a travel expense ("记一笔打车费50", "午餐80元", "酒店300一晚")
+- User explicitly requests recording one or more expenses ("记一笔打车费50元", "记两笔：打车50元、午餐80元")
 - User wants to query expenses ("这次出差花了多少钱", "费用汇总", "报销统计")
-- User wants to delete/correct an expense ("删掉那笔打车费", "午餐改成60")
+- User wants to delete/correct an expense ("删除上一笔费用", "修改费用 exp_123 为 60元")
+
+The execution layer parses the original user input without a model. A mutation
+first returns `action: "preview"` and a session-scoped confirmation command.
+Only the user sending that command commits the batch or targeted change.
+Standalone `reply()` without a trusted request context never writes to the ledger.
 
 ## Agent
 

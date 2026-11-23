@@ -1,125 +1,47 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Square } from 'lucide-react'
-import type { AgentResult, IntentionData } from '../../api/types'
-import { getAgentLabel } from '../Icons'
+import { lazy, Suspense, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useAgentActivity } from '../../hooks/useAgentActivity'
+import { messageActivity } from '../../utils/agentActivity'
+import type { Message } from '../../api/types'
+import { RouteBeacon } from '../Illustrations/RouteBeacon'
+import { ActivityNodes } from './ActivityNodes'
 
-type NodeStatus = 'pending' | 'active' | 'done' | 'error'
+const ActivityDetails = lazy(() => import('./ActivityDetails'))
 
-interface Node {
-  id: string
-  label: string
-  status: NodeStatus
+export function ActivityAnnouncement() {
+  const view = useAgentActivity()
+  return <p className="sr-only" role="status" aria-atomic="true">{view.historical || view.phase === 'idle' ? '' : view.summary}</p>
 }
 
-export function RouteStrip({
-  intention,
-  results,
-  running,
-  onCancel,
-}: {
-  intention: IntentionData | null
-  results: AgentResult[]
-  running: string[]
-  onCancel: () => void
-}) {
-  const [seconds, setSeconds] = useState(0)
-
-  useEffect(() => {
-    const timer = setInterval(() => setSeconds((s) => s + 1), 1000)
-    return () => clearInterval(timer)
-  }, [])
-
-  const nodes = useMemo<Node[]>(() => {
-    const list: Node[] = [{ id: 'intent', label: '理解', status: intention ? 'done' : 'active' }]
-    const schedule = intention?.agent_schedule ?? []
-
-    for (const item of schedule) {
-      const name = item.agent_name
-      const result = results.find((r) => r.agent_name === name)
-      const status: NodeStatus = result
-        ? result.status === 'error' ? 'error' : 'done'
-        : running.includes(name) ? 'active' : 'pending'
-      list.push({ id: name, label: getAgentLabel(name), status })
-    }
-
-    if (schedule.length === 0) {
-      list.push({
-        id: 'work',
-        label: '查询与规划',
-        status: intention ? 'active' : 'pending',
-      })
-    }
-
-    const allDone = schedule.length > 0 && schedule.every((a) =>
-      results.some((r) => r.agent_name === a.agent_name),
-    )
-    list.push({ id: 'summary', label: '汇总', status: allDone ? 'active' : 'pending' })
-    return list
-  }, [intention, results, running])
-
-  const active = nodes.find((n) => n.status === 'active')
-  const done = nodes.filter((n) => n.status === 'done').length
-
-  return (
-    <div className="w-full rounded-[2px] border border-rule bg-paper-raised" aria-label="处理进度">
-      <div className="flex items-center justify-between border-b border-rule px-4 py-2">
-        <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.12em] text-ink-3">
-          <span className="text-accent">ALIGO / 处理中</span>
-          <span className="tabular">{done}/{nodes.length}</span>
-          <span className="tabular">{seconds}s</span>
-        </div>
-        <button
-          type="button"
-          onClick={onCancel}
-          aria-label="停止生成"
-          className="flex h-9 items-center gap-1.5 rounded-[2px] border border-rule-strong px-2.5 text-[11px] font-medium text-ink-2 hover:bg-paper-sunken hover:text-ink"
-        >
-          <Square size={10} fill="currentColor" aria-hidden="true" />
-          停止
-        </button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 py-3">
-        {nodes.map((node, i) => (
-          <div key={node.id} className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className={`h-1.5 w-1.5 rounded-full ${
-                node.status === 'done'
-                  ? 'bg-ok'
-                  : node.status === 'active'
-                    ? 'bg-accent ring-4 ring-accent/10'
-                    : node.status === 'error'
-                      ? 'bg-err'
-                      : 'border border-rule-strong bg-transparent'
-              }`}
-            />
-            <span
-              className={`text-[11px] ${
-                node.status === 'active'
-                  ? 'font-semibold text-ink'
-                  : node.status === 'error'
-                    ? 'text-err'
-                    : node.status === 'pending'
-                      ? 'text-ink-3'
-                      : 'text-ink-2'
-              }`}
-            >
-              {node.label}
-            </span>
-            {i < nodes.length - 1 && (
-              <span
-                aria-hidden="true"
-                className={`ml-1 h-px w-4 ${node.status === 'done' ? 'bg-ok/50' : 'bg-rule'}`}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-
-      <p className="sr-only" aria-live="polite">
-        {active ? '正在' + active.label : '正在汇总结果'}
-      </p>
+export function RouteStrip({ message, current }: { message: Message; current: boolean }) {
+  const view = useMemo(() => messageActivity(message), [message])
+  const el = useRef<HTMLElement>(null)
+  const [compact, setCompact] = useState(true)
+  const [choice, setChoice] = useState<boolean | null>(null)
+  const id = useId()
+  useLayoutEffect(() => {
+    const root = el.current
+    if (!root || (!current && choice !== true)) return
+    const sync = () => setCompact(root.clientWidth < 570)
+    sync()
+    const observer = new ResizeObserver(sync)
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [current, choice])
+  const open = choice ?? (current && !message.historical && !compact)
+  const waiting = view.edges.find(e => view.nodes.some(n => n.id === e.to && n.status === 'pending') &&
+    view.nodes.some(n => n.id === e.from && (n.status === 'running' || n.status === 'pending')))
+  const name = (id: string) => view.nodes.find(n => n.id === id)?.label
+  return <section ref={el} className="activity-strip" aria-label={view.live ? '处理进度' : '协作回执'} data-replay={!!message.historical}>
+    <div className="activity-heading"><span className="activity-beacon"><RouteBeacon size={22} /></span>
+      <div className="min-w-0 flex-1"><p className="activity-caption">{message.historical ? '历史协作记录' : view.live ? '航图台 / 协作中' : '航图台 / 本轮回执'}</p>
+        <p className="activity-summary">{view.summary}</p></div>
+      {!!view.nodes.length && <button type="button" className="turn-toggle min-h-11 min-w-11 text-xs text-route" aria-expanded={open}
+        aria-controls={open ? id : undefined} onClick={() => setChoice(!open)}>{open ? '收起详情' : '展开详情'}</button>}
     </div>
-  )
+    {message.historical && !view.nodes.length && <p className="mt-1 text-xs text-ink-3">未保存可展示的任务明细。</p>}
+    {!!view.nodes.length && <p className="turn-meta mt-1 text-xs text-ink-3">列出 {view.nodes.length} 项 · 已返回 {view.returned} 项
+      {view.live && waiting && <> · {name(waiting.to)}在等{name(waiting.from)}</>}</p>}
+    {open && !!view.nodes.length && <div id={id}><Suspense fallback={<ActivityNodes nodes={view.nodes} />}>
+      <ActivityDetails view={view} compact={compact} /></Suspense></div>}
+  </section>
 }

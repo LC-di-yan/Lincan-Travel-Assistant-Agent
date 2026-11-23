@@ -1,0 +1,212 @@
+/* Structure and drawing inks for the travel desk. No runtime animation dependency. */
+:root {
+  --chart-land:#e3eadd; --chart-hill:#d4e0cf; --chart-sea:#bad6d1; --chart-sea-line:#a9c8c2;
+  --chart-coast:#8aafa6; --chart-contour:#a6bcaa; --chart-grid:#99b3a9;
+  --chart-ink:#254e50; --chart-route:#155a60; --chart-stamp:#a73b23;
+}
+.dark {
+  --chart-land:#253c3c; --chart-hill:#2b4541; --chart-sea:#1a3239; --chart-sea-line:#28464b;
+  --chart-coast:#436661; --chart-contour:#3d5c53; --chart-grid:#47655e;
+  --chart-ink:#c9ded3; --chart-route:#8bddcb; --chart-stamp:#ff9a73;
+}
+
+.deck-header {flex:none;background:var(--paper-raised);border-bottom:1px solid var(--rule);padding-top:env(safe-area-inset-top)}
+.masthead {min-height:64px;max-width:1600px;padding:0 clamp(16px,3.6vw,64px);margin:auto;display:flex;align-items:center;gap:clamp(16px,2.9vw,46px)}
+.deck-brand,.brand-mark,.desk-nav,.desk-link,.mast-actions,.nav-tool {display:inline-flex;align-items:center}
+.deck-brand {min-height:44px;gap:10px;text-decoration:none;color:var(--ink)}
+.deck-brand strong {font-family:Arial,sans-serif;font-weight:750;font-size:22px;line-height:1;letter-spacing:.035em}
+.brand-mark {justify-content:center;width:35px;height:35px;border-radius:9px;background:var(--route);color:var(--paper-raised)}
+.desk-nav,.mast-actions {gap:4px}
+.desk-link,.nav-tool {justify-content:center;gap:7px;min-height:44px;min-width:44px;color:var(--ink-2);font-size:13px;font-weight:600;white-space:nowrap}
+.desk-link {position:relative;padding:0 12px;min-height:64px}
+.desk-link[aria-current]{color:var(--route)}
+.desk-link[aria-current]::after {content:"";position:absolute;bottom:0;height:3px;left:12px;right:12px;background:var(--route)}
+.mast-actions {margin-left:auto}
+.nav-tool {border-radius:8px;padding:0 10px}
+.nav-icon {width:44px;padding:0}
+.nav-tool[aria-expanded="true"] {color:var(--route);background:var(--route-tint)}
+.nav-tool:disabled {opacity:.5}
+.mast-appearance {border-left:1px solid var(--rule);margin-left:5px;padding-left:5px}
+
+.flight-shell {flex:1;min-height:0;min-width:0;overflow:auto;container-type:inline-size}
+.deck-layout.brief-mode {max-width:1192px;width:100%;min-height:100%;margin:auto;padding:clamp(32px,6vh,84px) clamp(20px,4.4cqw,66px);display:grid;
+  grid-template-columns:minmax(0,1.12fr) minmax(0,1fr);grid-template-areas:"heading chart" "composer chart" "examples examples";
+  align-content:center;align-items:start;column-gap:clamp(32px,5.4cqw,82px);row-gap:24px}
+.brief-heading {grid-area:heading;align-self:end}
+.desk-kicker,.plate-overline,.activity-caption {font-family:var(--font-mono-stack);font-size:11px;font-weight:600;letter-spacing:.1em}
+.desk-kicker {display:flex;gap:10px;align-items:center;color:var(--route)}
+.desk-kicker span {width:23px;height:3px;background:var(--accent)}
+.desk-kicker i {color:var(--ink-3);font-style:normal}
+.brief-heading h1 {margin:12px 0 13px;font-family:var(--font-display-stack);font-size:clamp(42px,4.5cqw,56px);line-height:1.14;letter-spacing:-.055em;font-weight:700;color:var(--ink)}
+.brief-heading em {color:var(--route);font-style:normal}
+.brief-description {max-width:33em;color:var(--ink-2);font-size:15px;line-height:1.8;text-wrap:pretty}
+.atlas-plate {grid-area:chart;align-self:center;min-width:0;isolation:isolate;position:relative;border:1px solid var(--rule-strong);border-radius:12px;background:var(--paper-raised)}
+.atlas-plate::before {content:"";position:absolute;z-index:-1;inset:6px -5px -6px 5px;border:1px solid var(--rule);border-radius:inherit;background:var(--paper-sunken)}
+.plate-overline,.atlas-plate figcaption {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 16px}
+.plate-overline {height:37px;background:var(--paper-raised);color:var(--ink-2);border-radius:12px 12px 0 0}
+.plate-overline span,.atlas-plate figcaption span {display:inline-flex;align-items:center;gap:8px}
+.plate-overline i {width:8px;height:8px;border:2px solid var(--route);border-radius:50%}
+.plate-map,.plate-strip {width:100%;height:auto;border-block:1px solid var(--rule)}
+.plate-map {display:block}
+.plate-strip {display:none}
+.plate-map-label {fill:var(--chart-ink);font:600 13px var(--font-sans-stack);paint-order:stroke;stroke:var(--chart-land);stroke-width:3px;stroke-linejoin:round}
+.atlas-plate figcaption {height:43px;background:var(--paper-raised);border-radius:0 0 12px 12px;color:var(--ink-3);font-size:11px}
+.atlas-plate figcaption span:first-child {font-size:13px;font-weight:600;color:var(--ink)}
+.atlas-plate figcaption svg,.atlas-plate figcaption b {color:var(--route)}
+
+.composer-cell {grid-area:composer;min-width:0}
+.flight-composer {border:1px solid var(--rule-strong);background:var(--paper-raised);border-radius:12px;box-shadow:0 3px 0 var(--paper-sunken);padding:15px 16px 12px}
+.flight-composer:focus-within {border-color:var(--focus);box-shadow:0 0 0 1px var(--focus)}
+.composer-title,.composer-title label,.composer-tools,.mic-control,.action-inner,.action-glyph,.composer-foot,.plan-notice {display:flex;align-items:center}
+.composer-title {justify-content:space-between;gap:10px;color:var(--ink)}
+.composer-title label {font-size:13px;font-weight:700;gap:7px}
+.composer-title label svg,.mic-control[aria-pressed=true] {color:var(--route)}
+.composer-title>span {font-size:11px;color:var(--ink-3)}
+.flight-composer textarea {display:block;width:100%;resize:none;border:0;outline:none;background:transparent;color:var(--ink);padding:0;font-size:16px;line-height:1.55;margin:10px 0;min-height:49px;max-height:120px;scrollbar-width:thin}
+.flight-composer textarea::placeholder {color:var(--ink-3);opacity:1}
+.composer-tools {gap:8px}
+.compose-keys,.composer-foot {font-size:11px;color:var(--ink-3)}
+.compose-keys {font-family:var(--font-mono-stack)}
+.mic-control {min-width:44px;min-height:44px;justify-content:center;gap:6px;padding:0 7px;border-radius:8px;color:var(--ink-2);font-size:12px}
+.mic-control:disabled {opacity:.55}
+.deck-action {min-height:44px;min-width:44px;background:var(--paper-sunken);color:var(--ink);border-radius:8px;padding:0 15px;border:1px solid var(--rule-strong);font-weight:650;font-size:14px}
+.composer-tools .deck-action {margin-left:auto}
+.deck-action[data-intent=primary] {color:var(--on-accent);border-color:transparent;background:var(--accent);box-shadow:inset 0 -2px 0 #0002}
+.deck-action[data-intent=stop] {color:var(--err);border-color:var(--err);background:var(--error-light)}
+.deck-action:disabled {color:var(--ink-3);background:var(--paper-sunken);border-color:var(--rule);box-shadow:none}
+.action-inner {justify-content:center;gap:12px}
+.action-glyph {justify-content:center}
+.brief-mode .deck-action .action-glyph svg {transform:rotate(77deg)}
+.composer-foot,.plan-notice {min-height:26px;gap:10px;justify-content:space-between;flex-wrap:wrap}
+.composer-foot button,.plan-notice button {min-height:44px;color:var(--route);text-decoration:underline;font-weight:600}
+.plan-notice {margin-bottom:6px;font-size:13px;color:var(--ink-2)}
+
+.brief-examples {grid-area:examples;min-width:0;border-top:1px solid var(--rule);margin-top:clamp(5px,2vh,24px)}
+.example-heading,.example-heading button,.example-tile {display:flex;align-items:center}
+.example-heading {min-height:54px;gap:12px}
+.example-heading h2 {font-size:14px;font-weight:700;color:var(--ink)}
+.example-heading>span,.example-heading button,.example-tile small {font-size:12px;color:var(--ink-3)}
+.example-heading button {margin-left:auto;min-height:44px;gap:5px;color:var(--route)}
+.example-heading button[aria-expanded=true] svg {transform:rotate(180deg)}
+.example-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.example-tile {min-height:66px;min-width:0;position:relative;gap:12px;text-align:start;padding:9px 13px;border:1px solid var(--rule);border-radius:8px;background:var(--paper-raised)}
+.example-symbol {flex:none;color:var(--route)}
+.example-tile strong,.example-tile small {display:block}
+.example-tile strong {font-size:14px;font-weight:650;color:var(--ink)}
+.example-tile small {margin-top:2px}
+.example-arrow {margin-left:auto;flex:none;color:var(--ink-3)}
+
+.chat-mode,.message-pane {min-height:0;display:flex;flex-direction:column}
+.chat-mode {height:100%}
+.message-pane {position:relative;flex:1}
+.message-pane[hidden] {display:none}
+.chat-mode .composer-cell {width:min(100%,808px);margin:0 auto;padding:6px clamp(12px,3cqw,24px) max(5px,env(safe-area-inset-bottom));flex:none}
+.chat-mode .flight-composer {display:flex;align-items:flex-end;gap:8px;padding:5px 6px 5px 12px;box-shadow:none}
+.chat-mode .flight-composer textarea {flex:1;min-width:0;min-height:30px;margin:6px 0 5px}
+.chat-mode .composer-tools {gap:2px}
+.chat-mode .deck-action {padding:0 12px}
+.chat-mode .composer-tools .compose-keys {display:none}
+
+.activity-strip {border:1px solid var(--rule);border-left:3px solid var(--route);border-radius:8px;background:var(--paper-raised);padding:12px 14px}
+.activity-heading {display:flex;align-items:center;gap:10px}
+.activity-beacon {width:36px;height:36px;display:grid;place-items:center;color:var(--route);border-radius:8px;background:var(--route-tint)}
+.activity-caption {font-size:10px;color:var(--route)}
+.activity-summary {font-size:14px;font-weight:650;color:var(--ink);line-height:1.65;overflow-wrap:anywhere}
+.activity-count {margin-left:auto;font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.activity-nodes {margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,165px),1fr));gap:0 16px}
+.activity-nodes li {display:flex;align-items:center;gap:7px;border-top:1px solid var(--rule);min-height:38px;font-size:13px;color:var(--ink-2)}
+.activity-nodes strong {margin-left:auto;font-size:11px;color:var(--ink-3);font-weight:600}
+.state-mark {width:8px;height:8px;border:1.5px solid var(--rule-strong);border-radius:50%;flex:none}
+[data-state=running] .state-mark {border:2px solid var(--route);outline:1px solid var(--route);outline-offset:2px}
+:is([data-state=success],[data-state=cached]) .state-mark {background:var(--ok);border-color:var(--ok)}
+:is([data-state=partial],[data-state=timeout],[data-state=unavailable]) .state-mark {background:var(--warn);border-color:var(--warn);border-radius:1px}
+[data-state=awaiting] .state-mark {border-color:var(--warn);border-radius:1px}
+[data-state=failed] .state-mark {background:var(--err);border-color:var(--err);border-radius:1px}
+.activity-detail {padding:16px}
+.activity-detail>.activity-summary {margin-top:9px}
+
+.deck-dialog {padding:0;border:1px solid var(--rule-strong);background:var(--paper-raised);color:var(--ink);box-shadow:var(--shadow-lg);max-height:100dvh}
+.deck-dialog::backdrop {background:rgb(10 24 28/.46)}
+.deck-dialog[data-side=center] {margin:auto;width:min(440px,calc(100% - 24px));max-height:calc(100dvh - 32px);overflow-y:auto;border-radius:16px}
+.deck-dialog:not([data-side=center]) {position:fixed;inset-block:0;margin:0;width:min(320px,calc(100vw - 28px));height:100dvh;padding-bottom:env(safe-area-inset-bottom);padding-top:env(safe-area-inset-top)}
+.deck-dialog[data-side=right] {left:auto;right:0;border-width:0 0 0 1px}
+.deck-dialog[data-side=left] {left:0;right:auto;border-width:0 1px 0 0}
+.archive-panel {height:100%;display:flex;flex-direction:column;min-height:0;background:var(--paper)}
+.archive-panel>div:last-child {min-height:0;flex:1}
+.archive-heading {display:flex;align-items:center;justify-content:space-between;padding:3px 12px;border-bottom:1px solid var(--rule);font-size:14px;font-weight:650}
+.personal-nav a {flex-shrink:0}
+@media(hover:hover) and (pointer:fine) {
+  .nav-tool:not(:disabled):hover,.desk-link:hover,.mic-control:not(:disabled):hover {background:var(--paper-sunken);color:var(--ink)}
+  .nav-tool[aria-expanded=true]:hover {color:var(--route);background:var(--route-tint)}
+  .example-tile:hover {border-color:var(--route);background:var(--route-tint)}
+  .deck-action[data-intent=primary]:not(:disabled):hover {background:var(--accent-hover)}
+}
+@media(prefers-reduced-motion:no-preference) {
+  :root[data-motion=standard] .action-inner,:root[data-motion=standard] .action-glyph {transition:transform var(--motion-feedback) var(--ease-dock)}
+  :root[data-motion=standard] .deck-action:not(:disabled):active .action-inner {transform:translateY(2px) scale(.965);transition-duration:var(--motion-press)}
+  :root[data-motion=standard] .deck-action[data-intent=primary]:active .action-glyph {transform:translateX(3px)}
+  :root[data-motion=standard] .activity-strip:not([data-replay=true]),:root[data-motion=standard] .deck-dialog[open] {animation:deck-arrive var(--motion-feedback) var(--ease-dock) both}
+  :root[data-motion=standard] .activity-strip:not([data-replay=true]) .activity-beacon svg {animation:beacon-arrive var(--motion-reveal) var(--ease-dock) both}
+  @keyframes beacon-arrive {from{transform:translate(-7px,4px) rotate(65deg);opacity:.5}to{transform:none;opacity:1}}
+  :root[data-motion=standard] .deck-dialog:not([data-side=center])[open] {animation-name:drawer-arrive}
+  .deck-dialog[data-side=left] {--drawer-offset:-16px}
+  .deck-dialog[data-side=right] {--drawer-offset:16px}
+  @keyframes drawer-arrive {from{transform:translateX(var(--drawer-offset));opacity:.5}to{transform:none;opacity:1}}
+  @keyframes deck-arrive {from{opacity:.4;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+}
+@container(max-width:760px) {
+  .deck-layout.brief-mode {max-width:640px;grid-template-columns:minmax(0,1fr);grid-template-areas:"heading" "chart" "composer" "examples";gap:16px;align-content:start;padding:clamp(20px,5vh,44px) clamp(16px,5cqw,32px) max(24px,env(safe-area-inset-bottom))}
+  .brief-heading h1 {font-size:clamp(32px,8.6cqw,36px);margin:9px 0}
+  .brief-description {font-size:14px;line-height:1.65}
+  .atlas-plate::before {display:none}
+  .plate-map,.plate-overline {display:none}
+  .plate-strip {display:block;border:0;border-radius:11px 11px 0 0;height:clamp(48px,15cqw,84px)}
+  .atlas-plate figcaption {height:28px;padding:0 11px;border-top:1px solid var(--rule)}
+  .atlas-plate figcaption span:first-child {font-size:12px}
+  .flight-composer {padding:12px}
+  .example-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .brief-examples {margin:0}
+  .example-heading {min-height:45px;gap:9px}
+  .example-tile {min-height:57px;gap:9px;padding:8px 10px}
+  .example-tile small {font-size:11px}
+  .example-arrow {display:none}
+}
+@media(min-width:601px) {
+  .desk-nav {display:grid;grid-auto-flow:column;grid-auto-columns:1fr;position:relative;--nav-columns:1}
+  .desk-nav:has(.personal-link) {--nav-columns:2}
+  .desk-link[aria-current]::after {display:none}
+  .desk-nav:has([aria-current])::after {content:"";position:absolute;bottom:0;left:0;height:3px;
+    width:calc((100% - (var(--nav-columns) - 1)*4px)/var(--nav-columns));border-inline:12px solid transparent;
+    background:var(--route);background-clip:content-box;pointer-events:none;transition:transform var(--motion-feedback) var(--ease-dock)}
+  .desk-nav[data-personal=true]::after {transform:translateX(calc(100% + 4px))}
+}
+@media(max-width:850px) {
+  .masthead {gap:12px;padding-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right))}
+  .nav-tool>span,.mast-appearance,.nav-new {display:none}
+  .mast-actions {gap:0}
+}
+@media(max-width:600px) {
+  .masthead {min-height:56px;gap:7px}
+  .desk-nav {gap:0}
+  .desk-link {padding:0;min-height:44px;border-radius:8px}
+  .desk-link[aria-current] {background:var(--route-tint)}
+  .desk-link[aria-current]::after,.work-link,.personal-link span {display:none}
+  .desk-nav[data-personal=true] .work-link {display:inline-flex;padding:0 7px}
+  .deck-brand {gap:7px}
+  .deck-brand strong {font-size:19px}
+  .brand-mark {width:30px;height:30px}
+  .personal-nav {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px}
+  .personal-nav a {flex-direction:column;justify-content:center;gap:2px;padding:3px 0;font-size:12px}
+}
+@media(pointer:coarse) { .compose-keys {display:none} }
+@media(max-height:520px) and (orientation:landscape) {
+  .deck-layout.brief-mode {align-content:start;padding-block:16px}
+}
+
+@media(prefers-reduced-motion:no-preference) {
+  :root[data-motion=standard] [data-first-display=true] > div:first-of-type {animation:first-evidence var(--motion-reveal) var(--ease-dock) both}
+  @keyframes first-evidence {from{transform:translateY(4px);opacity:.9}to{transform:none;opacity:1}}
+}
+
+/* Reserve the final playback control's touch height without moving the reader. */
+@media(pointer:coarse) { .message-meta {min-height:44px} }

@@ -1,14 +1,37 @@
-import type { IntentionData, AgentResult, OrchestrationResult } from './types'
+import type { IntentionData, AgentResult, OrchestrationResult, PublicAgent } from './types'
+import type { PlanRef } from './personal'
+
+interface BrowserIdentity { user_id: string }
+interface SessionData { user_id: string; session_id: string }
+declare global {
+  interface Window { __aligoIdentityResponse?: Promise<Response> }
+}
+let identityRequest: Promise<BrowserIdentity> | null = null
+let sessionRequest: Promise<SessionData> | null = null
+
+export function ensureIdentity(): Promise<BrowserIdentity> {
+  if (!identityRequest) {
+    const boot = typeof window !== 'undefined' ? window.__aligoIdentityResponse : undefined
+    if (boot) delete window.__aligoIdentityResponse
+    identityRequest = (boot ?? fetch('/api/identity', { method: 'POST', credentials: 'include' }))
+      .then(async (response) => {
+        if (!response.ok) throw new Error('无法建立安全会话，请刷新后重试')
+        return await response.json() as BrowserIdentity
+      })
+      .catch((error) => { identityRequest = null; throw error })
+  }
+  return identityRequest
+}
 
 interface SSECallbacks {
   onThinking?: (data: { status: string }) => void
   onIntention?: (data: IntentionData) => void
-  onDispatching?: (data: { agents: unknown[] }) => void
-  onAgentStart?: (data: { agent_name: string; status: string }) => void
+  onDispatching?: (data: { agents: PublicAgent[] }) => void
+  onAgentStart?: (data: PublicAgent) => void
   onAgentResult?: (data: AgentResult) => void
   onComplete?: (data: OrchestrationResult) => void
-  onError?: (data: { message: string }) => void
-  onClarification?: (data: { question: string; missing_info?: string[] }) => void
+  onError?: (data: { message: string; interrupted?: boolean; history_warning?: string }) => void
+  onClarification?: (data: { question: string; missing_info?: string[]; history_warning?: string }) => void
 }
 
 let activeController: AbortController | null = null
@@ -25,11 +48,20 @@ export async function sendChatMessage(
   message: string,
   sessionId: string | null,
   callbacks: SSECallbacks,
+  requestId?: string,
+  planRef?: PlanRef,
 ): Promise<void> {
   const controller = new AbortController()
   activeController = controller
 
-  const body = JSON.stringify({ user_id: userId, session_id: sessionId, message })
+  const identity = await ensureIdentity()
+  const body = JSON.stringify({
+    user_id: identity.user_id,
+    session_id: identity.user_id === userId ? sessionId : null,
+    message,
+    request_id: requestId,
+    plan_ref: identity.user_id === userId ? planRef : undefined,
+  })
 
   let response: Response
   try {
@@ -38,9 +70,10 @@ export async function sendChatMessage(
       headers: { 'Content-Type': 'application/json' },
       body,
       signal: controller.signal,
+      credentials: 'include',
     })
   } catch (err) {
-    if (controller.signal.aborted) return // user cancelled
+    if (controller.signal.aborted) return // 用户已取消
     throw err
   }
 
@@ -77,7 +110,7 @@ export async function sendChatMessage(
             const data = JSON.parse(dataStr)
             const eventName = currentEvent
             currentEvent = ''
-            if (!eventName) continue
+            if (!eventName || terminal || controller.signal.aborted) continue
             switch (eventName) {
               case 'thinking':
                 callbacks.onThinking?.(data)
@@ -111,15 +144,17 @@ export async function sendChatMessage(
                 break
             }
           } catch {
-            // ignore parse errors
+            // 忽略无法解析的事件
           }
         }
       }
     }
 
     if (!terminal && !controller.signal.aborted) {
-      callbacks.onError?.({ message: '连接提前结束，结果可能不完整，请重试。' })
+      callbacks.onError?.({ interrupted: true, message: '连接提前结束，结果可能不完整，请重试。' })
     }
+  } catch (error) {
+    if (!controller.signal.aborted && !terminal) throw error
   } finally {
     reader.releaseLock()
     if (activeController === controller) {
@@ -129,37 +164,43 @@ export async function sendChatMessage(
 }
 
 async function fetchJson(url: string, init?: RequestInit) {
-  const res = await fetch(url, init)
+  await ensureIdentity()
+  const res = await fetch(url, { ...init, credentials: 'include' })
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
   return res.json()
 }
 
-function userQuery(userId: string, sessionId?: string | null) {
-  const params = new URLSearchParams({ user_id: userId })
-  if (sessionId) params.set('session_id', sessionId)
+async function userQuery(userId: string, sessionId?: string | null) {
+  const identity = await ensureIdentity()
+  const params = new URLSearchParams({ user_id: identity.user_id })
+  if (sessionId && !sessionId.startsWith('~') && userId === identity.user_id) params.set('session_id', sessionId)
   return params.toString()
 }
 
 export async function fetchPreferences(userId: string, sessionId?: string | null) {
-  return fetchJson(`/api/preferences?${userQuery(userId, sessionId)}`)
+  return fetchJson(`/api/preferences?${await userQuery(userId, sessionId)}`)
 }
 
 export async function fetchHistory(userId: string, sessionId?: string | null) {
-  return fetchJson(`/api/history?${userQuery(userId, sessionId)}`)
+  return fetchJson(`/api/history?${await userQuery(userId, sessionId)}`)
 }
 
 export async function fetchContext(userId: string, sessionId?: string | null) {
-  return fetchJson(`/api/context?${userQuery(userId, sessionId)}`)
+  return fetchJson(`/api/context?${await userQuery(userId, sessionId)}`)
 }
 
 export async function fetchExpenses(userId: string, sessionId?: string | null) {
-  return fetchJson(`/api/expenses?${userQuery(userId, sessionId)}`)
+  return fetchJson(`/api/expenses?${await userQuery(userId, sessionId)}`)
 }
 
-export async function createSession(userId: string) {
-  return fetchJson('/api/session/new', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId }),
-  })
+export async function createSession(): Promise<SessionData> {
+  if (!sessionRequest) {
+    sessionRequest = ensureIdentity().then((identity) => fetchJson('/api/session/new', {
+      method: 'POST',
+      signal: AbortSignal.timeout(8000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: identity.user_id }),
+    })).finally(() => { sessionRequest = null })
+  }
+  return sessionRequest
 }

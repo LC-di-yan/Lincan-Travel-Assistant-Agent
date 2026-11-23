@@ -1,0 +1,24 @@
+.run-details {margin-top:9px;border-top:1px solid var(--rule)}
+.run-key {display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:34px;font-size:12px;font-weight:650;color:var(--route)}
+.run-key button,.turn-toggle {min-height:44px;min-width:44px;color:var(--route);font-size:12px;font-weight:600}
+.task-map {display:block;width:100%;height:auto;border-radius:6px;background:var(--paper-sunken);border:1px solid var(--rule);padding:5px 0}
+.task-wire,.handoff {fill:none;stroke:var(--rule-strong);stroke-width:1.35}
+.handoff {stroke:var(--route);stroke-width:2.5;opacity:0}
+.map-station rect {fill:var(--paper-raised);stroke:var(--rule-strong)}
+.map-station circle {fill:var(--paper-raised);stroke:var(--rule-strong)}
+.map-station text {font:600 13px var(--font-sans-stack);fill:var(--ink)}
+.map-station .map-note,.map-stage {font:11px var(--font-sans-stack);fill:var(--ink-3)}
+.map-station[data-state=running] rect {fill:var(--route-tint);stroke:var(--route);stroke-width:1.8}
+.map-station[data-state=running] circle {fill:var(--route)}
+.map-station:is([data-state=success],[data-state=cached]) circle {fill:var(--ok);stroke:var(--ok)}
+.map-station[data-state=running] .station-ring {fill:none;stroke:var(--route)}
+.map-station:is([data-state=partial],[data-state=unavailable],[data-state=timeout],[data-state=failed],[data-state=stopped],[data-state=awaiting]) circle {fill:var(--paper-raised);stroke:var(--warn)}
+.dependency-list {display:grid;gap:5px;margin-top:8px;font-size:12px;color:var(--ink-2);overflow-wrap:anywhere}
+.dependency-list div {border-left:2px solid var(--rule-strong);padding-left:8px}
+.dependency-list dt {font-weight:650}
+.turn-meta {margin-top:4px;font-size:12px;color:var(--ink-3);line-height:1.6}
+.activity-strip[data-replay=true],.activity-strip[data-replay=true] svg {animation:none!important}
+@media(prefers-reduced-motion:no-preference) {
+ :root[data-motion=standard] .signalled {animation:route-handoff 270ms ease-out both}
+ @keyframes route-handoff {0%{opacity:0;stroke-dasharray:.18 1;stroke-dashoffset:.18}18%{opacity:1}100%{opacity:0;stroke-dasharray:.18 1;stroke-dashoffset:-1}}
+}

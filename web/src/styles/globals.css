@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./flightdeck.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -20,30 +21,40 @@
   --color-warn: var(--warn);
   --color-err: var(--err);
 
+  --color-on-accent: var(--on-accent);
+  --color-warning-light: var(--warning-light);
+  --color-error-light: var(--error-light);
+  --color-success-light: var(--success-light);
   --font-sans: var(--font-sans-stack);
   --font-display: var(--font-display-stack);
   --font-mono: var(--font-mono-stack);
 
-  --radius-card: 2px;
-  --radius-input: 4px;
+  --radius-card: 12px;
+  --radius-receipt: 6px;
+  --radius-input: 8px;
+  --radius-overlay: 16px;
 }
 
 :root {
-  --paper: #f7f3ec;
-  --paper-raised: #fffdf8;
-  --paper-sunken: #efe9de;
-  --ink: #171a1f;
-  --ink-2: #4a4f57;
-  /* #62676f 而非原 #666b73：后者配 --paper-sunken 仅 4.44:1，未达 WCAG AA 4.5。
-     此值在三种纸面上分别 5.15 / 5.60 / 4.71，色相与明度几乎不变。 */
-  --ink-3: #62676f;
-  --rule: #d9d2c5;
-  --rule-strong: #8c8578;
-  --accent: #b83c22;
-  --accent-hover: #9e301a;
-  --accent-tint: #f3e1d9;
-  --route: #1f4e6b;
-  --route-tint: #dde8ee;
+  --paper: #f5f4ec;
+  --paper-raised: #fffdf6;
+  --paper-sunken: #e8ece5;
+  --ink: #152c33;
+  --ink-2: #354d54;
+  --ink-3: #50626a;
+  --rule: #cdd5cf;
+  --rule-strong: #647781;
+  --accent: #a9371d;
+  --on-accent: #ffffff;
+  --accent-hover: #8a2c15;
+  --accent-tint: #f6e5d8;
+  --route: #11616a;
+  --route-tint: #dcebe4;
+  --focus: var(--route);
+  --motion-press: 75ms;
+  --motion-feedback: 160ms;
+  --motion-reveal: 260ms;
+  --ease-dock: cubic-bezier(.22,.75,.25,1);
   --ok: #2f6b4f;
   --warn: #8a5a00;
   --err: #a3302a;
@@ -92,19 +103,20 @@
 }
 
 .dark {
-  --paper: #101418;
-  --paper-raised: #1c222a;
-  --paper-sunken: #171c22;
-  --ink: #f2ede4;
-  --ink-2: #c9c3b8;
-  --ink-3: #9a948a;
-  --rule: #2a3038;
-  --rule-strong: #5a6472;
-  --accent: #e06a4f;
-  --accent-hover: #f07c62;
-  --accent-tint: #3a231d;
-  --route: #7fb3d5;
-  --route-tint: #1b2c38;
+  --paper: #101b20;
+  --paper-raised: #19282e;
+  --paper-sunken: #142228;
+  --ink: #e8f1ec;
+  --ink-2: #c3d2cf;
+  --ink-3: #aabbbe;
+  --rule: #34454c;
+  --rule-strong: #8ba0a4;
+  --accent: #ff956e;
+  --on-accent: #152126;
+  --accent-hover: #ffb090;
+  --accent-tint: #412b25;
+  --route: #7dd7d1;
+  --route-tint: #203e40;
   --ok: #6fbf9a;
   --warn: #e0b45c;
   --err: #e58a80;
@@ -162,7 +174,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus);
     outline-offset: 2px;
   }
 
@@ -184,24 +196,11 @@
 
 }
 
-/* ── 触感反馈（Tactile press）───────────────────────────────────────────
-   审计发现全站 active: 反馈为 0 处：按钮按下无任何物理回应。
-   这里统一给可点击元素加按下缩放 + 一致缓动，避免逐个组件补 39 处 class。
-   放在 @layer 之外：无层级样式在 CSS 级联中优先于 Tailwind utilities，
-   因此能覆盖组件自带的 transition-colors（否则 transform 不会有过渡）。
-   遮罩类按钮用 data-press="off" 退出，避免缩放后露出边缘。 */
-button:not(:disabled),
-[role='button']:not([aria-disabled='true']),
-a[href] {
-  transition-property: color, background-color, border-color, opacity, transform, box-shadow;
-  transition-duration: 180ms;
-  transition-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
-}
-
-button:not(:disabled):not([data-press='off']):active,
-[role='button']:not([aria-disabled='true']):not([data-press='off']):active {
-  transform: scale(0.97);
-  transition-duration: 60ms;
+/* A control's surface stays put. Only primary-action content travels on press. */
+@layer base {
+  button:not(:disabled), a[href] {
+    transition: color var(--motion-feedback), background-color var(--motion-feedback), border-color var(--motion-feedback);
+  }
 }
 
 /* 禁用态统一给出不可用光标，避免用户反复点击 */
@@ -367,7 +366,16 @@ button:disabled,
     animation: none !important;
     transition: none !important;
   }
+  html { scroll-behavior: auto !important; }
   .skeleton {
     background: var(--paper-sunken);
   }
 }
+:root:not([data-motion='standard'])[data-motion] *,
+:root:not([data-motion='standard'])[data-motion] *::before,
+:root:not([data-motion='standard'])[data-motion] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+:root:not([data-motion='standard'])[data-motion] .skeleton { background: var(--paper-sunken); }

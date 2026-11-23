@@ -20,6 +20,7 @@ from typing import Optional, Union, List, Dict, Any
 import json
 import logging
 import asyncio
+from datetime import date
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,43 @@ def _is_pg(memory_manager) -> bool:
         return False
     from context.long_term_memory import PostgresLongTermMemory
     return isinstance(memory_manager.long_term, PostgresLongTermMemory)
+
+
+_PLANNERS = {"itinerary_planning", "plan-trip"}
+_EVENT_COLLECTORS = {"event_collection", "event-collection"}
+_PREFERENCE_CONSUMERS = _PLANNERS | _EVENT_COLLECTORS
+_HISTORY_CONSUMERS = {"memory_query", "memory-query"}
+
+
+def _complete_event(intention: dict) -> bool:
+    event = intention.get("fast_event")
+    if not isinstance(event, dict) or event.get("missing_info") or intention.get("needs_clarification"):
+        return False
+    if not all(isinstance(event.get(field), str) and event[field].strip()
+               for field in ("origin", "destination", "trip_purpose")) or event["origin"] == event["destination"]:
+        return False
+    try:
+        duration = (date.fromisoformat(event["end_date"]) - date.fromisoformat(event["start_date"])).days + 1
+    except (KeyError, TypeError, ValueError):
+        return False
+    return duration > 0 and type(event.get("duration_days")) is int and event["duration_days"] == duration
+
+
+def normalized_schedule(intention: dict) -> list[dict]:
+    schedule = intention.get("agent_schedule")
+    if not isinstance(schedule, list):
+        return []
+    tasks = [entry for entry in schedule if isinstance(entry, dict) and isinstance(entry.get("agent_name"), str)]
+    separate_event = any(isinstance(item, dict) and item.get("type") in _EVENT_COLLECTORS
+                         for item in intention.get("intents") or [])
+    skip_event = any(entry["agent_name"] in _PLANNERS for entry in tasks) and not separate_event and _complete_event(intention)
+    unique = []
+    for entry in tasks:
+        if skip_event and entry["agent_name"] in _EVENT_COLLECTORS:
+            continue
+        if entry not in unique:
+            unique.append(entry)
+    return unique
 
 
 class OrchestrationAgent(SkillAgentBase):
@@ -48,6 +86,7 @@ class OrchestrationAgent(SkillAgentBase):
         self.agent_registry = agent_registry or {}
         self.memory_manager = memory_manager
         self.result_queue = result_queue
+        self.trip_evidence: dict = {}
 
     def register_agent(self, agent_name: str, agent: SkillAgentBase):
         """注册子智能体"""
@@ -86,8 +125,28 @@ class OrchestrationAgent(SkillAgentBase):
             logger.error(f"Failed to parse intention output: {e}")
             return mk_msg(self.name, {"error": "Invalid intention format"})
 
+        if not isinstance(intention_data, dict):
+            return mk_msg(self.name, {"error": "Invalid intention format"})
+        if intention_data.get("_prepared_trip") is not None:
+            from pydantic import ValidationError
+            from agents.trip_workflow import run_trip_workflow, shanghai_now
+            from utils.trip_request import TripRequest, trip_requirements
+
+            try:
+                request = TripRequest.model_validate(intention_data["_prepared_trip"])
+            except ValidationError:
+                return mk_msg(self.name, {"error": "Invalid trip request"})
+            if trip_requirements(request, shanghai_now().date()):
+                return mk_msg(self.name, {"error": "Incomplete trip request"})
+            hints = intention_data.get("_personal_ranking_hints")
+            if isinstance(hints, dict) and hints:
+                return mk_msg(self.name, await run_trip_workflow(
+                    request, self.agent_registry, self.result_queue, self.trip_evidence, ranking_hints=hints,
+                ))
+            return mk_msg(self.name, await run_trip_workflow(request, self.agent_registry, self.result_queue, self.trip_evidence))
+
         # 获取智能体调度计划
-        agent_schedule = intention_data.get("agent_schedule", [])
+        agent_schedule = normalized_schedule(intention_data)
         if not agent_schedule:
             return mk_msg(self.name, {
                 "status": "no_agents",
@@ -95,12 +154,16 @@ class OrchestrationAgent(SkillAgentBase):
             })
 
         # 按优先级排序
-        sorted_schedule = sorted(agent_schedule, key=lambda x: x.get("priority", 999))
+        def priority_of(entry):
+            value = entry.get("priority", 999)
+            return value if type(value) is int else 999
+
+        sorted_schedule = sorted(agent_schedule, key=priority_of)
 
         logger.info(f"Orchestrating {len(sorted_schedule)} agents")
 
         # 准备上下文信息
-        context = await self._prepare_context(intention_data)
+        context = await self._prepare_context(intention_data, {task["agent_name"] for task in sorted_schedule})
 
         # 并行执行智能体（按优先级分组）
         results = []
@@ -108,7 +171,7 @@ class OrchestrationAgent(SkillAgentBase):
         parallel_tasks = []
 
         for task in sorted_schedule:
-            priority = task.get("priority", 0)
+            priority = priority_of(task)
 
             # 如果优先级变化，先执行当前批次
             if current_priority is not None and priority != current_priority:
@@ -135,14 +198,14 @@ class OrchestrationAgent(SkillAgentBase):
 
         return mk_msg(self.name, final_result)
 
-    async def _prepare_context(self, intention_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _prepare_context(self, intention_data: Dict[str, Any], agent_names: set[str]) -> Dict[str, Any]:
         """准备上下文信息，供子智能体使用"""
         context = {
-            "reasoning": intention_data.get("reasoning", ""),
-            "intents": intention_data.get("intents", []),
             "key_entities": intention_data.get("key_entities", {}),
-            "rewritten_query": intention_data.get("rewritten_query", "")
+            "rewritten_query": intention_data.get("rewritten_query", ""),
         }
+        if original := intention_data.get("original_query"):
+            context["original_query"] = original
 
         # 快速路由提取的参数（如记账金额、分类等）
         if "fast_expense" in intention_data:
@@ -159,12 +222,13 @@ class OrchestrationAgent(SkillAgentBase):
             context["session_focus"] = intention_data["session_focus"]
 
         # 从记忆系统获取上下文
-        if self.memory_manager:
-            recent_context = self.memory_manager.short_term.get_recent_context(3)
-            context["recent_dialogue"] = recent_context
-
+        if self.memory_manager and agent_names & _HISTORY_CONSUMERS:
+            context["recent_dialogue"] = self.memory_manager.short_term.get_recent_context(3)
+        if self.memory_manager and agent_names & _PREFERENCE_CONSUMERS:
             lt = self.memory_manager.long_term
-            if _is_pg(self.memory_manager):
+            if "preferences_snapshot" in intention_data:
+                preferences = intention_data["preferences_snapshot"]
+            elif _is_pg(self.memory_manager):
                 preferences = await lt.get_preference()
             else:
                 preferences = lt.get_preference()
@@ -309,13 +373,19 @@ class OrchestrationAgent(SkillAgentBase):
         # 构建输入消息，并把当前 agent 名称传入上下文，供 skill 判断类型
         context_with_agent = dict(context)
         context_with_agent["agent_name"] = agent_name
+        if agent_name not in _HISTORY_CONSUMERS:
+            context_with_agent.pop("recent_dialogue", None)
+        if agent_name not in _PREFERENCE_CONSUMERS:
+            context_with_agent.pop("user_preferences", None)
+        if agent_name not in {"hotel_search", "hotel-search", "place-search", "train_ticket", "train-ticket"}:
+            context_with_agent.pop("original_query", None)
 
         # 构建输入消息
         input_data = {
             "context": context_with_agent,
             "reason": reason,
             "expected_output": expected_output,
-            "previous_results": previous_results
+            "previous_results": previous_results if agent_name in _PLANNERS else [],
         }
         # 传递快速路由提取的参数
         if "fast_expense" in context:
@@ -341,8 +411,9 @@ class OrchestrationAgent(SkillAgentBase):
             result = msg_json(response, default={"output": msg_text(response)})
 
             # 检查 result 中是否有 error 字段
-            if isinstance(result, dict) and "error" in result:
-                error_msg = result.get("error", "未知错误")
+            if isinstance(result, dict) and ("error" in result or result.get("status") == "error" or result.get("action") == "error" or result.get("query_success") is False):
+                error_msg = result.get("error") or result.get("answer") or result.get("message") or (result.get("results") or {}).get("message") or "暂时无法完成该请求"
+                result["error"] = error_msg
                 return {
                     "status": "error",
                     "agent_name": agent_name,
@@ -429,24 +500,9 @@ class OrchestrationAgent(SkillAgentBase):
 
                         if pref_action == "append":
                             if is_pg:
-                                current_prefs = await lt.get_preference()
+                                await lt.append_preference(pref_type, pref_value, unique=True)
                             else:
-                                current_prefs = lt.get_preference()
-                            existing_value = current_prefs.get(pref_type)
-
-                            if isinstance(existing_value, list):
-                                if pref_value not in existing_value:
-                                    existing_value.append(pref_value)
-                            elif existing_value:
-                                # 旧值是字符串时不要无脑拼成 ["汉庭","汉庭"]
-                                existing_value = existing_value if existing_value == pref_value else [existing_value, pref_value]
-                            else:
-                                existing_value = [pref_value]
-
-                            if is_pg:
-                                await lt.save_preference(pref_type, existing_value)
-                            else:
-                                lt.save_preference(pref_type, existing_value)
+                                lt.append_preference(pref_type, pref_value, unique=True)
                             logger.info(f"Appended to {pref_type}: {pref_value}")
                         else:
                             if is_pg:

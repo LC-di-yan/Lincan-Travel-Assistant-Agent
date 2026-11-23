@@ -1,127 +1,38 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# AgentScope
-.agentscope/
-
-# Data
-data/rag_knowledge/
-data/models/
-data/preferences/*.json
-!data/preferences/.gitkeep
-
-# Logs
-*.log
-logs/
-
-# 运行时数据（用户记忆、会话落盘、调试产物）
-server/data/
-
-# Frontend
-web/node_modules/
-web/dist/
-
-# Environment & Secrets
 .env
-.env.local
 .env.*
 !.env.example
-!.env.production.example
-*.bak-*
-*.bak
-
-# 本地运维脚本 / 备份（含服务器口令），只留本机，不进仓库
-private/
-
-# 调试产物
-models_out.json
-
-# Test / tooling caches
+*.key
+*.pem
+*.pfx
+*.p12
+*.sqlite*
+*.log
+*.lock.tmp
+__pycache__/
+*.py[cod]
 .pytest_cache/
+.mypy_cache/
 .ruff_cache/
-
-# User memory data (contains personal info)
-data/memory/*.json
-!data/memory/.gitkeep
-!data/memory/example_user.json
-
-# Claude local settings（claudian-settings.json 含内部 ARN/代理地址，绝不入库）
-.claude/settings.local.json
-.claude/claudian-settings.json
-
-# 决策层影子日志（运行时产物）
-data/decision_shadow/*.jsonl
-
-# 测试写入目录
-data/test_memory/
-
-# 抓取残留
-*.downloading
-image/resources/
-
-# Test results
-tests/results/
-
-# Database files
-*.db
-
-# OS
+.coverage*
+htmlcov/
+.venv*/
+venv*/
+node_modules/
+dist/
+*.tsbuildinfo
+logs/
+private/
+output/
+tmp/
+assets-audit/
+.idea/
+.vscode/
 .DS_Store
 Thumbs.db
-
-# AgentScope 升级的影子环境与临时产物
-.venv-as2/
-.venv-as1/
-data/pytest_*.txt
-# data 根目录只放运行时产物与调试日志，一律不入库（data/baseline/ 等子目录不受影响）
-data/*.txt
-data/*.log
-data/*.png
-data/demo-runtime/
-data/*.json.tmp
-data/ab_*.json
-data/lint.json
-# 前端视觉验证截图（本地产物，用 present 展示，不入库）
-data/visual/
-data/demo/
-data/baseline_p2_tests.txt
-experiments/pytest_*.txt
-data/p2_batch3_tests.txt
-data/commit_msg.txt
-
-# 构建产物与历史审计截图不入库（2026-11 精简：clone 体积从 7.4MB 降到 4.3MB）
-# 游客自行构建：cd web && npm install && npm run build（产物 web/dist/ 已被上面忽略）
-web/dist-pages/
-docs/ui-audit/
-# 一次性验证脚本（用后即删）
-experiments/_*.py
+data/*
+!data/as2_gate_allowlist.json
+!data/decision_thresholds.example.json
+server/data/
+.claude/settings.local.json
+.claude/claudian-settings.json
+.claude/skills/*/data/tree_index/

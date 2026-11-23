@@ -1,0 +1,152 @@
+.flight-result {
+  container: result-card / inline-size;
+  min-width: 0;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--route);
+  border-radius: 3px 3px 12px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.flight-result button,.flight-result a { min-height: 44px; }
+.flight-result :is(button,a):focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.fdr-heading { display: flex; justify-content: space-between; align-items: start; gap: 10px; padding: 15px 18px 12px; }
+.fdr-title { min-width: 0; }
+.fdr-overline { display: flex; align-items: center; gap: 7px; color: var(--route); font: 650 11px var(--font-mono-stack); letter-spacing: .08em; }
+.fdr-overline i { width: 8px; height: 8px; border: 2px solid currentColor; border-radius: 50%; flex: none; }
+.fdr-heading h3 { margin: 4px 0 0; font: 650 clamp(19px,4.1cqw,28px)/1.3 var(--font-display-stack); }
+.fdr-meta { display: flex; flex-wrap: wrap; gap: 3px 12px; margin-top: 5px; font-size: 12px; color: var(--ink-3); }
+.fdr-meta:empty { display: none; }
+.fdr-evidence { padding: 10px 18px 7px; background: var(--paper-sunken); border-block: 1px solid var(--rule); color: var(--ink-2); }
+.fdr-evidence-title { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.fdr-evidence p { margin-top: 4px; font-size: 12px; }
+.fdr-stamp,.fdr-mini-warn { border: 1px solid currentColor; border-radius: 3px; padding: 1px 5px; color: var(--warn); background: var(--warning-light); font-size: 11px; font-weight: 650; }
+.fdr-evidence[data-tone=neutral] .fdr-stamp { color: var(--route); background: var(--route-tint); }
+.fdr-evidence[data-tone=confirmed] .fdr-stamp { color: var(--ok); background: var(--success-light); }
+.fdr-summary[data-error] { color: var(--err); }
+.fdr-receipt-pair { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 12px 18px; }
+.fdr-receipt-pair > div { padding: 9px; border: 1px solid var(--rule); border-radius: 5px; }
+.fdr-receipt-pair dt { color: var(--ink-3); font-size: 11px; }
+.fdr-receipt-pair dd { color: var(--route); font: 650 15px var(--font-mono-stack); }
+.fdr-notes { padding-left: 16px; list-style: disc; font-size: 12px; }
+.fdr-sources { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: 14px; margin-inline-end: 12px; color: var(--ink-2); }
+.fdr-sources li,.fdr-inline-link { display: inline-flex; margin-inline-end: 4px; }
+.fdr-source-label { color: var(--ink-3); font-size: 11px; font-weight: 650; }
+.fdr-sources a,.fdr-inline-link { display: inline-flex; gap: 4px; align-items: center; padding-inline: 2px; color: var(--route); text-decoration: underline; text-underline-offset: .2em; font-size: 12px; font-weight: 650; }
+.fdr-sources span { font-size: 12px; }
+.fdr-sources svg,.fdr-inline-link svg { flex: none; }
+.fdr-inline-link:hover,.fdr-sources a:hover { background: var(--route-tint); }
+.fdr-summary,.fdr-empty { padding: 10px 18px; font-size: 12px; color: var(--ink-2); }
+.fdr-section-head { display: flex; align-items: center; justify-content: space-between; gap: 2px 10px; flex-wrap: wrap; padding: 3px 18px; border-bottom: 1px solid var(--rule); min-height: 48px; }
+.fdr-section-head h4 { color: var(--ink); font-size: 13px; font-weight: 700; }
+.fdr-section-head small { color: var(--ink-3); font-size: 11px; font-weight: 500; margin-inline-start: 4px; }
+.fdr-action { display: inline-flex; align-items: center; gap: 4px; color: var(--route); font-size: 12px; font-weight: 650; padding-inline: 5px; border-radius: 4px; }
+.fdr-action[aria-expanded=true] svg,.fdr-day-switch[aria-expanded=true] > svg { transform: rotate(180deg); }
+.fdr-action:hover,.fdr-day-switch:hover { background: var(--route-tint); }
+.fdr-day + .fdr-day,.fdr-train + .fdr-train,.fdr-hotel + .fdr-hotel { border-top: 1px solid var(--rule); }
+.flight-result .fdr-day-switch { width: 100%; min-height: 60px; display: grid; align-items: center; gap: 9px; grid-template-columns: auto minmax(0,1fr) auto auto; padding: 7px 18px; text-align: start; }
+.fdr-day-switch > svg { grid-column: 4; color: var(--route); }
+.fdr-day-switch[aria-expanded=true] { background: var(--route-tint); }
+.fdr-day-number { display: grid; place-items: center; height: 28px; min-width: 28px; padding-inline: 4px; border: 1px solid var(--route); border-radius: 4px; color: var(--route); font: 700 12px var(--font-mono-stack); }
+.fdr-day-text strong,.fdr-day-text small { display: block; }
+.fdr-day-text small { font-size: 11px; color: var(--ink-3); }
+.fdr-mini-warn { white-space: nowrap; }
+.fdr-day-detail { padding: 7px 18px 9px; }
+.fdr-dayrail { position: relative; --rail-offset: 6px; margin: 6px 0; }
+.fdr-dayrail:has(.fdr-stop + .fdr-stop)::before,.fdr-dayrail:has(.fdr-stop + .fdr-stop)::after { position: absolute; content: ''; top: 15px; bottom: 17px; left: var(--rail-offset); width: 1px; background: var(--rule-strong); pointer-events: none; }
+.fdr-dayrail::after { background: var(--route); width: 2px; display: none; }
+.fdr-stop { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0,120px) minmax(0,1fr); gap: 10px; padding: 7px 0 7px 20px; }
+.fdr-stop::before { content: ''; position: absolute; top: 12px; left: calc(var(--rail-offset) - 4px); width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--route); background: var(--paper-raised); }
+.fdr-stop[data-unverified]::before { border-color: var(--warn); border-radius: 2px; transform: rotate(45deg); }
+.fdr-stop-time { color: var(--route); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.fdr-stop[data-unverified] .fdr-stop-time,.fdr-hotel-price[data-unknown] strong { color: var(--warn); }
+.fdr-stop h5,.fdr-hotel h5 { font-size: 14px; font-weight: 700; }
+.fdr-stop-meta { display: flex; align-items: baseline; gap: 3px; color: var(--ink-3); font-size: 11px; }
+.fdr-stop-text { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+.fdr-meals { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; border-top: 1px dashed var(--rule); padding: 6px 0 2px; color: var(--ink-2); font-size: 12px; }
+.fdr-meals svg { color: var(--route); }
+.fdr-train { display: grid; grid-template-columns: minmax(65px,.65fr) minmax(0,1.8fr) minmax(0,1.4fr); align-items: start; gap: 6px 14px; padding: 10px 18px; }
+.fdr-train-id strong { font: 700 18px var(--font-mono-stack); color: var(--ink); }
+.fdr-train-id small,.fdr-train-track small { display: block; color: var(--ink-3); font-size: 11px; }
+.fdr-train-track { display: grid; grid-template-columns: minmax(0,1fr) minmax(15px,.4fr) minmax(0,1fr); align-items: center; gap: 5px; }
+.fdr-train-track > div:last-child { text-align: end; }
+.fdr-train-track span { display: block; color: var(--ink-3); font-size: 10px; }
+.fdr-train-track strong { display: block; color: var(--route); font: 700 15px var(--font-mono-stack); }
+.fdr-train-track > i { border-top: 1px solid var(--route); position: relative; }
+.fdr-train-track > i::after { position: absolute; right: 0; top: -3px; content: ''; width: 5px; height: 5px; border-top: 1px solid var(--route); border-right: 1px solid var(--route); transform: rotate(45deg); }
+.fdr-seats { display: flex; justify-content: end; gap: 3px; flex-wrap: wrap; }
+.fdr-seats > div { padding: 2px 4px; border: 1px solid var(--rule); border-radius: 3px; font-size: 11px; }
+.fdr-seats dt,.fdr-seats dd { display: inline; }
+.fdr-seats dd { margin-inline-start: 3px; font-weight: 650; }
+.fdr-seats > [data-unknown] { color: var(--ink-3); border-style: dashed; }
+.fdr-hotel { display: grid; grid-template-columns: auto minmax(0,1.7fr) minmax(104px,.7fr); gap: 9px; padding: 10px 18px; }
+.fdr-hotel-name p { font-size: 12px; color: var(--ink-2); }
+.fdr-hotel-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 2px; }
+.fdr-hotel-price { align-self: start; padding: 4px 7px; border-inline-start: 2px solid var(--route); background: var(--route-tint); color: var(--route); }
+.fdr-hotel-price[data-unknown] { border-color: var(--warn); background: var(--warning-light); }
+.fdr-hotel-price small { display: block; color: var(--ink-2); font-size: 11px; }
+.fdr-price-number { display: inline-block; max-width: 100%; font-variant-numeric: tabular-nums; }
+.fdr-place-thumb { display: grid; place-items: center; width: 36px; height: 36px; background: var(--route-tint); color: var(--route); border: 1px solid var(--rule); border-radius: 5px; overflow: hidden; }
+.fdr-place-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.fdr-place:not(:has(.fdr-hotel-price)) .fdr-hotel-name { grid-column: 2 / -1; }
+.fdr-weather-body { padding: 12px 18px; }
+.fdr-weather-live { padding: 9px 12px; background: var(--route-tint); border-left: 3px solid var(--route); border-radius: 2px 6px 6px 2px; }
+.fdr-weather-compact { font-size: 12px; line-height: 1.75; }
+.fdr-weather-forecast { margin-top: 4px; }
+.fdr-weather-live + .fdr-weather-forecast { margin-top: 12px; }
+.fdr-weather-forecast h4 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 9px; padding: 4px 0 7px; border-bottom: 1px solid var(--rule); font-weight: 700; }
+.fdr-weather-forecast h4 span { font-size: 11px; font-weight: 450; color: var(--ink-3); }
+.fdr-forecast-row { padding: 8px 0; font-size: 12px; }
+.fdr-forecast-row + .fdr-forecast-row { border-top: 1px solid var(--rule); }
+.fdr-forecast-reading { display: grid; align-items: baseline; grid-template-columns: minmax(0,.95fr) minmax(0,1.4fr) minmax(0,.65fr); gap: 4px 9px; }
+.fdr-forecast-reading time { font-weight: 650; }
+.fdr-forecast-conditions { color: var(--ink-2); }
+.fdr-forecast-range { justify-self: end; color: var(--route); font: 650 13px var(--font-mono-stack); }
+.fdr-expense-lines { padding-inline: 18px; }
+.fdr-expense-lines li { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,max-content); gap: 5px 12px; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+.fdr-expense-lines small { display: block; color: var(--ink-3); font-size: 11px; }
+.fdr-expense-lines b { justify-self: end; text-align: end; color: var(--ink); font: 700 14px var(--font-mono-stack); }
+.fdr-expense-totals,.fdr-expense-category { padding: 10px 18px; }
+.fdr-expense-totals h4,.fdr-expense-category h4 { font-weight: 700; }
+.fdr-expense-totals small { margin-inline-start: 3px; color: var(--ink-3); font-size: 11px; font-weight: 450; }
+.fdr-expense-totals ul { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.fdr-expense-totals li { padding: 5px 8px; background: var(--route-tint); color: var(--route); border-radius: 4px; font-family: var(--font-mono-stack); }
+.fdr-expense-category .fdr-expense-lines { padding-inline: 0; }
+.fdr-expense-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px 12px; padding: 8px 18px; background: var(--paper-sunken); border-top: 1px solid var(--rule); }
+.fdr-expense-actions span { color: var(--ink-2); font-size: 12px; }
+.fdr-expense-actions button { padding-inline: 12px; background: var(--accent); color: var(--on-accent); border-radius: 6px; font-weight: 650; }
+.fdr-expense-actions button:hover { background: var(--accent-hover); }
+.flight-result .fdr-expense-actions button:focus-visible { outline-offset: 2px; }
+
+@container result-card (max-width: 490px) {
+  .fdr-heading,.fdr-evidence,.fdr-day-switch,.fdr-section-head,.fdr-day-detail,.fdr-summary,.fdr-empty,.fdr-train,.fdr-hotel { padding-inline: 11px; }
+  .fdr-weather-body,.fdr-expense-lines,.fdr-expense-totals,.fdr-expense-category,.fdr-expense-actions { padding-inline: 11px; }
+  .fdr-forecast-reading { grid-template-columns: minmax(0,1.15fr) minmax(0,.85fr); }
+  .fdr-forecast-conditions { grid-column: 1 / -1; grid-row: 2; }
+  .fdr-forecast-range { grid-column: 2; grid-row: 1; }
+  .fdr-expense-lines li { grid-template-columns: minmax(0,1fr) minmax(0,.9fr); }
+  .fdr-stop { grid-template-columns: minmax(0,78px) minmax(0,1fr); gap: 6px; }
+  .flight-result .fdr-day-switch { column-gap: 5px; padding-inline: 11px; }
+  .fdr-train { grid-template-columns: minmax(54px,.5fr) minmax(0,1.8fr); }
+  .fdr-seats { grid-column: 1 / -1; justify-content: start; }
+  .fdr-hotel { grid-template-columns: auto minmax(0,1fr) minmax(84px,.5fr); gap: 6px; }
+}
+@container result-card (max-width: 316px) {
+  .flight-result .fdr-day-switch { grid-template-columns: auto minmax(0,1fr) auto; }
+  .fdr-day-switch > svg { grid-column: 3; grid-row: 1; }
+  .fdr-mini-warn { grid-column: 2; justify-self: start; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-motion=standard] .fdr-dayrail[data-trace]::after { display: block; transform-origin: top; animation: fdr-follow-order 320ms var(--ease-dock) both; }
+  :root[data-motion=standard] .fdr-stamp[data-fresh] { animation: fdr-expense-confirmed 320ms var(--ease-dock) both; }
+}
+@keyframes fdr-follow-order {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes fdr-expense-confirmed {
+  from { transform: scale(.93); box-shadow: 0 0 0 3px var(--route-tint); }
+  to { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+}

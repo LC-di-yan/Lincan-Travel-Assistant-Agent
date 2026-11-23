@@ -16,12 +16,7 @@ function cacheKey(ctx: SuggestionContext): string {
   return `${ctx.userMessage.slice(0, 40)}|${primary}|${dest}`
 }
 
-// ── LLM 调用 ──────────────────────────────────────────
-// 通过 Vite 环境变量配置 LLM API（复用服务端同一模型）
-// VITE_LLM_API_URL  - OpenAI 兼容 API 地址
-// VITE_LLM_API_KEY  - API Key
-// VITE_LLM_MODEL    - 模型名
-// 未配置则自动降级，仅使用规则引擎结果
+// 模型建议由同源服务端生成，禁止把模型密钥配置进浏览器构建产物。
 
 function buildPrompt(ctx: SuggestionContext): string {
   const intents = ctx.intention?.intents?.map((i) => i.type).join(', ') || '未知'
@@ -77,13 +72,6 @@ export async function fetchLLMSuggestions(
   existingTexts: Set<string>,
   signal?: AbortSignal,
 ): Promise<FollowUpSuggestion[]> {
-  const apiUrl = import.meta.env.VITE_LLM_API_URL
-  const apiKey = import.meta.env.VITE_LLM_API_KEY
-  const model = import.meta.env.VITE_LLM_MODEL || 'deepseek-chat'
-
-  // 未配置 LLM API → 自动降级
-  if (!apiUrl || !apiKey) return []
-
   // 检查缓存
   const key = cacheKey(ctx)
   const cached = cache.get(key)
@@ -92,28 +80,18 @@ export async function fetchLLMSuggestions(
   }
 
   try {
-    const response = await fetch(apiUrl, {
+    const response = await fetch('/api/suggestions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: '你是一个追问建议生成器。只输出 JSON 数组，不要输出任何其他内容。' },
-          { role: 'user', content: buildPrompt(ctx) },
-        ],
-        max_tokens: 200,
-        temperature: 0.7,
-      }),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: buildPrompt(ctx).slice(0, 6000) }),
       signal,
     })
 
     if (!response.ok) return []
 
     const data = await response.json()
-    const content = data.choices?.[0]?.message?.content || ''
+    const content = typeof data.content === 'string' ? data.content : ''
     const suggestions = parseSuggestions(content, existingTexts)
 
     // 写入缓存

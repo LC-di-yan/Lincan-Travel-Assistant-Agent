@@ -1,108 +1,56 @@
-import { useState } from 'react'
-import { PanelRightOpen, PanelRightClose, Volume2, Plus } from 'lucide-react'
+import { lazy, useState } from 'react'
+import { History, PanelsRightBottom, SlidersHorizontal, Plus, CircleUserRound, Compass } from 'lucide-react'
+import type { MotionChoice } from '../../hooks/useMotionPolicy'
+import { RouteBeacon } from '../Illustrations/RouteBeacon'
 import { ThemeToggle } from './ThemeToggle'
-import { TTSSettings } from './TTSSettings'
-import { ConfirmDialog } from './ConfirmDialog'
-import { useChatStore } from '../../store/chatStore'
+import { SurfaceDialog } from './SurfaceDialog'
+import { DeferredRegion } from './DeferredRegion'
 
-export function Header({ dark, toggle, sidebarOpen, onToggleSidebar }: {
-  dark: boolean
-  toggle: () => void
-  sidebarOpen: boolean
-  onToggleSidebar: () => void
-}) {
-  const clearChat = useChatStore((s) => s.clearChat)
-  const messages = useChatStore((s) => s.messages)
-  const [ttsOpen, setTtsOpen] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
+const TTSSettings = lazy(() => import('./TTSSettings').then(m => ({ default: m.TTSSettings })))
 
-  const requestClear = () => {
-    if (messages.length === 0) {
-      clearChat()
-      return
-    }
-    setConfirmOpen(true)
-  }
+interface Props {
+  dark: boolean; toggle: () => void
+  motion: MotionChoice; onMotion: (value: MotionChoice) => void
+  sidebarOpen: boolean; onToggleSidebar: () => void
+  personalAvailable: boolean; inPersonal: boolean; hasMessages: boolean
+  historyOpen: boolean; onToggleHistory: () => void
+  onNewConversation: () => void; switching: boolean
+}
 
-  return (
-    <>
-      <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-rule bg-paper px-4 md:px-6">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <button
-            type="button"
-            onClick={requestClear}
-            className="flex min-w-0 items-center gap-2.5 rounded-[2px] text-left"
-            title="新对话"
-          >
-            <span
-              aria-hidden="true"
-              className="flex h-6 w-6 flex-shrink-0 -rotate-3 items-center justify-center rounded-[2px] border-[1.5px] border-accent font-mono text-[11px] font-bold leading-none text-accent"
-            >
-              A
-            </span>
-            <span className="truncate text-[15px] font-bold tracking-[0.16em] text-ink">ALIGO</span>
-            <span className="hidden text-[11px] tracking-[0.08em] text-ink-3 sm:inline">差旅文件</span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={requestClear}
-            className="mr-1 hidden h-9 items-center gap-1.5 rounded-[2px] border border-rule-strong px-3 text-xs font-semibold text-ink hover:bg-paper-sunken sm:flex"
-          >
-            <Plus size={14} aria-hidden="true" />
-            新对话
-          </button>
-
-          <button
-            type="button"
-            onClick={requestClear}
-            aria-label="新对话"
-            title="新对话"
-            className="flex h-11 w-11 items-center justify-center rounded-[2px] text-ink-3 hover:bg-paper-sunken hover:text-ink sm:hidden"
-          >
-            <Plus size={18} aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            aria-label="语音设置"
-            title="语音设置"
-            onClick={() => setTtsOpen(true)}
-            className="flex h-11 w-11 items-center justify-center rounded-[2px] text-ink-3 hover:bg-paper-sunken hover:text-ink"
-          >
-            <Volume2 size={18} aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            aria-label={sidebarOpen ? '收起行程档案' : '展开行程档案'}
-            aria-expanded={sidebarOpen}
-            title={sidebarOpen ? '收起侧栏' : '展开侧栏'}
-            onClick={onToggleSidebar}
-            className="flex h-11 w-11 items-center justify-center rounded-[2px] text-ink-3 hover:bg-paper-sunken hover:text-ink"
-          >
-            {sidebarOpen
-              ? <PanelRightClose size={18} aria-hidden="true" />
-              : <PanelRightOpen size={18} aria-hidden="true" />}
-          </button>
-
-          <ThemeToggle dark={dark} toggle={toggle} />
-        </div>
-      </header>
-
-      <TTSSettings open={ttsOpen} onClose={() => setTtsOpen(false)} />
-
-      <ConfirmDialog
-        open={confirmOpen}
-        title="删除当前对话？"
-        description="这会清空当前会话的消息。偏好、历史和费用记录不会删除。"
-        confirmLabel="删除"
-        danger
-        onConfirm={clearChat}
-        onClose={() => setConfirmOpen(false)}
-      />
-    </>
-  )
+export function Header({ dark, toggle, motion, onMotion, sidebarOpen, onToggleSidebar, personalAvailable,
+  inPersonal, hasMessages, historyOpen, onToggleHistory, onNewConversation, switching }: Props) {
+  const [settings, setSettings] = useState(false)
+  return <>
+    <header className="deck-header"><div className="masthead">
+      <a href="#/" className="deck-brand" aria-label={inPersonal ? 'ALIGO，返回航图台' : 'ALIGO 首页'}>
+        <span className="brand-mark"><RouteBeacon size={26} /></span><strong>ALIGO</strong>
+      </a>
+      <nav aria-label="工作区导航" className="desk-nav" data-personal={inPersonal}>
+        <a href="#/" className="desk-link work-link" aria-label={inPersonal ? '返回对话' : '差旅航图台'}
+          aria-current={!inPersonal ? 'page' : undefined}><Compass size={16} /> <span>{inPersonal ? '返回对话' : '航图台'}</span></a>
+        {personalAvailable && <a href="#/personal" className="desk-link personal-link" aria-label="个人中心"
+          aria-current={inPersonal ? 'page' : undefined} title="个人中心"><CircleUserRound size={17} /> <span>个人中心</span></a>}
+      </nav>
+      <div className="mast-actions">
+        {!inPersonal && <>
+          {hasMessages && <button type="button" className="nav-tool nav-new" onClick={onNewConversation} disabled={switching}
+            aria-label="新对话" title="新对话"><Plus size={17} /><span>新对话</span></button>}
+          <button type="button" className="nav-tool" onClick={onToggleHistory} aria-expanded={historyOpen}
+            aria-controls={historyOpen ? 'conversation-history' : undefined} title="聊天记录"
+            aria-label={historyOpen ? '收起聊天记录' : '展开聊天记录'}><History size={17} /><span>聊天记录</span></button>
+          <button type="button" className="nav-tool" onClick={onToggleSidebar} aria-expanded={sidebarOpen}
+            aria-controls={sidebarOpen ? 'trip-archive' : undefined} title="行程档案"
+            aria-label={sidebarOpen ? '收起行程档案' : '展开行程档案'}><PanelsRightBottom size={17} /><span>行程档案</span></button>
+        </>}
+        <div className="mast-appearance"><ThemeToggle dark={dark} toggle={toggle} /></div>
+        <button type="button" className="nav-tool nav-icon" onClick={() => setSettings(true)} aria-haspopup="dialog"
+          title="显示与语音设置" aria-label="显示与语音设置"><SlidersHorizontal size={17} /></button>
+      </div>
+    </div></header>
+    {settings && <SurfaceDialog label="显示与语音设置" onClose={() => setSettings(false)}>
+      <DeferredRegion label="显示与语音设置">
+        <TTSSettings onClose={() => setSettings(false)} dark={dark} toggle={toggle} motion={motion} onMotion={onMotion} />
+      </DeferredRegion>
+    </SurfaceDialog>}
+  </>
 }

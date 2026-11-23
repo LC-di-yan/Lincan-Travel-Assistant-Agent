@@ -5,6 +5,7 @@ interface UseSpeechRecognitionOptions {
   continuous?: boolean
   interimResults?: boolean
   onFinal?: (text: string) => void
+  onIssue?: (message: string) => void
 }
 
 interface UseSpeechRecognitionReturn {
@@ -17,36 +18,54 @@ interface UseSpeechRecognitionReturn {
   reset: () => void
 }
 
+interface SpeechResultEvent {
+  resultIndex: number
+  results: ArrayLike<{ isFinal: boolean; [index: number]: { transcript: string } }>
+}
+interface BrowserRecognition {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  onresult: ((event: SpeechResultEvent) => void) | null
+  onerror: ((event: { error: string }) => void) | null
+  onend: (() => void) | null
+  start(): void
+  stop(): void
+}
+type RecognitionConstructor = new () => BrowserRecognition
+type SpeechWindow = Window & { SpeechRecognition?: RecognitionConstructor; webkitSpeechRecognition?: RecognitionConstructor }
+
 export function useSpeechRecognition({
   lang = 'zh-CN',
   continuous = false,
   interimResults = true,
-  onFinal,
+  onFinal, onIssue,
 }: UseSpeechRecognitionOptions = {}): UseSpeechRecognitionReturn {
   const [isListening, setIsListening] = useState(false)
   const [interimText, setInterimText] = useState('')
   const [finalText, setFinalText] = useState('')
-  const recognitionRef = useRef<any>(null)
+  const recognitionRef = useRef<BrowserRecognition | null>(null)
   const onFinalRef = useRef(onFinal)
+  const onIssueRef = useRef(onIssue)
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const isSupported = typeof window !== 'undefined' &&
-    !!(window as any).SpeechRecognition || !!(window as any).webkitSpeechRecognition
+  const constructor = typeof window === 'undefined' ? undefined :
+    ((window as SpeechWindow).SpeechRecognition || (window as SpeechWindow).webkitSpeechRecognition)
+  const isSupported = Boolean(constructor)
 
   useEffect(() => {
     onFinalRef.current = onFinal
-  }, [onFinal])
+    onIssueRef.current = onIssue
+  }, [onFinal, onIssue])
 
   useEffect(() => {
-    if (!isSupported) return
-
-    const SRCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    const recognition = new SRCtor()
+    if (!constructor) return
+    const recognition = new constructor()
     recognition.lang = lang
     recognition.continuous = continuous
     recognition.interimResults = interimResults
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: SpeechResultEvent) => {
       let interim = ''
       let final = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -65,8 +84,12 @@ export function useSpeechRecognition({
       }
     }
 
-    recognition.onerror = (event: any) => {
-      console.warn('[SpeechRecognition] error:', event.error)
+    recognition.onerror = (event: { error: string }) => {
+      if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null }
+      if (event.error !== 'aborted') onIssueRef.current?.(
+        event.error === 'not-allowed' || event.error === 'service-not-allowed' ? '未获得麦克风权限。可以继续打字，或在浏览器设置中允许麦克风。' :
+        event.error === 'no-speech' ? '未听到语音。请再试一次，或直接输入文字。' : '语音输入暂不可用。可以继续打字。',
+      )
       setIsListening(false)
       setInterimText('')
     }
@@ -83,6 +106,8 @@ export function useSpeechRecognition({
     recognitionRef.current = recognition
 
     return () => {
+      recognition.onresult = null; recognition.onend = null; recognition.onerror = null
+      recognitionRef.current = null
       try {
         recognition.stop()
       } catch { /* noop */ }
@@ -91,7 +116,7 @@ export function useSpeechRecognition({
         autoStopTimerRef.current = null
       }
     }
-  }, [isSupported, lang, continuous, interimResults])
+  }, [constructor, lang, continuous, interimResults])
 
   const startListening = useCallback(() => {
     if (!recognitionRef.current || isListening) return
@@ -104,8 +129,8 @@ export function useSpeechRecognition({
       autoStopTimerRef.current = setTimeout(() => {
         try { recognitionRef.current?.stop() } catch { /* noop */ }
       }, 15000)
-    } catch (e) {
-      console.warn('[SpeechRecognition] start failed:', e)
+    } catch {
+      onIssueRef.current?.('无法启动麦克风。请检查浏览器权限，或直接输入文字。')
     }
   }, [isListening])
 

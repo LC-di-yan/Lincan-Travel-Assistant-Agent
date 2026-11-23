@@ -5,12 +5,16 @@
 from agents.base import SkillAgentBase
 from agentscope.message import Msg
 from typing import Optional, Union, List
+import asyncio
+import hashlib
 import json
 import logging
-from datetime import date
+from utils.expenses import format_money, summarize_expenses
 
-from utils.llm_response import extract_llm_json
-from utils.as_compat import mk_msg, msg_text, as_messages
+from utils.expense_commands import (
+    current_expense_request, mixed_expense_command, operation_token, parse_expense_command, prepare_expense_command, read_scope,
+)
+from utils.as_compat import mk_msg, msg_text
 
 logger = logging.getLogger(__name__)
 
@@ -30,136 +34,112 @@ class ExpenseTrackerAgent(SkillAgentBase):
         self.name = name
         self.model = model
         self.memory_manager = memory_manager
-        from utils.skill_loader import SkillLoader
-        self.skill_loader = SkillLoader()
-
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
-        if x is None:
-            return mk_msg(self.name, {"error": "No input"})
-
-        src = x[-1] if isinstance(x, list) else x
-        raw = msg_text(src)
-        fast_expense = None
+        if not x:
+            return mk_msg(self.name, {"action": "error", "answer": "未收到费用请求"})
+        request = current_expense_request.get()
+        raw = msg_text(x[-1] if isinstance(x, list) else x)
+        if request is None:
+            # Standalone consumers may preview a draft but cannot authorize writes.
+            try:
+                data = json.loads(raw)
+                raw = data.get("context", {}).get("rewritten_query", "") if isinstance(data, dict) else raw
+            except json.JSONDecodeError:
+                pass
+        original = request.original if request else raw
+        parsed = parse_expense_command(original)
+        if request and (parsed is None or parsed["kind"] == "invalid"):
+            parsed = mixed_expense_command(original) or parsed
         try:
-            data = json.loads(raw)
-            context = data.get("context", {})
-            user_query = context.get("rewritten_query", "") or str(data)
-            fast_expense = data.get("fast_expense")
-        except json.JSONDecodeError:
-            user_query = raw
-
-        # 获取已有费用记录
-        is_pg = _is_pg(self.memory_manager)
-        existing_expenses = []
-        if self.memory_manager:
-            lt = self.memory_manager.long_term
-            existing_expenses = await lt.get_expenses() if is_pg else lt.get_expenses()
-
-        # 快速路径
-        if fast_expense and fast_expense.get("amount"):
-            result = {
-                "action": "record",
-                "expense": {
-                    "category": fast_expense.get("category", "其他"),
-                    "amount": fast_expense["amount"],
-                    "currency": "CNY",
-                    "description": fast_expense.get("description", ""),
-                    "date": date.today().isoformat(),
-                },
-            }
-            result = await self._execute_action(result, existing_expenses, is_pg)
-            return mk_msg(self.name, result)
-
-        today = date.today().isoformat()
-        expenses_str = json.dumps(existing_expenses[-20:], ensure_ascii=False, indent=2)
-
-        skill_instruction = self.skill_loader.get_skill_content("expense-tracker")
-        if not skill_instruction:
-            skill_instruction = "请分析用户的费用记录请求。"
-
-        prompt = f"""你是差旅费用管理专家，负责记录、查询和管理差旅费用。
-
-【今天的日期】{today}
-
-【最近的费用记录】
-{expenses_str}
-
-【用户输入】
-{user_query}
-
-【任务说明】
-{skill_instruction}
-
-请根据用户意图输出JSON：
-- 记录费用：{{"action": "record", "expense": {{"category": "...", "amount": 数字, "currency": "CNY", "description": "...", "date": "YYYY-MM-DD"}}}}
-- 查询汇总：{{"action": "query", "query_type": "total|by_category|by_date|summary"}}
-- 删除费用：{{"action": "delete", "delete_index": 数字(从0开始)}}
-- 如果无法理解：{{"action": "unknown", "answer": "无法理解您的请求"}}
-
-分类参考：交通、餐饮、住宿、通讯、办公、娱乐、其他
-请直接输出JSON，不要其他文字。
-"""
-
-        try:
-            response = await self.model(as_messages([{"role": "user", "content": prompt}]))
-            result = extract_llm_json(response)
-        except Exception as e:
-            logger.error(f"Expense parsing failed: {e}")
-            result = {"action": "unknown", "answer": f"费用解析失败: {str(e)}"}
-
-        result = await self._execute_action(result, existing_expenses, is_pg)
-
+            if parsed:
+                result = await self._handle_command(request, parsed)
+            elif (scope := read_scope(original)) is not None:
+                if not self.memory_manager:
+                    result = {"action": "error", "answer": "账本暂不可用"}
+                elif scope.get("unsupported_scope"):
+                    result = {"action": "error", "answer": "暂不支持这个查询范围，未返回全量合计"}
+                else:
+                    existing = await self._storage("get_expenses")
+                    existing = [item for item in existing
+                                if (not scope.get("category") or item.get("category") == scope["category"])
+                                and (not scope.get("start") or scope["start"] <= (item.get("date") or "") <= scope["end"])]
+                    result = self._query_expenses({}, existing)
+            else:
+                result = {"action": "error", "answer": "没有明确的账本操作，未修改账本。记账请说「记一笔打车50元」；查账请说「费用汇总」。"}
+        except Exception as exc:
+            logger.warning("Ledger operation failed (%s)", type(exc).__name__)
+            result = {"action": "error", "answer": "账本操作暂不可用。若刚确认后中断，请重试同一个确认命令核对结果。"}
         return mk_msg(self.name, result)
 
-    async def _execute_action(self, parsed: dict, existing: list, is_pg: bool) -> dict:
-        """执行费用操作"""
-        action = parsed.get("action", "unknown")
+    async def _storage(self, name, *args):
+        method = getattr(self.memory_manager.long_term, name)
+        if _is_pg(self.memory_manager):
+            return await method(*args)
+        return await asyncio.to_thread(method, *args)
 
-        if action == "record":
-            return await self._record_expense(parsed, existing, is_pg)
-        elif action == "query":
-            result = self._query_expenses(parsed, existing)
-            if existing:
-                result["proactive_question"] = "需要我帮你导出这些费用明细用于报销吗？"
-            return result
-        elif action == "delete":
-            result = await self._delete_expense(parsed, existing, is_pg)
-            if result.get("action") != "error":
-                result["proactive_question"] = "需要我帮你看看剩余的费用汇总吗？"
-            return result
+    async def _handle_command(self, request, parsed):
+        kind = parsed["kind"]
+        if kind == "invalid":
+            return {"action": "error", "answer": "费用操作有歧义或金额格式不明确，未修改账本。请分开说明每笔用途、正数金额和币种。"}
+        if request is None:
+            if kind == "record":
+                return {"action": "preview", "expense": parsed["items"][0], "expenses": parsed["items"],
+                        "answer": "仅预览，未写入。请在当前会话发起并确认。"}
+            return {"action": "error", "answer": "请在当前会话发起费用操作，未修改账本。"}
+        if not self.memory_manager:
+            return {"action": "error", "answer": "账本暂不可用，未确认提交"}
+        session_id = request.session_id
+        if kind == "confirm":
+            token = parsed["token"]
+            result = await self._storage("expense_operation", session_id, token, "confirm")
         else:
-            return parsed
-
-    async def _record_expense(self, parsed: dict, existing: list, is_pg: bool) -> dict:
-        """记录一笔费用"""
-        expense = parsed.get("expense", {})
-        if not expense.get("amount"):
-            return {"action": "error", "answer": "未识别到金额，请重新输入"}
-
-        expense.setdefault("id", f"exp_{len(existing) + 1}")
-        expense.setdefault("date", date.today().isoformat())
-        expense.setdefault("currency", "CNY")
-        expense.setdefault("category", "其他")
-
-        if self.memory_manager:
-            lt = self.memory_manager.long_term
-            if is_pg:
-                await lt.add_expense(expense)
+            token = operation_token(request)
+            request_hash = hashlib.sha256(request.original.encode()).hexdigest()
+            if kind == "record":
+                command = prepare_expense_command(parsed, [])
+                result = await self._storage("expense_operation", session_id, token, "stage",
+                                             {**command, "request_hash": request_hash})
             else:
-                lt.add_expense(expense)
-
-        amount = expense["amount"]
-        category = expense["category"]
-        desc = expense.get("description", "")
-        total_after = sum(e.get("amount", 0) for e in existing) + amount
-
-        return {
-            "action": "record",
-            "expense": expense,
-            "total_after": total_after,
-            "answer": f"已记录：{category} - {desc} ¥{amount:.2f}",
-            "proactive_question": "需要我帮你看看这个月的费用汇总吗？",
+                result = await self._storage("expense_operation", session_id, token, "lookup")
+                if result["state"] == "not_found":
+                    command = prepare_expense_command(parsed, await self._storage("get_expenses"))
+                    if command is None:
+                        return {"action": "error", "answer": "未能唯一定位这笔费用，未修改账本。请使用费用编号。"}
+                    result = await self._storage("expense_operation", session_id, token, "stage",
+                                                 {**command, "request_hash": request_hash})
+                elif result.get("command", {}).get("request_hash", request_hash) != request_hash:
+                    result = {"state": "conflict"}
+        state = result["state"]
+        if state == "committed":
+            return result["receipt"]
+        if state == "pending":
+            return self._preview(result["command"], token)
+        message = {
+            "not_found": "当前会话未找到这项待确认操作，未修改账本。",
+            "expired": "该确认已过期，未修改账本。请重新发起操作。",
+            "conflict": "费用记录已变化或请求编号已被使用，未修改账本。请核对后重新发起。",
         }
+        return {"action": "error", "answer": message.get(state, "未确认账本操作")}
+
+    @staticmethod
+    def _preview(command, token):
+        kind = command["kind"]
+        if kind == "record":
+            items = command["items"]
+            lines = [f"{item['date']} · {item['description'] or item['category']} · {format_money(item['amount'], item['currency'])}"
+                     for item in items]
+            detail = {"expenses": items, "expense": items[0]}
+            heading = "将新增以下费用，尚未写入："
+        else:
+            item = command["expected"]
+            previous = format_money(item["amount"], item["currency"])
+            lines = [f"{item['id']} · {item['description'] or item['category']} · {previous}"]
+            detail = {"expense": item}
+            heading = "将删除以下费用，尚未修改账本：" if kind == "delete" else "将修改以下费用，尚未写入："
+            if kind == "update":
+                lines.append(f"新金额：{format_money(command['amount'], command['currency'])}")
+        return {"action": "preview", "operation": kind, "answer": heading + "\n" + "\n".join(lines),
+                "confirmation_command": f"确认费用 {token}", **detail}
 
     def _query_expenses(self, parsed: dict, existing: list) -> dict:
         """查询费用汇总"""
@@ -172,44 +152,21 @@ class ExpenseTrackerAgent(SkillAgentBase):
                 "answer": "暂无费用记录"
             }
 
-        total = sum(e.get("amount", 0) for e in existing)
-        by_category = {}
-        for e in existing:
-            cat = e.get("category", "其他")
-            by_category[cat] = by_category.get(cat, 0) + e.get("amount", 0)
-
-        summary = {
-            "total": total,
-            "count": len(existing),
-            "by_category": by_category,
-            "items": existing[-10:]
-        }
+        summary = summarize_expenses(existing)
+        total = summary["total"]
+        by_category = summary["by_category"]
+        currency = summary["currency"]
+        if currency is None:
+            parts = [format_money(amount, code) for code, amount in sorted(summary["totals_by_currency"].items())]
+            return {"action": "query", "summary": summary, "answer": "按原币种分别汇总：" + "；".join(parts) + "（未进行汇率换算）"}
 
         if query_type == "total":
-            answer = f"共{len(existing)}笔支出，合计 ¥{total:.2f}"
+            answer = f"共{len(existing)}笔支出，合计 {format_money(total, currency)}"
         elif query_type == "by_category":
-            parts = [f"{cat}: ¥{amt:.2f}" for cat, amt in sorted(by_category.items(), key=lambda x: -x[1])]
+            parts = [f"{cat}: {format_money(amt, currency)}" for cat, amt in sorted(by_category.items(), key=lambda x: -x[1])]
             answer = "按类别：" + "，".join(parts)
         else:
-            cat_lines = [f"  {cat}: ¥{amt:.2f}" for cat, amt in sorted(by_category.items(), key=lambda x: -x[1])]
-            answer = f"本次差旅共{len(existing)}笔支出，合计¥{total:.2f}\n" + "\n".join(cat_lines)
+            cat_lines = [f"  {cat}: {format_money(amt, currency)}" for cat, amt in sorted(by_category.items(), key=lambda x: -x[1])]
+            answer = f"共{len(existing)}笔支出，合计{format_money(total, currency)}\n" + "\n".join(cat_lines)
 
         return {"action": "query", "summary": summary, "answer": answer}
-
-    async def _delete_expense(self, parsed: dict, existing: list, is_pg: bool) -> dict:
-        """删除一笔费用"""
-        idx = parsed.get("delete_index", -1)
-        if 0 <= idx < len(existing):
-            deleted = existing[idx]
-            if self.memory_manager:
-                lt = self.memory_manager.long_term
-                if is_pg:
-                    await lt.delete_expense(idx)
-                else:
-                    lt.delete_expense(idx)
-            return {
-                "action": "delete",
-                "deleted_id": deleted.get("id", ""),
-                "answer": f"已删除：{deleted.get('category', '')} - {deleted.get('description', '')} ¥{deleted.get('amount', 0):.2f}"
-            }
-        return {"action": "error", "answer": "未找到该笔费用记录"}

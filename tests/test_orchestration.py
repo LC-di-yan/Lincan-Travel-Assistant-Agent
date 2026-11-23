@@ -4,6 +4,7 @@
 测试智能体协调系统
 """
 import sys
+import pytest
 import os
 import asyncio
 import json
@@ -21,6 +22,8 @@ from agents.orchestration_agent import OrchestrationAgent
 from agents.lazy_agent_registry import LazyAgentRegistry
 
 
+@pytest.mark.integration
+@pytest.mark.usefixtures("live_model")
 async def test_orchestration():
     """测试智能体协调系统"""
     print("=" * 70)

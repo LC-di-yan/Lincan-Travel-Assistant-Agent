@@ -11,7 +11,8 @@ import logging
 from typing import Any, AsyncIterator, Optional
 
 import httpx
-from fastapi import APIRouter
+from utils.provider_http import provider_client
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -24,7 +25,9 @@ from server.routes.tts_personas import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+from server.auth import require_identity
+
+router = APIRouter(dependencies=[Depends(require_identity)])
 
 # Narration 独立熔断器（与 chat / TTS 隔离）
 _narration_circuit = CircuitBreaker(
@@ -112,12 +115,13 @@ async def _stream_glm(
     )
 
     content_started = False
+    completed = False
+    incomplete_reason = False
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("POST", url, headers=headers, json=payload) as resp:
+        async with provider_client("narration") as client:
+            async with client.stream("POST", url, headers=headers, json=payload, timeout=timeout) as resp:
                 if resp.status_code != 200:
-                    body = await resp.aread()
-                    logger.error(f"[Narration] upstream {resp.status_code}: {body[:300]}")
+                    logger.warning("[Narration] upstream status=%s", resp.status_code)
                     yield {
                         "event": "error",
                         "data": json.dumps(
@@ -132,14 +136,22 @@ async def _stream_glm(
                         continue
                     data_str = line[5:].strip()
                     if data_str == "[DONE]":
+                        completed = True
                         break
                     try:
                         chunk = json.loads(data_str)
                     except json.JSONDecodeError:
                         continue
+                    if chunk.get("error"):
+                        incomplete_reason = True
+                        break
                     choices = chunk.get("choices") or []
                     if not choices:
                         continue
+                    reason = choices[0].get("finish_reason")
+                    if reason:
+                        completed = reason == "stop"
+                        incomplete_reason = not completed
                     delta = choices[0].get("delta", {}) or {}
                     # 仅透传 content，跳过 reasoning_content（思考阶段不输出给前端）
                     content = delta.get("content")
@@ -153,16 +165,19 @@ async def _stream_glm(
                             ),
                         }
     except httpx.HTTPError as e:
-        logger.exception("[Narration] upstream connection failed")
+        logger.warning("[Narration] upstream connection failed (%s)", type(e).__name__)
         yield {
             "event": "error",
             "data": json.dumps(
-                {"message": f"播报连接失败: {e}"},
+                {"message": "播报连接失败，请稍后再试。"},
                 ensure_ascii=False,
             ),
         }
         return
 
+    if incomplete_reason or not completed:
+        yield {"event": "error", "data": json.dumps({"message": "播报内容未完整生成"})}
+        return
     if not content_started:
         # 思考阶段耗尽 max_tokens，正式文案一个字没出
         logger.warning("[Narration] no content produced (reasoning exhausted max_tokens?)")
@@ -202,8 +217,11 @@ async def narrate(req: NarrateRequest):
     async def _generator():
         try:
             async for evt in _stream_glm(messages):
+                if evt["event"] == "error":
+                    _narration_circuit.record_failure()
+                elif evt["event"] == "done":
+                    _narration_circuit.record_success()
                 yield evt
-            _narration_circuit.record_success()
         except Exception as e:
             _narration_circuit.record_failure()
             logger.exception("[Narration] generator failed")
@@ -275,8 +293,8 @@ async def _generate_progress_via_llm(
     timeout = httpx.Timeout(8.0, connect=3.0)
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(url, headers=headers, json=payload)
+        async with provider_client("narration") as client:
+            resp = await client.post(url, headers=headers, json=payload, timeout=timeout)
             if resp.status_code != 200:
                 logger.warning(f"[Narration/Progress] LLM {resp.status_code}")
                 return None

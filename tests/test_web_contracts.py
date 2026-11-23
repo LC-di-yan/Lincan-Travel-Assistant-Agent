@@ -12,24 +12,31 @@ upstream (see tests/mock_audio_provider.py):
 """
 import json
 import os
-import uuid
+from contextlib import contextmanager
+from typing import Iterator
 from pathlib import Path
 
 import httpx
 import pytest
 
-BASE_URL = os.environ.get("ALIGO_TEST_BASE_URL", "http://127.0.0.1:3003").rstrip("/")
+BASE_URL = os.environ.get("ALIGO_TEST_BASE_URL", "").rstrip("/")
 AUDIO_URL = os.environ.get("ALIGO_AUDIO_BASE_URL", "").rstrip("/")
 MEMORY_DIR = Path(__file__).resolve().parent.parent / "data" / "memory"
 
 
-def _client(base: str = BASE_URL, timeout: float = 30) -> httpx.Client:
-    return httpx.Client(base_url=base, timeout=timeout)
+@contextmanager
+def _client(base: str = BASE_URL, timeout: float = 30) -> Iterator[httpx.Client]:
+    with httpx.Client(base_url=base, timeout=timeout, trust_env=False) as client:
+        identity = client.post('/api/identity')
+        identity.raise_for_status()
+        yield client
 
 
 def _skip_if_down(base: str):
+    if not base:
+        pytest.skip("请显式指定本次测试专用的 Aligo 服务地址")
     try:
-        r = httpx.get(base + "/api/health", timeout=3)
+        r = httpx.get(base + "/api/health", timeout=3, trust_env=False)
         if r.status_code != 200:
             pytest.skip(f"server {base} unhealthy: HTTP {r.status_code}")
     except Exception as exc:
@@ -38,12 +45,15 @@ def _skip_if_down(base: str):
 
 @pytest.fixture()
 def test_user():
-    user = "pytest_web_" + uuid.uuid4().hex[:10]
-    yield user
-    try:
-        (MEMORY_DIR / f"{user}.json").unlink(missing_ok=True)
-    except OSError:
-        pass
+    _skip_if_down(BASE_URL)
+    with _client() as client:
+        user = client.post('/api/identity').json()['user_id']
+        yield client, user
+    for suffix in ('.json', '.json.lock'):
+        try:
+            (MEMORY_DIR / f"{user}{suffix}").unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _sse_events(resp):
@@ -74,28 +84,26 @@ def test_health_and_static_index():
 
 
 def test_session_and_read_endpoints(test_user):
-    _skip_if_down(BASE_URL)
-    with _client() as c:
-        session = c.post("/api/session/new", json={"user_id": test_user})
-        assert session.status_code == 200
-        sid = session.json()["session_id"]
-        assert sid
+    c, test_user = test_user
+    session = c.post("/api/session/new", json={"user_id": test_user})
+    assert session.status_code == 200
+    sid = session.json()["session_id"]
+    assert sid
 
-        history = c.get("/api/history", params={"user_id": test_user, "session_id": sid})
-        assert history.status_code == 200
-        body = history.json()
-        assert body["trips"] == []
-        assert body["statistics"]["total_trips"] == 0
+    history = c.get("/api/history", params={"user_id": test_user, "session_id": sid})
+    assert history.status_code == 200
+    body = history.json()
+    assert body["trips"] == []
+    assert body["statistics"]["total_trips"] == 0
 
-        prefs = c.get("/api/preferences", params={"user_id": test_user, "session_id": sid})
-        assert prefs.status_code == 200
-        assert prefs.json()["preferences"] == {}
+    prefs = c.get("/api/preferences", params={"user_id": test_user, "session_id": sid})
+    assert prefs.status_code == 200
+    assert prefs.json()["preferences"] == {}
 
-        expenses = c.get("/api/expenses", params={"user_id": test_user, "session_id": sid})
-        assert expenses.status_code == 200
-        assert expenses.json()["expenses"] == []
-        assert expenses.json()["total"] == 0
-
+    expenses = c.get("/api/expenses", params={"user_id": test_user, "session_id": sid})
+    assert expenses.status_code == 200
+    assert expenses.json()["expenses"] == []
+    assert expenses.json()["total"] == 0
 
 def test_plugin_and_persona_contracts():
     _skip_if_down(BASE_URL)
@@ -116,7 +124,7 @@ def test_history_newest_first_contract():
     """The API promises newest-first ordering for both JSON and PG stores."""
     _skip_if_down(BASE_URL)
     with _client() as c:
-        r = c.get("/api/history", params={"user_id": "default_user"})
+        r = c.get("/api/history")
         assert r.status_code == 200
         dates = [t.get("start_date") or t.get("timestamp") or "" for t in r.json()["trips"]]
         assert dates == sorted(dates, reverse=True)

@@ -54,6 +54,12 @@ def _safe_get(d: Any, *keys, default=None):
 
 def _summarize_itinerary(inner: dict) -> str:
     """行程规划摘要。"""
+    if isinstance(plan := inner.get("trip_plan"), dict):
+        request = plan.get("request") or {}
+        status = "已生成经验证的差旅候选" if plan.get("recommended") else "仅取得部分可核验差旅结果"
+        return f"{status}：{_clean(request.get('origin', ''))}至{_clean(request.get('destination', ''))}，未执行预订。"
+    if inner.get("answer") and not inner.get("itinerary"):
+        return _clean(inner["answer"], limit=250)
     it = inner.get("itinerary", inner) if isinstance(inner, dict) else {}
     title = it.get("title", "行程规划") if isinstance(it, dict) else "行程规划"
     duration = it.get("duration", "") if isinstance(it, dict) else ""
@@ -149,6 +155,9 @@ def _summarize_information(inner: dict) -> str:
     summary = ""
     if isinstance(results, dict):
         summary = results.get("summary") or results.get("message") or ""
+        transport = results.get("transport_advice")
+        if isinstance(transport, dict) and transport.get("summary"):
+            return str(summary)[:80] + "；交通建议：" + str(transport["summary"])[:110]
     if not summary:
         summary = inner.get("summary") or inner.get("answer") or inner.get("message") or ""
     return str(summary)[:150] if summary else "已查询信息。"

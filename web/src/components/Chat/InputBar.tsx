@@ -1,117 +1,116 @@
-import { useState, useEffect, useRef, type KeyboardEvent } from 'react'
-import { Send, Square, Mic } from 'lucide-react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, type KeyboardEvent, type ReactNode } from 'react'
+import { ArrowUp, Square, Mic, AlignLeft } from 'lucide-react'
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition'
+import { useChatStore } from '../../store/chatStore'
+import { RouteBeacon } from '../Illustrations/RouteBeacon'
+import { ActionButton } from '../Layout/ActionButton'
+import { BriefExamples } from './BriefHero'
 
-export function InputBar({ onSend, onCancel, disabled }: { onSend: (text: string) => void; onCancel: () => void; disabled: boolean }) {
+interface InputProps {
+  onSend: (text: string) => void
+  onCancel: () => void
+  disabled: boolean
+  blocked: boolean
+  offline: boolean
+  brief: boolean
+  examples: boolean
+  notice?: ReactNode
+  visible: boolean
+}
+
+export function InputBar({ onSend, onCancel, disabled, blocked, offline, brief, examples, notice, visible }: InputProps) {
   const [text, setText] = useState('')
+  const [invalid, setInvalid] = useState(false)
+  const [previousDraft, setPreviousDraft] = useState<string | null>(null)
+  const [exampleApplied, setExampleApplied] = useState(false)
+  const [speechIssue, setSpeechIssue] = useState('')
   const taRef = useRef<HTMLTextAreaElement>(null)
-  const {
-    isListening,
-    isSupported,
-    interimText,
-    finalText,
-    startListening,
-    stopListening,
-    reset,
-  } = useSpeechRecognition({ lang: 'zh-CN', continuous: false, interimResults: true })
-
+  const edit = useCallback((value: string) => {
+    setText(value); setInvalid(false); setPreviousDraft(null); setExampleApplied(false); setSpeechIssue('')
+  }, [])
   useEffect(() => {
-    if (!isListening && finalText) {
-      setText((prev) => (prev ? prev + finalText : finalText))
-      reset()
+    if (disabled) return
+    let active = true
+    const adoptPrompt = () => {
+      const { draftPrompt, setDraftPrompt } = useChatStore.getState()
+      if (!active || !draftPrompt) return
+      setDraftPrompt(null)
+      setText(old => old ? old + '\n' + draftPrompt : draftPrompt)
+      setInvalid(false)
+      setPreviousDraft(null); setExampleApplied(false); setSpeechIssue('')
     }
-  }, [isListening, finalText, reset])
-
+    const unsubscribe = useChatStore.subscribe(adoptPrompt)
+    queueMicrotask(adoptPrompt)
+    return () => { active = false; unsubscribe() }
+  }, [disabled])
+  const appendSpeech = useCallback((value: string) => {
+    if (useChatStore.getState().isProcessing) return
+    setText(previous => previous + value); setInvalid(false); setPreviousDraft(null); setExampleApplied(false); setSpeechIssue('')
+  }, [])
+  const { isListening, isSupported, interimText, startListening, stopListening } = useSpeechRecognition({
+    lang: 'zh-CN', continuous: false, interimResults: true, onFinal: appendSpeech, onIssue: setSpeechIssue,
+  })
   useEffect(() => {
-    if (disabled && isListening) stopListening()
-  }, [disabled, isListening, stopListening])
-
+    if ((disabled || blocked || !visible) && isListening) stopListening()
+  }, [blocked, disabled, visible, isListening, stopListening])
   const displayText = isListening && interimText ? text + interimText : text
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = taRef.current
-    if (!el) return
+    if (!el || !visible) return
     el.style.height = '0px'
     el.style.height = Math.min(el.scrollHeight, 120) + 'px'
-  }, [displayText])
+  }, [displayText, brief, visible])
 
-  const handleSend = () => {
-    const trimmed = text.trim()
-    if (!trimmed || disabled) return
-    onSend(trimmed)
-    setText('')
+  const submit = () => {
+    if (disabled || blocked || offline || !navigator.onLine || useChatStore.getState().isProcessing) return
+    if (!text.trim()) { setInvalid(true); taRef.current?.focus(); return }
+    onSend(text.trim())
+    edit('')
     if (isListening) stopListening()
   }
-
   const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key !== 'Enter' || e.shiftKey) return
-    if (e.nativeEvent.isComposing) return
+    if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
     e.preventDefault()
-    handleSend()
+    if (!e.repeat) submit()
   }
-
-  return (
-    <div className="flex-shrink-0 border-t border-rule bg-paper px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 md:px-4">
-      <div className="mx-auto w-full max-w-[760px]">
-        <div className="flex items-end gap-1.5 rounded-[2px] border border-rule-strong bg-paper-raised px-2 py-1.5 transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10">
-          <textarea
-            ref={taRef}
-            value={displayText}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder={isListening ? '正在聆听…' : '说需求，或粘贴航班号…'}
-            rows={1}
-            aria-label="输入消息"
-            className="max-h-[120px] min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-6 text-ink outline-none placeholder:text-ink-3 disabled:opacity-50"
-          />
-
-          {isSupported && (
-            <button
-              type="button"
-              onClick={() => (isListening ? stopListening() : startListening())}
-              disabled={disabled && !isListening}
-              aria-label={isListening ? '停止语音输入' : '语音输入'}
-              title={isListening ? '停止语音输入' : '语音输入'}
-              className={`flex h-11 w-11 items-center justify-center rounded-[2px] transition-colors disabled:opacity-40 ${
-                isListening
-                  ? 'bg-err text-white'
-                  : 'text-ink-3 hover:bg-paper-sunken hover:text-ink'
-              }`}
-            >
-              <Mic size={18} aria-hidden="true" fill={isListening ? 'currentColor' : 'none'} />
-            </button>
-          )}
-
-          {disabled ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              aria-label="停止生成"
-              title="停止生成"
-              className="flex h-11 w-11 items-center justify-center rounded-[2px] bg-err text-white hover:opacity-90"
-            >
-              <Square size={16} fill="currentColor" aria-hidden="true" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!text.trim()}
-              aria-label="发送消息"
-              title="发送"
-              className="flex h-11 w-11 items-center justify-center rounded-[2px] bg-accent text-paper transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-rule disabled:text-ink-3"
-            >
-              <Send size={17} aria-hidden="true" />
-            </button>
-          )}
+  const chooseExample = (value: string) => {
+    if (text !== value) setPreviousDraft(text.trim() ? text : null)
+    setExampleApplied(true); setSpeechIssue(''); setText(value); setInvalid(false)
+    taRef.current?.focus()
+  }
+  return <>
+    <div className="composer-cell">
+      {notice}
+      <form className="flight-composer" data-listening={isListening || undefined}
+        onSubmit={event => { event.preventDefault(); submit() }}>
+        {brief && <div className="composer-title"><label htmlFor="flight-request"><AlignLeft size={16} aria-hidden="true" /> 行前简报</label>
+          <span>可编辑</span></div>}
+        <textarea id="flight-request" ref={taRef} value={displayText} onChange={e => edit(e.target.value)}
+          onKeyDown={handleKey} aria-label="输入消息" aria-invalid={invalid || undefined}
+          aria-describedby={invalid || offline || speechIssue ? 'compose-hint' : undefined} rows={brief ? 2 : 1} disabled={blocked}
+          placeholder={isListening ? '正在聆听…' : brief ? '例如：明天从北京去上海出差 3 天，预算 2000 元。' : '继续补充你的差旅需求…'} />
+        <div className="composer-tools">
+          {isSupported && <button type="button" className="mic-control" onClick={() => { setSpeechIssue(''); if (isListening) stopListening(); else startListening() }}
+            aria-pressed={isListening} disabled={(disabled || blocked || offline) && !isListening}
+            aria-label={isListening ? '停止语音输入' : '语音输入'} title={isListening ? '停止语音输入' : '语音输入'}>
+            <Mic size={18} strokeWidth={1.65} aria-hidden="true" />{brief && <span>{isListening ? '正在聆听' : '语音输入'}</span>}
+          </button>}
+          <span className="compose-keys" aria-hidden="true">{brief ? 'Enter 发送' : ''}</span>
+          {disabled
+            ? <ActionButton key="stop" intent="stop" onClick={event => { if (event.detail < 2) onCancel() }} aria-label="停止生成" icon={<Square size={13} fill="currentColor" />}>停止</ActionButton>
+            : <ActionButton key="send" intent="primary" type="submit" disabled={blocked || offline || (!brief && !text.trim())}
+                aria-label={brief ? '开始规划' : '发送消息'} icon={brief ? <RouteBeacon size={19} /> : <ArrowUp size={17} />}>
+                {brief ? '开始规划' : '发送'}
+              </ActionButton>}
         </div>
-
-        <div className="mt-1.5 flex items-center justify-between px-1 font-mono text-[10px] tracking-[0.04em] text-ink-3">
-          <span className="hidden sm:inline">Enter 发送 · Shift+Enter 换行</span>
-          <span className="sm:hidden">Enter 发送</span>
-          <span>AI 可能会出错，请核对关键信息</span>
-        </div>
-      </div>
+      </form>
+      {(invalid || offline || exampleApplied || speechIssue || isListening || !brief) && <div className="composer-foot">
+        <span role="status" id="compose-hint">{offline ? '当前离线，联网后可手动发送。' : invalid ? '先写下差旅需求，或从下方选一个示例。' :
+          speechIssue ? speechIssue : isListening ? '正在聆听，点击麦克风可停止。' : exampleApplied ? '已填入示例，未发送。' : '请核对关键时间、价格与来源。'}</span>
+        {previousDraft !== null && <button type="button" onClick={() => { edit(previousDraft); taRef.current?.focus() }}>撤销替换</button>}
+        {!brief && <span className="compose-keys">Shift + Enter 换行</span>}
+      </div>}
     </div>
-  )
+    {brief && examples && <BriefExamples onChoose={chooseExample} />}
+  </>
 }

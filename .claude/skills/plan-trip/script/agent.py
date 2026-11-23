@@ -32,7 +32,7 @@ class ItineraryPlanningAgent(SkillAgentBase):
         from utils.skill_loader import SkillLoader
         self.skill_loader = SkillLoader()
 
-    @cached("itinerary", ttl=3600)
+    @cached("itinerary_v2", ttl=3600)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         if x is None:
             return mk_msg(self.name, {})
@@ -62,17 +62,21 @@ class ItineraryPlanningAgent(SkillAgentBase):
             user_preferences = content.get("user_preferences", {})
 
         # 整合所有可用信息
-        all_info = {
-            "user_query": user_query,
-            "context": context_info,
-        }
+        all_info = {key: context_info[key] for key in ("key_entities", "session_focus") if context_info.get(key)}
 
         # 从previous_results中提取其他agent的数据
         for prev in previous_results:
             agent_name = prev.get("agent_name", "")
             result_data = prev.get("result", {}).get("data", {})
-            if result_data and agent_name:
+            if result_data and agent_name in {
+                "event_collection", "event-collection", "train_ticket", "train-ticket", "information_query", "query-info",
+                "hotel_search", "restaurant_search", "scenic_search", "place-search", "hotel-search", "rag_knowledge", "ask-question",
+            }:
                 all_info[agent_name] = result_data
+        if "train-ticket" in all_info:
+            all_info.setdefault("train_ticket", all_info.pop("train-ticket"))
+        if "event-collection" in all_info:
+            all_info.setdefault("event_collection", all_info.pop("event-collection"))
 
         # 回退：event_collection 合并到 intention 后，直接从 context 读取
         if "event_collection" not in all_info and context_info.get("event_collection"):
@@ -88,7 +92,7 @@ class ItineraryPlanningAgent(SkillAgentBase):
                     train_ticket_info = "【火车票信息】\n"
                     for t in trains[:5]:  # 最多显示5趟
                         train_ticket_info += f"- {t['train_no']} ({t['train_type']}): {t['from_station']}→{t['to_station']} {t['depart_time']}-{t['arrive_time']} 历时{t['duration']} 二等座{t['second_class']} 一等座{t['first_class']}\n"
-                    train_ticket_info += "\n请在攻略中推荐合适的火车班次，并标注出发/到达时间和票价参考。\n"
+                    train_ticket_info += "\n只按上面查询到的班次标注时刻和席别状态；未查询官方票价，票价写未知。\n"
 
         # 构建用户偏好信息
         preferences_info = ""
@@ -141,6 +145,7 @@ class ItineraryPlanningAgent(SkillAgentBase):
 4. 不要在字符串值中使用换行符
 5. 确保JSON格式完整，可直接被解析
 6. 额外输出"proactive_question"字段（字符串），用"需要我帮你..."开头，基于行程自然延伸一句反问（25字内），如不需要则设为""
+7. 不得生成任何供应商报价、票价或可订房价。没有实查数据写“暂未核验”，预算如需保留仅作规划估算。
 
 直接输出JSON：
 """
@@ -155,23 +160,25 @@ class ItineraryPlanningAgent(SkillAgentBase):
                 budget = SCENARIO_TOKENS["itinerary"]
 
             # 调用模型 - 使用消息列表格式
-            # 关闭「思考」：本任务按固定 schema 输出 JSON，思考 token 占输出量 30~50%，
-            # 实测 2.7s → 0.9s；上游不支持该参数时自动回退。
+            # 按固定 schema 输出 JSON。GLM 的思考 token 计入输出预算，
+            # enable_thinking=False 可能被兼容网关静默忽略。
             _msgs = as_messages([{"role": "user", "content": prompt}])
             try:
                 response = await self.model(
                     _msgs, max_tokens=budget,
-                    extra_body={"enable_thinking": False},
+                    extra_body={"thinking": {"type": "disabled"}},
                 )
             except Exception as _think_err:
                 _es = str(_think_err)
-                if "enable_thinking" in _es or "unexpected keyword" in _es:
-                    logger.info("upstream rejected enable_thinking, falling back")
+                if "thinking" in _es or "unexpected keyword" in _es:
+                    logger.info("upstream rejected thinking option, falling back")
                     response = await self.model(_msgs, max_tokens=budget)
                 else:
                     raise
 
             text = extract_llm_text(response)
+            if not text or not text.strip():
+                raise ValueError("Model returned empty response text")
 
             # 解析结果
             result = None
@@ -209,6 +216,9 @@ class ItineraryPlanningAgent(SkillAgentBase):
 
             # 兜底：保证每个活动都有名称，避免前端回退成「未命名活动」
             _it = result.get("itinerary") or {}
+            if isinstance(_it, dict) and _it:
+                _it["price_status"] = "unverified"
+                _it["price_notice"] = "此行程为模型建议；交通票价、住宿房价与可订状态未核验，请以供应方为准。"
             for _plan in (_it.get("daily_plans") or []):
                 for _act in (_plan.get("activities") or []):
                     if not isinstance(_act, dict):
@@ -227,11 +237,14 @@ class ItineraryPlanningAgent(SkillAgentBase):
             from utils.llm_errors import classify, describe, friendly
 
             logger.error("Itinerary planning failed: %s", describe(e))
-            raw_text = locals().get('text', 'N/A')
-            logger.error(f"Raw response text (first 500 chars): {str(raw_text)[:500]}")
+            raw_text = locals().get('text', '')
+            logger.error("Itinerary response text length: %s", len(raw_text))
 
             err_code = classify(e)
-            if err_code == "parse" or "JSON" in str(e) or "parse" in str(e).lower():
+            if "empty response text" in str(e).lower():
+                err_code = "empty_response"
+                user_message = "抱歉，模型没有返回有效的行程内容，可能是输出额度不足或服务异常，请稍后重试。"
+            elif err_code == "parse" or "JSON" in str(e) or "parse" in str(e).lower():
                 user_message = "抱歉，模型返回的数据格式有误，无法解析行程信息。请稍后重试或简化您的需求描述。"
             else:
                 user_message = (

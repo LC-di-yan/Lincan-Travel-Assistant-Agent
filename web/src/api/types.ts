@@ -1,7 +1,10 @@
+import type { TurnActivity } from '../utils/agentActivity'
+import type { ConflictReport, PlanLink, PlanRef } from './personal'
+
 // ===== SSE 事件类型 =====
 
 export interface SSEEvent {
-  event: 'thinking' | 'intention' | 'dispatching' | 'agent_result' | 'complete' | 'error' | 'clarification'
+  event: 'thinking' | 'intention' | 'dispatching' | 'agent_start' | 'agent_result' | 'complete' | 'error' | 'clarification'
   data: string
 }
 
@@ -27,7 +30,12 @@ export interface AgentSchedule {
   priority: number
   reason: string
   expected_output: string
+  node_id?: string
+  label?: string
+  depends_on?: string[]
 }
+
+export type PublicAgent = Pick<AgentSchedule, 'agent_name' | 'node_id' | 'label' | 'depends_on'>
 
 export interface IntentionData {
   reasoning: string
@@ -46,6 +54,7 @@ export interface IntentionData {
     missing_info?: string[]
   }
   agent_schedule: AgentSchedule[]
+  trip_request?: Record<string, unknown>
 }
 
 // ===== Agent 结果 =====
@@ -55,14 +64,26 @@ export interface AgentResult {
   priority: number
   status: 'success' | 'error'
   data: Record<string, unknown>
+  node_id?: string
+  label?: string
+  node_status?: 'running' | 'success' | 'partial' | 'failed' | 'unavailable' | 'timeout' | 'skipped' | 'cancelled'
+  cached?: boolean
 }
 
 export interface OrchestrationResult {
   status: string
+  history_warning?: string
   intention?: IntentionData
   agents_executed: number
   results: AgentResult[]
   errors?: number
+  trip_plan?: Record<string, unknown>
+  selected_proposal?: string
+  candidate_ref?: string
+  candidate_session_id?: string
+  candidate_base?: PlanRef
+  candidate_base_revision?: number
+  personal_conflicts?: ConflictReport
 }
 
 // ===== 行程规划 =====
@@ -92,6 +113,8 @@ export interface Itinerary {
   daily_plans: DailyPlan[]
   notes?: string[]
   estimated_budget?: string
+  price_notice?: string
+  sources?: { title?: string; url?: string }[]
   planning_complete?: boolean
 }
 
@@ -195,10 +218,17 @@ export interface ScenicResultData {
 // ===== 消息 =====
 
 export interface Message {
+  requestId?: string
+  planLink?: PlanLink
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: number
+  confirmedOptionId?: string
+  selectionReceipt?: { sourceMessageId: string; optionId: string; number: number }
+  activity?: TurnActivity
+  historical?: boolean
+  historyWarning?: string
   startedAt?: number
   intention?: IntentionData
   agentResults?: AgentResult[]

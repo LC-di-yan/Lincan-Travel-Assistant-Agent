@@ -14,26 +14,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from server.session import SessionManager  # noqa: E402
 
-# SessionManager() 在构造时就会创建 OpenAI 客户端，缺 api_key 会直接抛
-# openai.OpenAIError。无 .env 的环境（新克隆 / CI）应跳过而不是失败。
-from config import LLM_CONFIG  # noqa: E402
-
-pytestmark = pytest.mark.skipif(
-    not LLM_CONFIG.get("api_key"),
-    reason="需要 ALIGO_API_KEY（SessionManager 构造即创建 LLM 客户端）",
-)
-
 USER = "pytest_session_reuse"
 
 
 @pytest.fixture()
-def manager():
+def manager(monkeypatch, tmp_path):
+    from context.memory_manager import MemoryManager
+    from unittest.mock import MagicMock
+    from agents.lazy_agent_registry import LazyAgentRegistry
+
+    monkeypatch.setattr("server.session.build_chat_model", lambda *a, **kw: MagicMock())
+    monkeypatch.setattr("server.session.MemoryManager", lambda **kw: MemoryManager(storage_path=str(tmp_path / "memory"), **kw))
+    monkeypatch.setattr(LazyAgentRegistry, "CONFIG_PATH", tmp_path / "plugin_config.json")
     mgr = SessionManager()
-    yield mgr
-    mgr._sessions.clear()
-    p = Path("data/memory") / f"{USER}.json"
-    if p.exists():
-        p.unlink()
+    mgr._initialized = True
+    return mgr
 
 
 def test_same_user_without_session_id_reuses_session(manager):
@@ -73,3 +68,18 @@ def test_new_session_replaces_user_sessions(manager):
     assert latest is fresh
     # 新会话仍应从磁盘读到刚写入的偏好
     assert "全季" in str(fresh.memory_manager.long_term.get_preference())
+
+
+async def test_last_access_breaks_equal_clock_ticks_without_crossing_users(manager, monkeypatch):
+    from types import SimpleNamespace
+    import server.session as sessions
+
+    monkeypatch.setattr(sessions, "time", SimpleNamespace(monotonic=lambda: 42.0))
+    old = await manager.get_or_create(USER, "old1")
+    fresh = await manager.new_session(USER)
+    another = await manager.get_or_create("user_other", old.session_id)
+    assert old.last_active == fresh.last_active == another.last_active
+    assert manager.get_existing(USER) is fresh
+    await manager.get_or_create(USER, old.session_id)
+    assert manager.get_existing(USER) is old
+    assert manager.get_existing("user_other") is another

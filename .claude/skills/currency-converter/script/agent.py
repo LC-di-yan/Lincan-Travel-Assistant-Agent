@@ -1,7 +1,7 @@
 """
 汇率转换智能体
 职责：查询实时汇率、货币换算
-API: frankfurter.app (免费，无需 key)
+API: Frankfurter (免费，无需 key)
 
 优化：fast_currency 快速路径 + regex 兜底，避免 LLM 调用。
 """
@@ -10,26 +10,18 @@ from agentscope.message import Msg
 from typing import Optional, Union, List
 import json
 import logging
-import re
-import requests
+import asyncio
+import httpx
+from utils.provider_http import provider_client
 import time as _time
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from threading import Lock
+from utils.currency_parser import CURRENCY_MAP, parse_currency
 
 from utils.llm_response import extract_llm_json
 from utils.as_compat import mk_msg, msg_text, as_messages
-from cache.decorators import cached
 
 logger = logging.getLogger(__name__)
-
-# 常用货币中文名映射
-CURRENCY_MAP = {
-    "人民币": "CNY", "元": "CNY", "块": "CNY",
-    "美元": "USD", "美金": "USD", "刀": "USD",
-    "欧元": "EUR", "英镑": "GBP", "日元": "JPY",
-    "韩元": "KRW", "港币": "HKD", "港元": "HKD",
-    "新台币": "TWD", "台币": "TWD",
-    "新加坡元": "SGD", "新币": "SGD",
-    "泰铢": "THB", "澳元": "AUD", "加元": "CAD",
-}
 
 CURRENCY_NAMES = {
     "CNY": "人民币", "USD": "美元", "EUR": "欧元", "GBP": "英镑",
@@ -37,36 +29,15 @@ CURRENCY_NAMES = {
     "SGD": "新加坡元", "THB": "泰铢", "AUD": "澳元", "CAD": "加元",
 }
 
-# 货币关键词按长度降序（避免"元"先匹配"美元"中的"元"）
-_CURRENCY_WORDS = sorted(CURRENCY_MAP.keys(), key=len, reverse=True)
-
-API_BASE = "https://api.frankfurter.app"
+API_BASE = "https://api.frankfurter.dev/v1"
+# 汇率是公开数据：按货币对共享缓存，而不是把整轮对话/金额当缓存键。
+_RATE_CACHE = {}
+_RATE_LOCK = Lock()
+_RATE_TTL = 900
 
 
 def _parse_currency_regex(query: str) -> Optional[dict]:
-    """用正则从查询中提取货币信息。返回 {from_currency, to_currency, amount} 或 None。"""
-    q = query.strip()
-
-    # 模式1: "100美元多少人民币" / "100美元换多少人民币"
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(\S+?)\s*(?:多少|换|兑|兑换|换算|等于|是|转)\s*(?:多少|几)?\s*(\S+)", q)
-    if m:
-        amount = float(m.group(1))
-        currencies = re.findall(r"|".join(_CURRENCY_WORDS), q)
-        codes = list(dict.fromkeys(CURRENCY_MAP[w] for w in currencies))
-        if len(codes) >= 2:
-            return {"from_currency": codes[0], "to_currency": codes[1], "amount": amount}
-
-    # 模式2: "美元兑人民币" / "日元汇率" (无金额 → amount=1)
-    currencies = re.findall(r"|".join(_CURRENCY_WORDS), q)
-    codes = list(dict.fromkeys(CURRENCY_MAP[w] for w in currencies))
-    if len(codes) >= 2:
-        return {"from_currency": codes[0], "to_currency": codes[1], "amount": 1}
-
-    # 模式3: "汇率" + 单个货币 → 该货币兑人民币
-    if len(codes) == 1 and "汇率" in q:
-        return {"from_currency": codes[0], "to_currency": "CNY", "amount": 1}
-
-    return None
+    return parse_currency(query)
 
 
 class CurrencyConverterAgent(SkillAgentBase):
@@ -77,7 +48,6 @@ class CurrencyConverterAgent(SkillAgentBase):
         self.name = name
         self.model = model
 
-    @cached("currency", ttl=3600)
     async def reply(self, x: Optional[Union[Msg, List[Msg]]] = None) -> Msg:
         if x is None:
             return mk_msg(self.name, {"error": "No input"})
@@ -153,42 +123,62 @@ class CurrencyConverterAgent(SkillAgentBase):
             to_curr = parsed.get("to_currency", "CNY").upper()
             amount = float(parsed.get("amount", 1))
 
+        # 参数无效时不请求上游；相同币种无需联网。
+        if from_curr not in CURRENCY_NAMES or to_curr not in CURRENCY_NAMES or not Decimal(str(amount)).is_finite() or amount < 0 or amount > 1e15:
+            return mk_msg(self.name, {"action": "error", "answer": "请提供有效金额和支持的货币代码。"})
+
         # 调用 frankfurter.app API
         try:
-            result = self._fetch_rate(from_curr, to_curr, amount)
+            result = await self._fetch_rate(from_curr, to_curr, amount)
         except Exception as e:
-            logger.error(f"Rate fetch failed: {e}")
-            result = {"action": "error", "answer": f"汇率查询失败: {str(e)}"}
+            logger.warning("Rate fetch failed (%s)", type(e).__name__)
+            result = {"action": "error", "answer": "汇率查询暂不可用，请稍后再试。"}
 
         return mk_msg(self.name, result)
 
-    def _fetch_rate(self, from_curr: str, to_curr: str, amount: float) -> dict:
-        """调用 frankfurter.app 获取汇率"""
-        url = f"{API_BASE}/latest?from={from_curr}&to={to_curr}"
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
+    async def _fetch_rate(self, from_curr: str, to_curr: str, amount: float) -> dict:
+        """Fetch a dated public quote; repeated amounts reuse the same currency pair."""
+        rate_date = ""
+        cached_quote = False
+        if from_curr == to_curr:
+            rate = Decimal("1")
+        else:
+            pair = (from_curr, to_curr)
+            with _RATE_LOCK:
+                quote = _RATE_CACHE.get(pair)
+            if quote and _time.monotonic() - quote[0] < _RATE_TTL:
+                rate, rate_date = quote[1:]
+                cached_quote = True
+            else:
+                async with asyncio.timeout(8), provider_client("exchange", timeout=httpx.Timeout(5, connect=3, pool=2)) as client:
+                    resp = await client.get(f"{API_BASE}/latest", params={"from": from_curr, "to": to_curr})
+                    resp.raise_for_status()
+                    data = resp.json()
+                try:
+                    rate = Decimal(str(data.get("rates", {}).get(to_curr)))
+                    if not rate.is_finite() or rate <= 0:
+                        raise ValueError("invalid rate")
+                except (InvalidOperation, ValueError):
+                    return {"action": "error", "answer": f"未取得可靠汇率: {from_curr} → {to_curr}"}
+                rate_date = str(data.get("date") or "")
+                with _RATE_LOCK:
+                    if len(_RATE_CACHE) >= 128:
+                        _RATE_CACHE.pop(next(iter(_RATE_CACHE)))
+                    _RATE_CACHE[pair] = (_time.monotonic(), rate, rate_date)
 
-        rate = data.get("rates", {}).get(to_curr)
-        if rate is None:
-            return {"action": "error", "answer": f"不支持的货币对: {from_curr} → {to_curr}"}
-
-        converted = round(amount * rate, 2)
+        converted = (Decimal(str(amount)) * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         from_name = CURRENCY_NAMES.get(from_curr, from_curr)
         to_name = CURRENCY_NAMES.get(to_curr, to_curr)
-
+        date_note = f"；汇率日期 {rate_date}" if rate_date else ""
         if amount == 1:
-            answer = f"当前{from_name}兑{to_name}汇率: 1 {from_curr} = {rate} {to_curr}"
+            answer = f"{from_name}兑{to_name}参考汇率: 1 {from_curr} = {rate} {to_curr}{date_note}"
         else:
-            answer = f"{amount} {from_name} = {converted} {to_name} (汇率: 1 {from_curr} = {rate} {to_curr})"
-
+            amount_text = format(Decimal(str(amount)).normalize(), "f")
+            answer = f"{amount_text} {from_name} = {converted} {to_name} (参考汇率: 1 {from_curr} = {rate} {to_curr}{date_note})"
         return {
-            "action": "convert" if amount > 1 else "rate",
-            "from": from_curr,
-            "to": to_curr,
-            "amount": amount,
-            "rate": rate,
-            "result": converted,
-            "answer": answer,
+            "action": "rate" if amount == 1 else "convert",
+            "from": from_curr, "to": to_curr, "amount": amount,
+            "rate": float(rate), "result": float(converted), "rate_date": rate_date,
+            "rate_cached": cached_quote, "answer": answer,
             "proactive_question": "需要我帮你换算其他货币吗？",
         }

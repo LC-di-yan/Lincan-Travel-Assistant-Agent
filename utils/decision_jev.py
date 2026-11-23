@@ -2,7 +2,7 @@
 """决策层 TypeSafe/Jev 后端（升级计划 P7 决策项，协议实测兼容）。
 
 背景（2026-11-06 实测）：
-- NeoHorse 端点（tokenrhythm.studio）同时提供 /v1/decision（自研客户端路径）与
+- 配置的 NeoHorse 端点同时提供 /v1/decision（自研客户端路径）与
   /v1/systemone（TypeSafe SDK 标准路径），二者无鉴权时均返回 401（路径存在）；
 - TypeSafe systemone 载荷 {state, model, questions} 与自研决策层逐字段同源，
   题面原语 noul/choice/score 同名；
@@ -95,7 +95,7 @@ class JevDecisionBackend:
         from agentscope.credential import TypeSafeCredential
 
         # TypeSafe SDK 会自己在 base_url 后拼 /v1/systemone；
-        # 项目配置的 base_url 惯例带 /v1（https://tokenrhythm.studio/v1），必须剥掉，
+        # 项目配置的 base_url 惯例带 /v1（https://example.invalid/v1），必须剥掉，
         # 否则变成 /v1/v1/systemone（实测 404/400）。
         clean = base_url.rstrip("/")
         if clean.endswith("/v1"):

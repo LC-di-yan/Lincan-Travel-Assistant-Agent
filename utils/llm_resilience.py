@@ -61,7 +61,7 @@ async def retry_with_backoff(
             raise
         except Exception as e:
             last_exc = e
-            err_msg = str(e)
+            from utils.llm_errors import describe
             if attempt == max_retries or not is_retriable_error(e):
                 raise
             delay = min(base_delay_sec * (2 ** attempt), max_delay_sec)
@@ -70,7 +70,7 @@ async def retry_with_backoff(
                 delay = delay * (0.5 + random.random())
             logger.warning(
                 "LLM call failed (attempt %d/%d), retry in %.1fs: %s",
-                attempt + 1, max_retries + 1, delay, err_msg,
+                attempt + 1, max_retries + 1, delay, describe(e),
             )
             await asyncio.sleep(delay)
     raise last_exc

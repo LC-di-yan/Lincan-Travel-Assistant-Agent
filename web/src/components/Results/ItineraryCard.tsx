@@ -1,106 +1,87 @@
-import { useState } from 'react'
-import { Clock, Utensils, ChevronDown, ChevronRight, StickyNote } from 'lucide-react'
-import type { Itinerary, DailyPlan } from '../../api/types'
-import { CardShell } from './CardShell'
+import { useId, useRef, useState } from 'react'
+import { ChevronDown, MapPin, Utensils } from 'lucide-react'
+import type { Itinerary } from '../../api/types'
+import { activityTime, evidenceSources, evidenceText } from '../../utils/flightEvidence'
+import { EvidenceBand, FlightResult, ResultDisclosure } from './FlightResult'
 import { ExportButton } from './ExportButton'
-
-function DailyPlanItem({ plan }: { plan: DailyPlan }) {
-  const [open, setOpen] = useState(true)
-  const dayLabel = typeof plan.day === 'number' ? `第 ${plan.day} 天` : plan.day
-  const meta = [plan.date, plan.city, plan.theme].filter(Boolean).join(' · ')
-
-  return (
-    <div className="relative pb-3 pl-5">
-      <div className="absolute bottom-0 left-[5px] top-2 w-px bg-rule" aria-hidden="true" />
-      <div className="absolute left-0 top-2 h-2.5 w-2.5 rounded-full border border-accent bg-paper-raised" aria-hidden="true" />
-
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex items-center gap-1 text-[13px] font-semibold text-ink hover:text-accent"
-      >
-        {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
-        {dayLabel}
-        {meta && <span className="ml-1 text-[10px] font-normal text-ink-3">{meta}</span>}
-      </button>
-
-      {open && (
-        <div className="mt-1">
-          {(plan.activities || []).map((act, i) => (
-            <div key={i} className="flex gap-3 border-b border-rule py-2 text-[13px] last:border-0">
-              <span className="w-[72px] shrink-0 font-mono text-[10px] tabular text-ink-3">
-                {act.time || '—'}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="font-medium text-ink">{act.activity || '未命名活动'}</span>
-                  {act.transport && <span className="text-[11px] text-route">{act.transport}</span>}
-                </div>
-                {act.description && (
-                  <p className="mt-0.5 text-[12px] leading-5 text-ink-2">{act.description}</p>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {(plan.meals?.lunch || plan.meals?.dinner) && (
-            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 pl-1 text-[11px] text-ink-2">
-              {plan.meals?.lunch && (
-                <span className="inline-flex items-center gap-1">
-                  <Utensils size={10} aria-hidden="true" /> 午：{plan.meals.lunch}
-                </span>
-              )}
-              {plan.meals?.dinner && (
-                <span className="inline-flex items-center gap-1">
-                  <Utensils size={10} aria-hidden="true" /> 晚：{plan.meals.dinner}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export function ItineraryCard({ data }: { data: Record<string, unknown> }) {
   const itinerary = (data.itinerary || data) as Itinerary
+  const days = Array.isArray(itinerary.daily_plans) ? itinerary.daily_plans : []
+  const notes = Array.isArray(itinerary.notes) ? itinerary.notes.filter(note => evidenceText(note)) : []
+  const id = useId()
+  const [opened, setOpened] = useState<number[]>([0])
+  const [traceDay, setTraceDay] = useState<number | null>(null)
+  const traced = useRef(new Set<number>())
   if (!itinerary?.title) return null
 
-  return (
-    <CardShell agentName="itinerary_planning">
-      <div className="flex items-start justify-between gap-3 border-b border-rule px-4 py-3">
-        <div className="min-w-0">
-          <div className="font-mono text-[10px] tracking-[0.14em] text-accent">ALIGO / ITINERARY</div>
-          <h3 className="mt-1 font-display text-lg leading-snug text-ink">{itinerary.title}</h3>
-          {itinerary.duration && (
-            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-3">
-              <Clock size={10} aria-hidden="true" /> {itinerary.duration}
-            </p>
-          )}
+  const allOpen = days.length > 0 && days.every((_, index) => opened.includes(index))
+  const budget = evidenceText(itinerary.estimated_budget)
+  const sources = evidenceSources(itinerary.sources, data.sources)
+
+  function toggleDay(index: number) {
+    const open = opened.includes(index)
+    const draw = !open && !traced.current.has(index)
+    if (draw) traced.current.add(index)
+    setTraceDay(draw ? index : null)
+    setOpened(open ? opened.filter(day => day !== index) : [...opened, index])
+  }
+
+  return <FlightResult agent="itinerary_planning" kind="逐日行程" title={itinerary.title}
+    meta={<>{itinerary.duration && <span>{itinerary.duration}</span>}{itinerary.route && <span>路线示意：{itinerary.route}</span>}</>}
+    action={<ExportButton itinerary={{ ...itinerary, sources }} />}>
+    <EvidenceBand label="规划参考" status={budget ? `预计预算：${budget}` : '票价、房价与可订状态需核验'} sources={sources}>
+      <p>{itinerary.price_notice || '行程仅供规划参考，票价、房价与可订状态请向供应方核验。'}</p>
+      {notes.length > 0 && <ul className="fdr-notes" aria-label="行前备注">{notes.map((note, i) => <li key={i}>{note}</li>)}</ul>}
+    </EvidenceBand>
+    {days.length > 0 && <div className="fdr-section-head">
+      <h4>按天查看 <small>按行程给出的顺序</small></h4>
+      {days.length > 1 && <ResultDisclosure open={allOpen} onToggle={() => {
+        setTraceDay(null)
+        setOpened(allOpen ? [] : days.map((_, index) => index))
+      }} controls={id + '-days'}>{allOpen ? '收起全部' : '展开全部'}</ResultDisclosure>}
+    </div>}
+    {days.length === 0 && <p className="fdr-empty">尚未提供逐日明细。</p>}
+    <ol id={id + '-days'} className="fdr-days">{days.map((plan, index) => {
+      const activities = Array.isArray(plan.activities) ? plan.activities : []
+      const open = opened.includes(index)
+      const missing = activities.filter(activity => !activityTime(activity.time)).length
+      const day = typeof plan.day === 'number' ? `第 ${plan.day} 天` : evidenceText(plan.day) || `第 ${index + 1} 天`
+      const detailsId = `${id}-day-${index}`
+      return <li key={index} className="fdr-day" data-open={open}>
+        <button type="button" className="fdr-day-switch" aria-expanded={open} aria-controls={detailsId}
+          onClick={() => toggleDay(index)}>
+          <span className="fdr-day-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+          <span className="fdr-day-text"><strong>{day}{plan.theme ? ` · ${plan.theme}` : ''}</strong>
+            <small>{[evidenceText(plan.date) || '日期未指定', plan.city, `${activities.length} 项安排`].filter(Boolean).join(' · ')}</small>
+          </span>
+          {missing > 0 && <span className="fdr-mini-warn">{missing} 项时刻待核验</span>}
+          <ChevronDown size={15} aria-hidden="true" />
+        </button>
+        <div className="fdr-day-detail" id={detailsId} hidden={!open}>
+          {activities.length > 0 ? <ol className="fdr-dayrail" data-trace={traceDay === index || undefined}>
+            {activities.map((act, i) => {
+              const time = activityTime(act.time)
+              const place = evidenceText(act.location)
+              const activity = evidenceText(act.activity)
+              return <li key={i} className="fdr-stop" data-unverified={!time || undefined}>
+                <span className="fdr-stop-time">{time || '时刻待核验'}</span>
+                <div>
+                  <h5>{activity || place || '未命名活动'}</h5>
+                  {place && activity && place !== activity && <p className="fdr-stop-meta"><MapPin size={13} aria-hidden="true" />{place}</p>}
+                  {act.transport && <p className="fdr-stop-meta">交通：{act.transport}</p>}
+                  {act.description && <p className="fdr-stop-text">{act.description}</p>}
+                </div>
+              </li>
+            })}
+          </ol> : <p className="fdr-empty">暂无活动明细。</p>}
+          {(plan.meals?.lunch || plan.meals?.dinner) && <p className="fdr-meals">
+            <Utensils size={14} aria-hidden="true" />
+            {plan.meals.lunch && <span>午餐：{plan.meals.lunch}</span>}
+            {plan.meals.dinner && <span>晚餐：{plan.meals.dinner}</span>}
+          </p>}
         </div>
-        <ExportButton itinerary={itinerary} />
-      </div>
-
-      <div className="p-4">
-        {itinerary.daily_plans?.map((plan, i) => (
-          <DailyPlanItem key={i} plan={plan} />
-        ))}
-
-        {itinerary.notes && itinerary.notes.length > 0 && (
-          <div className="mt-3 border border-warn/30 bg-warning-light p-3 text-[12px]">
-            <div className="mb-1 flex items-center gap-1 font-medium text-ink">
-              <StickyNote size={12} aria-hidden="true" /> 注意事项
-            </div>
-            <ul className="list-disc space-y-0.5 pl-4 text-ink-2">
-              {itinerary.notes.map((note, i) => (
-                <li key={i}>{note}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    </CardShell>
-  )
+      </li>
+    })}</ol>
+  </FlightResult>
 }

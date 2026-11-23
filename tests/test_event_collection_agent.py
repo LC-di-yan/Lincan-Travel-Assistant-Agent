@@ -2,6 +2,7 @@
 测试事项收集智能体
 """
 import sys
+import pytest
 import os
 import asyncio
 import json
@@ -24,6 +25,8 @@ _spec.loader.exec_module(_mod)
 EventCollectionAgent = _mod.EventCollectionAgent
 
 
+@pytest.mark.integration
+@pytest.mark.usefixtures("live_model")
 async def test_event_collection_agent():
     """测试事项收集智能体"""
 
