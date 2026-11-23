@@ -234,7 +234,7 @@ async def test_trip_disconnect_cancels_all_active_reads_and_emits_no_false_compl
             disconnect.set()
             await asyncio.Future()
 
-    await asyncio.wait_for(response({"type": "http"}, receive, send), timeout=1.5)
+    await asyncio.wait_for(response({"type": "http", "method": "POST", "path": "/api/chat", "headers": []}, receive, send), timeout=1.5)
     assert len(started) == 4 and cancelled == started
     assert session.orchestrator.result_queue is None and not session.chat_lock.locked()
     assert not any(b"event: complete" in frame for frame in sent)

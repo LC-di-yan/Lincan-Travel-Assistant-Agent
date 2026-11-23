@@ -350,7 +350,7 @@ async def test_sse_disconnect_while_sending_cancels_worker_releases_lock(monkeyp
             disconnect.set()
             await asyncio.Future()  # client disconnects exactly while transport is sending
 
-    await asyncio.wait_for(response({"type": "http"}, receive, send), timeout=1)
+    await asyncio.wait_for(response({"type": "http", "method": "POST", "path": "/api/chat", "headers": []}, receive, send), timeout=1)
     assert producer_cancelled.is_set()
     assert session.orchestrator.result_queue is None and not session.chat_lock.locked()
 
