@@ -58,6 +58,10 @@ const GLASS_PRESS_SPRING = { type: 'spring' as const, stiffness: 640, damping: 3
 const GLASS_RELEASE_SPRING = { type: 'spring' as const, stiffness: 460, damping: 14.4, mass: 0.7 }
 const GLASS_HEIGHT = 64
 const GLASS_RADIUS = 22
+/** 删除成功后，红色状态与浮空「撤销」一起停留多久。 */
+const CONFIRMED_VISIBLE_MS = 800
+/** 停留结束后整行（含撤销按钮）渐隐的时长，渐隐完成才真正删除。 */
+const CONFIRMED_FADE_MS = 240
 
 type Phase = 'idle' | 'holding' | 'cancelling' | 'confirmed'
 
@@ -150,8 +154,11 @@ export function HoldToDelete({
   }, [onConfirm])
   const [phase, setPhaseState] = useState<Phase>('idle')
   const [internalDeleted, setInternalDeleted] = useState(false)
+  const [fading, setFading] = useState(false)
   const [announce, setAnnounce] = useState('')
   const removed = deleted ?? internalDeleted
+  const confirmTimerRef = useRef<number | null>(null)
+  const fadeTimerRef = useRef<number | null>(null)
   const seconds = (holdMs / 1000).toFixed(1)
 
   const setPhase = useCallback((next: Phase) => {
@@ -168,6 +175,10 @@ export function HoldToDelete({
       rafRef.current = null
       if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current)
       resetTimerRef.current = null
+      if (confirmTimerRef.current !== null) window.clearTimeout(confirmTimerRef.current)
+      confirmTimerRef.current = null
+      if (fadeTimerRef.current !== null) window.clearTimeout(fadeTimerRef.current)
+      fadeTimerRef.current = null
       pressAnim.current?.stop()
       pressAnim.current = null
     }
@@ -199,6 +210,17 @@ export function HoldToDelete({
     }
   }, [])
 
+  const clearConfirmTimers = useCallback(() => {
+    if (confirmTimerRef.current !== null) {
+      window.clearTimeout(confirmTimerRef.current)
+      confirmTimerRef.current = null
+    }
+    if (fadeTimerRef.current !== null) {
+      window.clearTimeout(fadeTimerRef.current)
+      fadeTimerRef.current = null
+    }
+  }, [])
+
   const confirm = useCallback(() => {
     if (confirmedRef.current) return
     confirmedRef.current = true
@@ -208,8 +230,40 @@ export function HoldToDelete({
     setPhase('confirmed')
     setAnnounce('已删除')
     drivePress(0)
-    confirmHandler.current()
-  }, [clearResetTimer, drivePress, paint, setPhase, stopLoop])
+    if (!glass) {
+      confirmHandler.current()
+      return
+    }
+    // 红色状态与「撤销」停留 800ms；没人撤销才渐隐，渐隐结束才真正删除。
+    clearConfirmTimers()
+    setFading(false)
+    confirmTimerRef.current = window.setTimeout(() => {
+      confirmTimerRef.current = null
+      if (!mountedRef.current) return
+      setFading(true)
+      fadeTimerRef.current = window.setTimeout(() => {
+        fadeTimerRef.current = null
+        if (mountedRef.current) confirmHandler.current()
+      }, CONFIRMED_FADE_MS)
+    }, CONFIRMED_VISIBLE_MS)
+  }, [clearConfirmTimers, clearResetTimer, drivePress, glass, paint, setPhase, stopLoop])
+
+  /** 撤销：清掉倒计时，把卡片恢复成长按前的样子，不删除任何数据。 */
+  const undoDelete = useCallback(() => {
+    if (!confirmedRef.current) return
+    clearConfirmTimers()
+    confirmedRef.current = false
+    setInternalDeleted(false)
+    setPhase('idle')
+    setAnnounce('已撤销删除')
+    pressRef.current = 0
+    const node = ringRef.current
+    if (node) {
+      node.style.transition = 'none'
+      node.style.strokeDashoffset = String(RING_CIRCUMFERENCE)
+    }
+    onUndo?.()
+  }, [clearConfirmTimers, onUndo, setPhase])
 
   const cancel = useCallback(() => {
     if (rafRef.current === null && phaseRef.current !== 'holding') return
@@ -238,6 +292,7 @@ export function HoldToDelete({
   const begin = useCallback(() => {
     if (removed || confirmedRef.current || rafRef.current !== null) return
     clearResetTimer()
+    setFading(false)
     drivePress(1)
     const node = ringRef.current
     if (node) {
@@ -263,6 +318,7 @@ export function HoldToDelete({
   useEffect(() => {
     stopLoop()
     clearResetTimer()
+    clearConfirmTimers()
     if (removed) {
       paint(1)
       return
@@ -274,7 +330,7 @@ export function HoldToDelete({
       node.style.removeProperty('transition')
       node.style.strokeDashoffset = String(RING_CIRCUMFERENCE)
     }
-  }, [clearResetTimer, paint, removed, setPhase, stopLoop])
+  }, [clearConfirmTimers, clearResetTimer, paint, removed, setPhase, stopLoop])
 
   const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     if (removed || event.button !== 0) return
@@ -290,6 +346,11 @@ export function HoldToDelete({
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Escape') {
+      if (confirmedRef.current) {
+        event.preventDefault()
+        undoDelete()
+        return
+      }
       if (phaseRef.current === 'holding') {
         event.preventDefault()
         cancel()
@@ -298,7 +359,7 @@ export function HoldToDelete({
     }
     if (event.key !== ' ' && event.key !== 'Enter') return
     event.preventDefault()
-    if (event.repeat || removed) return
+    if (event.repeat || removed || confirmedRef.current) return
     pressRef.current = performance.now()
     begin()
   }
@@ -310,6 +371,7 @@ export function HoldToDelete({
   }
 
   const handleClick = () => {
+    if (confirmedRef.current) return
     if (removed) {
       setInternalDeleted(false)
       setAnnounce('')
@@ -324,9 +386,10 @@ export function HoldToDelete({
   const reduced = prefersReducedMotion()
   const switchMs = reduced ? REDUCED_SWITCH_MS : STATE_SWITCH_MS
   const holding = !removed && (phase === 'holding' || phase === 'cancelling')
-  const border = removed ? DELETED_BORDER : holding ? HOLD_BORDER : IDLE_BORDER
-  const background = removed ? DELETED_BG : holding ? HOLD_BG : IDLE_BG
-  const color = removed ? DELETED_TEXT : IDLE_TEXT
+  const deletedNow = removed || (glass && phase === 'confirmed')
+  const border = deletedNow ? DELETED_BORDER : holding ? HOLD_BORDER : IDLE_BORDER
+  const background = deletedNow ? DELETED_BG : holding ? HOLD_BG : IDLE_BG
+  const color = deletedNow ? DELETED_TEXT : IDLE_TEXT
   const ringTrack = glass ? 'var(--lg-ring-track)' : TRACK_COLOR
   const ringProgressColor = glass
     ? (phase === 'confirmed' || removed ? 'var(--lg-ring-ok)' : 'var(--lg-ring)')
@@ -334,6 +397,8 @@ export function HoldToDelete({
   const ringRadius = (glass ? GLASS_RADIUS : BOX_RADIUS) + RING_OFFSET
   // 玻璃行平时不画轨道环：玻璃本身已经是「按住的按钮」，环只在你真的按住时出现。
   const trackOpacity = removed ? 0 : glass ? (holding ? 1 : 0) : 1
+  // 进度环同理：圆头线帽在 dashoffset 等于周长时仍会画出一个小圆点，闲时必须整条隐藏。
+  const progressOpacity = removed ? 0 : glass ? (holding ? 1 : 0) : 1
 
   const style: MotionStyle = {
     width,
@@ -400,7 +465,7 @@ export function HoldToDelete({
         strokeDasharray={String(RING_CIRCUMFERENCE)}
         strokeDashoffset={String(RING_CIRCUMFERENCE)}
         style={{
-          opacity: removed ? 0 : 1,
+          opacity: progressOpacity,
           transition: 'opacity ' + switchMs + 'ms linear',
           ...(removed ? { strokeDashoffset: String(RING_CIRCUMFERENCE) } : {}),
         }}
@@ -408,7 +473,7 @@ export function HoldToDelete({
     </svg>
   )
 
-  const content = removed ? (
+  const content = deletedNow && !glass ? (
     <span className="hold-to-delete__status">
       <span className="hold-to-delete__icon" aria-hidden="true">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
@@ -421,7 +486,13 @@ export function HoldToDelete({
   ) : (children ?? <span className="hold-to-delete__text">{label}</span>)
 
   return (
-    <>
+    <div
+      className="hold-to-delete-wrap"
+      style={{
+        opacity: fading ? 0 : 1,
+        transition: reduced ? 'none' : 'opacity ' + CONFIRMED_FADE_MS + 'ms linear',
+      }}
+    >
       <motion.button
         type="button"
         className={glass ? 'hold-to-delete hold-to-delete--glass lg-button' : 'hold-to-delete'}
@@ -429,6 +500,7 @@ export function HoldToDelete({
         aria-label={ariaLabel ?? '按住 ' + seconds + ' 秒删除'}
         aria-current={active ? 'true' : undefined}
         data-active={active ? 'true' : undefined}
+        data-deleted={deletedNow ? 'true' : undefined}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerLeave={cancel}
@@ -439,13 +511,37 @@ export function HoldToDelete({
         onContextMenu={(event) => event.preventDefault()}
       >
         {glass
-          ? <GlassSurface overlay={ring}>{content}</GlassSurface>
+          ? (deletedNow
+            ? <>
+              <span className="hold-to-delete__red" aria-hidden="true" />
+              <span className="hold-to-delete__status hold-to-delete__status--on-red">
+                <span className="hold-to-delete__icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+                    strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 12.5 9.5 18 20 6.5" />
+                  </svg>
+                </span>
+                <span className="hold-to-delete__text">{deletedLabel}</span>
+              </span>
+            </>
+            : <GlassSurface overlay={ring}>{content}</GlassSurface>)
           : <>{ring}{content}</>}
       </motion.button>
+      {glass && deletedNow && !fading && (
+        <button
+          type="button"
+          className="hold-to-delete__undo"
+          onClick={(event) => { event.stopPropagation(); undoDelete() }}
+          onPointerDown={(event) => event.stopPropagation()}
+          aria-label="撤销删除"
+        >
+          撤销
+        </button>
+      )}
       <span className="hold-to-delete__live" role="status" aria-live="polite">
         {announce}
       </span>
-    </>
+    </div>
   )
 }
 

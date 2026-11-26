@@ -20,7 +20,7 @@ interface Props {
 
 const dateLabel = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' })
 /** 删除对话的按住时长：破坏性操作，两秒内可随时松手取消。 */
-const HOLD_MS = 2000
+const HOLD_MS = 1500
 
 export function ConversationSidebar({ activeId, navigating, working, onSelect, onNew, onClose, search, onSearch }: Props) {
   const query = search.trim()
@@ -110,13 +110,17 @@ export function ConversationSidebar({ activeId, navigating, working, onSelect, o
     try {
       await deleteConversation(row.id)
       if (row.id === activeId) onNew?.()
-      // 让"已删除"终帧停留片刻再刷新列表，删除结果才看得见。
+      // 渐隐已经在卡片里走完，这里直接把它从列表摘掉，再让侧栏与别处对齐。
+      setSnapshot((previous) => previous?.page
+        ? { ...previous, page: { ...previous.page, items: previous.page.items.filter((item) => item.id !== row.id) } }
+        : previous)
+      setDeleting(null)
       if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current)
       refreshTimer.current = window.setTimeout(() => {
         refreshTimer.current = null
         notifyConversationsChanged()
         refresh()
-      }, 450)
+      }, 300)
     } catch (err) {
       setDeleting(null)
       setDeleteError(err instanceof ConversationError ? err.message : '删除失败，请稍后重试。')
@@ -191,6 +195,7 @@ export function ConversationSidebar({ activeId, navigating, working, onSelect, o
                     align="left"
                     active={active}
                     deleted={deleting === row.id}
+                    deletedLabel="已删除"
                     ariaLabel={'按住 ' + (HOLD_MS / 1000) + ' 秒删除对话：' + row.title}
                     onActivate={() => { if (!navigating) onSelect(row.id) }}
                     onConfirm={() => { void removeConversation(row) }}>

@@ -274,6 +274,67 @@
   box-shadow: var(--lg-face-inner), 0 0 0 1px var(--lg-focus);
 }
 
+/* ── 长按删除：红色成功态 + 浮空撤销 ─────────────────────────────────── */
+
+.hold-to-delete-wrap {
+  position: relative;
+  width: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.hold-to-delete-wrap > .hold-to-delete {
+  width: 100%;
+}
+
+.hold-to-delete[data-deleted='true'] {
+  cursor: default;
+}
+
+.hold-to-delete__red {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #d32f2f;
+  pointer-events: none;
+}
+
+.hold-to-delete__status--on-red {
+  position: relative;
+  z-index: 1;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-shadow: none;
+}
+
+.hold-to-delete__undo {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-raised);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  box-shadow: 0 8px 18px rgb(21 44 51 / 0.18);
+  cursor: pointer;
+}
+
+.hold-to-delete__undo:hover {
+  background: var(--paper-sunken);
+  border-color: var(--rule-strong);
+}
+
 /* 窄栏里的聊天记录行：38px 图标块太占宽，改成 15px 图标 + 两行文字 */
 .lg-content--row {
   align-items: center;
