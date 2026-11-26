@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react'
 import { fetchHistory } from '../../api/client'
 import { useChatStore } from '../../store/chatStore'
 import type { TripRecord, FrequentDestination } from '../../api/types'
+import { AnimatedNumber } from '../effects/AnimatedNumber'
 
 export function HistoryPanel({ personalAvailable = false }: { personalAvailable?: boolean }) {
   const userId = useChatStore((s) => s.userId)
@@ -46,11 +47,11 @@ export function HistoryPanel({ personalAvailable = false }: { personalAvailable?
 
       <div className="grid grid-cols-2 border-y border-rule">
         <div className="border-r border-rule py-2.5 text-center">
-          <div className="font-mono text-[18px] font-semibold tabular text-accent">{(stats.total_trips as number) || 0}</div>
+          <div className="font-mono text-[18px] font-semibold tabular text-accent"><AnimatedNumber value={Number(stats.total_trips) || 0} /></div>
           <div className="mt-0.5 text-[10px] text-ink-3">总行程</div>
         </div>
         <div className="py-2.5 text-center">
-          <div className="font-mono text-[18px] font-semibold tabular text-ink">{(stats.total_messages as number) || 0}</div>
+          <div className="font-mono text-[18px] font-semibold tabular text-ink"><AnimatedNumber value={Number(stats.total_messages) || 0} /></div>
           <div className="mt-0.5 text-[10px] text-ink-3">总消息</div>
         </div>
       </div>

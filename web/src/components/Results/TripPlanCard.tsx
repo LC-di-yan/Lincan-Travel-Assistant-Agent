@@ -181,6 +181,8 @@ export default function TripPlanCard({ data, actions }: { data: Record<string, u
   const plan = asRecord(data.trip_plan)
   const request = asRecord(plan.request)
   const budget = asRecord(request.budget)
+  const nightly = asRecord(request.nightly_limit)
+  const excluded = strings(request.excluded_transport)
   const recommended = label(asRecord(plan.recommended).id)
   const validation = label(asRecord(plan.validation).note)
   const options = records(plan.alternatives)
@@ -213,6 +215,9 @@ export default function TripPlanCard({ data, actions }: { data: Record<string, u
       <p className="proposal-meta">
         {dates.length > 0 && <span>{dates.join(' 至 ')}</span>}
         {amountText(budget.amount) && <span>总预算 {label(budget.currency)} {amountText(budget.amount)}</span>}
+        {amountText(nightly.amount) && <span>单晚不高于 {label(nightly.currency)} {amountText(nightly.amount)}</span>}
+        {excluded.includes('flight') && <span>已排除飞机</span>}
+        {request.lodging === false && <span>不安排住宿</span>}
         <span>{options.length} 份候选</span>
       </p>
     </header>

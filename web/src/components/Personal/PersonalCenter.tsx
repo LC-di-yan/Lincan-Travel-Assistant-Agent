@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { ArrowLeft, ArrowUpRight, Bookmark, CalendarDays, FileText, Plus, SlidersHorizontal, Wallet } from 'lucide-react'
 import { type ActionReceipt, type CreateContent, type DraftContent, type Lifecycle, type PlanMeta, type PlanVersion, type ScheduleAction, type TripDetail, type VersionInfo, newOperationKey, personalApi } from '../../api/personal'
 import { useChatStore } from '../../store/chatStore'
 import { formatMoney } from '../../utils/money'
 import TripForm from './TripForm'
-import { PlanList, Section } from './ui'
+import { PlanList, Section, StableResourceRegion } from './ui'
 import { button, dayTime, days, input, lifecycleLabel, pane, primary, tripHref } from './style'
 import { usePersonalResource as useLoad } from './usePersonalResource'
 import CalendarOperation from './CalendarOperation'
@@ -29,6 +29,21 @@ function useIdempotent<T extends object>(save: (data: T, key: string) => Promise
     const encoded = JSON.stringify(payload)
     if (last.current?.encoded !== encoded) last.current = { encoded, key: newOperationKey() }
     return save(payload, last.current.key)
+  }
+}
+
+function useRouteContinuation(routeKey?: string) {
+  const lifetime = useRef<object | null>(null)
+  useLayoutEffect(() => {
+    lifetime.current = {}
+    return () => { lifetime.current = null }
+  }, [routeKey])
+
+  return () => {
+    const origin = lifetime.current
+    const hash = window.location.hash
+    // A completed write may outlive its form, but its navigation must not.
+    return () => origin !== null && lifetime.current === origin && window.location.hash === hash
   }
 }
 
@@ -133,6 +148,7 @@ function TripsPage({ initialAgenda = false }: { initialAgenda?: boolean }) {
       </form>
     </details>
     <Section className="trip-header" title={status === 'scheduled' ? '已安排议程' : '已保存行程'}>
+      <StableResourceRegion holding={resource.loading || !!resource.error}>
       <RequestState {...resource} />
       {status === 'scheduled' && <p className="mb-2 text-xs text-ink-3">按本页已安排日期排列，不根据分页结果判断空闲日期。</p>}
       {resource.data && <PlanList rows={status === 'scheduled'
@@ -143,6 +159,7 @@ function TripsPage({ initialAgenda = false }: { initialAgenda?: boolean }) {
         {resource.data?.next_cursor && <button type="button" className={button}
           onClick={() => setCursor(resource.data?.next_cursor || '')}>下一页</button>}
       </div>
+      </StableResourceRegion>
     </Section>
     {status !== 'scheduled' && <LegacyTrips />}
   </>
@@ -154,6 +171,7 @@ function LegacyTrips() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
   const copy = useIdempotent((data: CreateContent, key) => personalApi.create(data, key))
+  const captureRoute = useRouteContinuation()
 
   return <div className="mt-4">
     <Section title="旧对话的行程摘要">
@@ -163,11 +181,12 @@ function LegacyTrips() {
         {resource.data.items.map((row, index) => <li key={`${row.trip_id}:${index}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
           <span className="text-sm text-ink">{row.origin || '起点待定'} → {row.destination || '终点待定'} · {days(row.start_date, row.end_date)}</span>
           <button type="button" className={button} disabled={!!busy || row.ambiguous} onClick={async () => {
+            const stillHere = captureRoute()
             setBusy(row.trip_id)
             setError('')
             try {
               const next = await copy({ source: 'historical_summary', trip_id: row.trip_id })
-              window.location.hash = tripHref(next.plan_id)
+              if (stillHere()) window.location.hash = tripHref(next.plan_id)
             } catch (err) { setError(err instanceof Error ? err.message : '复制失败。') }
             finally { setBusy('') }
           }}>{row.ambiguous ? '编号重复，请手动新建' : busy === row.trip_id ? '正在复制…' : '复制为草稿'}</button>
@@ -180,22 +199,43 @@ function LegacyTrips() {
 
 function DetailPage({ id, selectedVersion }: { id: string; selectedVersion?: number }) {
   const [receipt, setReceipt] = useState<ActionReceipt | null>(null)
+  const previous = useRef({ id, selectedVersion })
+  const movingVersion = useRef(false)
+  const versionBoard = useRef<HTMLDivElement>(null)
+  const requestState = useRef<HTMLDivElement>(null)
   const loader = useCallback(async (signal: AbortSignal) => {
     const [detail, versions] = await Promise.all([personalApi.get(id, signal), personalApi.versions(id, signal)])
     const shown = selectedVersion != null ? await personalApi.version(id, selectedVersion, signal) : detail.draft
     return { detail, items: versions.items, shown }
   }, [id, selectedVersion])
   const resource = useLoad(loader)
-  return resource.data
-    ? <DetailContent key={`${id}:${resource.data.shown.version}:${resource.data.detail.plan.revision}`} {...resource.data}
-      reload={resource.retry} receipt={receipt?.plan_id === id && receipt.revision === resource.data.detail.plan.revision ? receipt : null}
-      onReceipt={setReceipt} />
-    : <RequestState {...resource} />
+  useLayoutEffect(() => {
+    if (previous.current.id !== id) movingVersion.current = false
+    else if (previous.current.selectedVersion !== selectedVersion) movingVersion.current = true
+    previous.current = { id, selectedVersion }
+    if (!movingVersion.current) return
+    const available = document.activeElement === document.body || document.activeElement === requestState.current
+    if (resource.loading) {
+      if (available) requestState.current?.focus({ preventScroll: true })
+    } else {
+      if (!resource.error) movingVersion.current = false
+      if (available) (resource.error ? requestState.current : versionBoard.current)?.focus()
+    }
+  }, [id, resource.error, resource.loading, selectedVersion])
+
+  return <StableResourceRegion key={id} holding={resource.loading || !!resource.error}>
+    {resource.data
+      ? <DetailContent key={`${id}:${resource.data.shown.version}:${resource.data.detail.plan.revision}`} {...resource.data}
+        reload={resource.retry} receipt={receipt?.plan_id === id && receipt.revision === resource.data.detail.plan.revision ? receipt : null}
+        onReceipt={setReceipt} versionBoard={versionBoard} />
+      : <div ref={requestState} tabIndex={-1} className="sticky top-0 z-10 bg-paper"><RequestState {...resource} /></div>}
+  </StableResourceRegion>
 }
 
-function DetailContent({ detail, shown, items, reload, receipt, onReceipt }: {
+function DetailContent({ detail, shown, items, reload, receipt, onReceipt, versionBoard }: {
   detail: TripDetail; shown: PlanVersion; items: VersionInfo[]; reload: () => void
   receipt: ActionReceipt | null; onReceipt: (value: ActionReceipt) => void
+  versionBoard: RefObject<HTMLDivElement | null>
 }) {
   const { plan } = detail
   const snapshot = shown.snapshot
@@ -211,6 +251,7 @@ function DetailContent({ detail, shown, items, reload, receipt, onReceipt }: {
   const saveOption = useIdempotent((optionId: { id: string }, key) => personalApi.addVersion(
     ref, { source: 'saved_option', option_id: optionId.id }, plan.revision, key,
   ))
+  const captureRoute = useRouteContinuation()
   const canSchedule = shown.version === plan.current_draft_version
   const calendar = plan.lifecycle === 'scheduled' && detail.scheduled && shown.version === detail.scheduled.version ? calendarText(detail.scheduled) : null
 
@@ -226,7 +267,7 @@ function DetailContent({ detail, shown, items, reload, receipt, onReceipt }: {
     <Section title={plan.title} className="trip-header" action={<span className="rounded-input border border-rule px-2 py-1 text-xs font-semibold text-route">{lifecycleLabel[plan.lifecycle]}</span>}>
       <p className="trip-kicker mb-1">ALIGO / 行程档案</p>
       <p className="break-words text-sm text-ink-2">{snapshot.origin && snapshot.destination ? `${snapshot.origin} → ${snapshot.destination} · ` : ''}{days(snapshot.start_date, snapshot.end_date)}</p>
-      <VersionBoard plan={plan} shown={shown} />
+      <VersionBoard plan={plan} shown={shown} boardRef={versionBoard} />
       {receipt && <p role="status" className="text-sm font-semibold text-ok">安排操作回执：第 {receipt.version} 版 · {lifecycleLabel[receipt.lifecycle]}。不涉及预订或付款。</p>}
       <details className="mb-2 border-y border-rule">
         <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-route">版本记录（{items.length}）</summary>
@@ -251,14 +292,22 @@ function DetailContent({ detail, shown, items, reload, receipt, onReceipt }: {
         {editing && <a className={button} href={tripHref(plan.plan_id, `/edit?v=${shown.version}`)}>手动调整</a>}
         {editing && <button className={button} type="button" onClick={() => setRenaming(true)}>修改名称</button>}
         {editing && !canSchedule && <button className={button} type="button" disabled={busy} onClick={async () => {
+          const stillHere = captureRoute()
           setBusy(true); setError('')
-          try { await restore(ref); window.location.hash = tripHref(plan.plan_id); reload() }
+          try {
+            await restore(ref)
+            if (stillHere()) { window.location.hash = tripHref(plan.plan_id); reload() }
+          }
           catch (err) { setError(err instanceof Error ? err.message : '恢复旧版本失败。') }
           finally { setBusy(false) }
         }}>将此版本恢复为新草稿</button>}
         <button className={button} type="button" disabled={busy} onClick={async () => {
+          const stillHere = captureRoute()
           setBusy(true); setError('')
-          try { const result = await copy({ source: 'copy', ref }); window.location.hash = tripHref(result.plan_id) }
+          try {
+            const result = await copy({ source: 'copy', ref })
+            if (stillHere()) window.location.hash = tripHref(result.plan_id)
+          }
           catch (err) { setError(err instanceof Error ? err.message : '复制失败。') }
           finally { setBusy(false) }
         }}>复制为新草稿</button>
@@ -308,8 +357,12 @@ function DetailContent({ detail, shown, items, reload, receipt, onReceipt }: {
         </p>)}
         <div className="mt-2 flex flex-wrap gap-2">
           {editing && row.option_id !== snapshot.selected_option_id && <button type="button" className={button} disabled={busy} onClick={async () => {
+            const stillHere = captureRoute()
             setBusy(true); setError('')
-            try { await saveOption({ id: row.option_id }); window.location.hash = tripHref(plan.plan_id); reload() }
+            try {
+              await saveOption({ id: row.option_id })
+              if (stillHere()) { window.location.hash = tripHref(plan.plan_id); reload() }
+            }
             catch (err) { setError(err instanceof Error ? err.message : '未能将此备选保存为新草稿。') }
             finally { setBusy(false) }
           }}>采用此备选另存一版</button>}
@@ -330,9 +383,11 @@ function DetailContent({ detail, shown, items, reload, receipt, onReceipt }: {
 
 function NewTripPage() {
   const create = useIdempotent((draft: DraftContent, key) => personalApi.create({ source: 'manual', draft }, key))
+  const captureRoute = useRouteContinuation()
   return <TripForm cancel="#/personal/trips" onSave={async (draft) => {
+    const stillHere = captureRoute()
     const saved = await create(draft)
-    window.location.hash = tripHref(saved.plan_id)
+    if (stillHere()) window.location.hash = tripHref(saved.plan_id)
   }} />
 }
 
@@ -345,14 +400,16 @@ function EditTripPage({ id, number }: { id: string; number?: number }) {
   const create = useIdempotent((item: { draft: DraftContent; revision: number; version: number }, key) => personalApi.addVersion(
     { plan_id: id, version: item.version }, { source: 'manual', draft: item.draft }, item.revision, key,
   ))
+  const captureRoute = useRouteContinuation(`${id}:${number}`)
   if (!resource.data) return <RequestState {...resource} />
   const { detail, version } = resource.data
   const snapshot = version.snapshot
   const option = snapshot.options.find((value) => value.option_id === snapshot.selected_option_id)
   return <TripForm key={version.version} initial={{ ...snapshot, title: detail.plan.title,
     schedule_items: [...(snapshot.schedule_items || []), ...(option?.schedule_items || [])] }} preserveEvents cancel={tripHref(id)} onSave={async (draft) => {
+      const stillHere = captureRoute()
       await create({ draft, revision: detail.plan.revision, version: version.version })
-      window.location.hash = tripHref(id)
+      if (stillHere()) window.location.hash = tripHref(id)
     }} />
 }
 

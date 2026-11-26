@@ -1,3 +1,4 @@
+import type { RefObject } from 'react'
 import type { PlanEvent, PlanMeta, PlanVersion } from '../../api/personal'
 import { dayTime, days, tripHref } from './style'
 import './trip-rhythm.css'
@@ -39,10 +40,10 @@ export function EventRows({ values, compact = false }: { values: PlanEvent[]; co
   </div>
 }
 
-export function VersionBoard({ plan, shown }: { plan: PlanMeta; shown: PlanVersion }) {
+export function VersionBoard({ plan, shown, boardRef }: { plan: PlanMeta; shown: PlanVersion; boardRef?: RefObject<HTMLDivElement | null> }) {
   const scheduled = plan.lifecycle === 'scheduled' ? plan.scheduled_version : null
   const versionLink = (version: number) => tripHref(plan.plan_id, `?v=${version}`)
-  return <div className="trip-version-board" aria-label="查看、草稿与安排版本" role="group">
+  return <div ref={boardRef} tabIndex={boardRef ? -1 : undefined} className="trip-version-board" aria-label="查看、草稿与安排版本" role="group">
     <div data-viewing><span>正在查看</span><b>第 {shown.version} 版</b>
       <small>{shown.version === plan.current_draft_version ? '当前草稿版本' : shown.version === scheduled ? '日历正在使用这一版' : '历史快照，不改变草稿或日历'}</small></div>
     <div><span>当前草稿</span><b>第 {plan.current_draft_version} 版</b>

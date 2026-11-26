@@ -6,7 +6,7 @@ import { unwrapResultData } from './resultData.ts'
 export type RunPhase = 'idle' | 'submitted' | 'receiving' | 'finished' | 'clarification' | 'error' | 'cancelled' | 'interrupted' | 'archived'
 export const activityStates = {
   pending: '待开始', running: '进行中', success: '已完成', cached: '已复用', partial: '部分完成',
-  failed: '失败', timeout: '超时', unavailable: '无可核验数据', skipped: '已跳过',
+  failed: '失败', timeout: '超时', unavailable: '无可核验数据', no_match: '未找到条款', skipped: '已跳过',
   stopped: '已停止', unreported: '未收到结果', returned: '已收到结果', awaiting: '待确认',
 } as const
 type NodeState = keyof typeof activityStates
@@ -63,6 +63,11 @@ export function mergeSchedule(previous: readonly Identity[], next: readonly Iden
 }
 
 function resultState(row: ResultFact): NodeState {
+  if (row.agent_name === 'rag_knowledge') {
+    const status = unwrapResultData(row.data).status
+    if (status === 'no_knowledge') return 'no_match'
+    if (status === 'unavailable') return 'unavailable'
+  }
   if (row.status === 'success' && (!row.node_status || row.node_status === 'success') &&
       ['expense_tracker', 'expense_tracking'].includes(row.agent_name)) {
     const action = unwrapResultData(row.data).action
@@ -122,14 +127,15 @@ export function projectAgentActivity({ phase, schedule, finalSchedule, running, 
   }
   const list = [...nodes.values()].map(n => duplicates.has(n.id) ? { ...n, label: n.label + '（同类任务）' } : n)
   const active = list.filter(n => n.status === 'running')
-  const hasIssues = list.some(n => ['failed', 'partial', 'timeout', 'unavailable', 'skipped', 'stopped', 'unreported', 'returned'].includes(n.status))
+  const hasIssues = list.some(n => ['failed', 'partial', 'timeout', 'unavailable', 'no_match', 'skipped', 'stopped', 'unreported', 'returned'].includes(n.status))
   let summary: string
   if (cancelled) summary = '本轮已停止'
   else if (phase === 'interrupted') summary = '连接中断，未收到完整回复'
   else if (phase === 'archived') summary = '历史记录 · 未保存完整过程'
   else if (phase === 'error' || finalStatus === 'failed') summary = '本轮未能完成'
   else if (phase === 'clarification') summary = '等待你补充信息'
-  else if (phase === 'finished') summary = hasIssues || finalStatus === 'partial_failure' ? '本轮结束，有待核验项' : '本轮已结束'
+  else if (phase === 'finished') summary = hasIssues || finalStatus === 'partial_failure' ? '本轮结束，有待核验项'
+    : list.some(n => n.status === 'awaiting') ? '待你确认费用' : '本轮已结束'
   else if (phase === 'idle') summary = '尚无进行中的任务'
   else if (active.length) summary = '正在处理：' + active.map(n => n.label).join('、')
   else if (results.length) summary = '已收到结果，等待本轮结束'

@@ -71,6 +71,7 @@ export interface AgentResult {
 }
 
 export interface OrchestrationResult {
+  answer?: string
   status: string
   history_warning?: string
   intention?: IntentionData

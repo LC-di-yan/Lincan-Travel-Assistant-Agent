@@ -110,7 +110,7 @@ test('进行中已有结果即展示卡片而非先展示原始副本，用户�
   const runningHtml = await render(msg, { isRunning: true })
   assert.equal(count(runningHtml, result.data.answer), 1)
   assert.match(runningHtml, /data-agent="memory_query"/)
-  assert.doesNotMatch(runningHtml, /class="markdown max-w-\[680px\]"/)
+  assert.doesNotMatch(runningHtml, /class="markdown assistant-prose\b/)
   const userHtml = await render({ ...msg, role: 'user' })
   assert.equal(count(userHtml, result.data.answer), 1)
   assert.match(userHtml, /data-message-role="user"/)

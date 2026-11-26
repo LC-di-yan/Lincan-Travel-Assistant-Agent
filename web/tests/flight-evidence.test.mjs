@@ -1,6 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { activityTime, amapMarker, beijingQueryTime, evidenceSources, mapReference, seatStatus } from '../src/utils/flightEvidence.ts'
+import { activityTime, amapMarker, amapPhoto, beijingQueryTime, evidenceSources, mapReference, seatStatus } from '../src/utils/flightEvidence.ts'
+
+test('高德照片限来源域名并升级到 HTTPS，不接受空图或无关地址', () => {
+  assert.equal(amapPhoto('http://store.is.autonavi.com/a.jpg?size=2'), 'https://store.is.autonavi.com/a.jpg?size=2')
+  assert.equal(amapPhoto('https://aos-comment.amap.com/b.jpg'), 'https://aos-comment.amap.com/b.jpg')
+  for (const url of [undefined, [], 'blob:picture', 'https://amap.com.example.org/p.jpg', 'https://amap.com:444/a.jpg', 'https://account@amap.com/a.jpg']) {
+    assert.equal(amapPhoto(url), undefined)
+  }
+})
 
 test('缺时刻不生成时间，已有时段和跨天标记原样保留', () => {
   for (const time of ['', '—', '时间待定', null, '待核验']) assert.equal(activityTime(time), '')

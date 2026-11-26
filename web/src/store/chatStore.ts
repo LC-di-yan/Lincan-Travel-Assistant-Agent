@@ -10,6 +10,7 @@ interface ChatState {
   isProcessing: boolean
   pendingPlan: PlanLink | null
   draftPrompt: string | null
+  composerDrafts: ReadonlyMap<string | null, string>
 
   setUserId: (id: string) => void
   setSessionId: (id: string | null) => void
@@ -20,6 +21,7 @@ interface ChatState {
   patchMessage: (id: string, patch: Partial<Message>) => void
   setPendingPlan: (link: PlanLink | null) => void
   setDraftPrompt: (value: string | null) => void
+  updateComposerDraft: (value: string | ((previous: string) => string)) => void
   activateConversation: (id: string, messages: Message[]) => void
   prependHistory: (id: string, messages: Message[]) => void
 }
@@ -39,6 +41,7 @@ export const useChatStore = create<ChatState>((set) => ({
   isProcessing: false,
   pendingPlan: null,
   draftPrompt: null,
+  composerDrafts: new Map(),
 
   setUserId: (id) => {
     localStorage.setItem('aligo_user_id', id)
@@ -46,7 +49,14 @@ export const useChatStore = create<ChatState>((set) => ({
   },
   setSessionId: (id) => {
     rememberSession(id)
-    set({ sessionId: id })
+    set((s) => {
+      const unallocated = s.composerDrafts.get(null)
+      if (id === null || s.sessionId !== null || !unallocated) return { sessionId: id }
+      const composerDrafts = new Map(s.composerDrafts)
+      composerDrafts.delete(null)
+      composerDrafts.set(id, unallocated)
+      return { sessionId: id, composerDrafts }
+    })
   },
 
   addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
@@ -59,6 +69,15 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setPendingPlan: (link) => set({ pendingPlan: link }),
   setDraftPrompt: (value) => set(value ? { draftPrompt: value, pendingPlan: null } : { draftPrompt: null }),
+  updateComposerDraft: (value) => set((s) => {
+    const previous = s.composerDrafts.get(s.sessionId) ?? ''
+    const text = typeof value === 'function' ? value(previous) : value
+    if (text === previous) return s
+    const composerDrafts = new Map(s.composerDrafts)
+    if (text) composerDrafts.set(s.sessionId, text)
+    else composerDrafts.delete(s.sessionId)
+    return { composerDrafts }
+  }),
 
   activateConversation: (id, messages) => {
     // Reset the active view, not the owner's persisted data.

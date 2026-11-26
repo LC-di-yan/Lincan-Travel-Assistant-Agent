@@ -1,0 +1,375 @@
+/* ============================================================================
+   液态玻璃（纸面版） / Liquid glass, paper edition
+   ----------------------------------------------------------------------------
+   几何与物理数值在 components/effects/LiquidGlassButton.tsx 里（292×64、圆角 22、
+   10px 背板模糊、1px 高光边、按压弹簧）。这里只放三样东西：
+
+   1. 材质配色 token —— 亮色是纸白玻璃 + 墨色文字；暗色回到提示词原值
+      （白玻璃 + 白字）。
+   2. .lg-* 图层绘制 —— 面层、顶部高光、指针高光、内容排版。块下方不画厚边、
+      不投影，玻璃直接贴在底纹上。
+   3. .chart-paper —— 两块宿主区域（示例区、聊天记录列表）底下的航图底纹，
+      背板模糊得有东西可模糊，玻璃才看得出来是玻璃。
+   ========================================================================== */
+
+:root {
+  --lg-radius: 22px;
+
+  /* 文字与图标 */
+  --lg-ink: var(--ink);
+  --lg-ink-soft: color-mix(in srgb, var(--ink) 74%, transparent);
+  --lg-ink-meta: color-mix(in srgb, var(--ink) 58%, transparent);
+  --lg-text-shadow: 0 1px 0 rgb(255 255 255 / 0.7);
+
+  /* 玻璃面层：白天模式比纸面深半档，玻璃才有「厚」的感觉 */
+  --lg-face-tint: linear-gradient(
+    155deg,
+    rgb(255 255 255 / 0.26) 0%,
+    rgb(198 212 203 / 0.34) 52%,
+    rgb(255 255 255 / 0.16) 100%
+  );
+  --lg-face-border: rgb(255 255 255 / 1);
+  --lg-face-outline: 0 0 0 1px rgb(21 44 51 / 0.13);
+  --lg-face-inner:
+    inset 0 1px 0 rgb(255 255 255 / 1),
+    inset 0 -1px 1px rgb(21 44 51 / 0.1),
+    inset 0 -8px 12px -11px rgb(21 44 51 / 0.16);
+
+  /* 顶部高光与指针高光 */
+  --lg-top-light: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.7) 0%,
+    rgb(255 255 255 / 0.18) 34%,
+    rgb(255 255 255 / 0) 58%
+  );
+  --lg-glow: rgb(255 255 255 / 0.9);
+  --lg-glow-blend: soft-light;
+
+  /* 图标块与未读点 */
+  --lg-icon-border: rgb(21 44 51 / 0.14);
+  --lg-icon-bg: linear-gradient(180deg, rgb(255 255 255 / 0.92) 0%, rgb(255 255 255 / 0.46) 100%);
+  --lg-icon-ink: var(--route);
+  --lg-unread: #3ddc84;
+  --lg-unread-ring: rgb(255 255 255 / 0.9);
+
+  /* 长按删除的进度环（聊天记录行复用同一块玻璃） */
+  --lg-ring: var(--accent);
+  --lg-ring-track: color-mix(in srgb, var(--accent) 18%, transparent);
+  --lg-ring-ok: var(--ok);
+
+  /* 底纹与焦点 */
+  --lg-contour: rgb(21 44 51 / 0.09);
+  --lg-grid: rgb(21 44 51 / 0.05);
+  --lg-focus: var(--route);
+}
+
+.dark {
+  --lg-ink: #fff;
+  --lg-ink-soft: rgb(255 255 255 / 0.78);
+  --lg-ink-meta: rgb(255 255 255 / 0.7);
+  --lg-text-shadow: 0 1px 3px rgb(8 10 18 / 0.45);
+
+  --lg-face-tint: linear-gradient(
+    155deg,
+    rgb(255 255 255 / 0.13) 0%,
+    rgb(255 255 255 / 0.059) 52%,
+    rgb(255 255 255 / 0.098) 100%
+  );
+  --lg-face-border: rgb(255 255 255 / 0.42);
+  --lg-face-outline: 0 0 0 1px rgb(0 0 0 / 0);
+  --lg-face-inner:
+    inset 0 1px 0 rgb(255 255 255 / 0.62),
+    inset 0 -1px 1px rgb(255 255 255 / 0.22),
+    inset 0 -12px 20px -14px rgb(255 255 255 / 0.35);
+
+  --lg-top-light: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.35) 0%,
+    rgb(255 255 255 / 0.08) 34%,
+    rgb(255 255 255 / 0) 58%
+  );
+  --lg-glow: rgb(255 255 255 / 0.55);
+  --lg-glow-blend: screen;
+
+  /* 图标块与未读点 */
+  --lg-icon-border: rgb(255 255 255 / 0.35);
+  --lg-icon-bg: linear-gradient(180deg, rgb(255 255 255 / 0.22) 0%, rgb(255 255 255 / 0.06) 100%);
+  --lg-icon-ink: rgb(255 255 255 / 0.92);
+  --lg-unread-ring: rgb(255 255 255 / 0.72);
+
+  --lg-ring: var(--accent);
+  --lg-ring-track: color-mix(in srgb, var(--accent) 22%, transparent);
+  --lg-ring-ok: var(--ok);
+
+  --lg-contour: rgb(255 255 255 / 0.055);
+  --lg-grid: rgb(255 255 255 / 0.035);
+  --lg-focus: var(--route);
+}
+
+/* ── 按钮外壳 ───────────────────────────────────────────────────────────── */
+
+.lg-button {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: var(--lg-width, 292px);
+  height: var(--lg-height, 64px);
+  max-width: 100%;
+  border-radius: var(--lg-radius, 22px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lg-ink);
+  text-align: start;
+  cursor: pointer;
+  transform-origin: 50% 70%;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  font-family: var(--font-sans-stack);
+}
+
+.lg-button:focus-visible {
+  outline: 2px solid var(--lg-focus);
+  outline-offset: 3px;
+}
+
+.lg-button:active {
+  /* 形变交给 Motion；这里只消掉浏览器默认的按压反馈 */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 让玻璃按钮铺满宿主格子（示例卡 / 聊天记录行） */
+.lg-fill {
+  width: 100%;
+}
+
+/* ── 玻璃图层 ───────────────────────────────────────────────────────────── */
+
+.lg-shift {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: var(--lg-radius);
+}
+
+.lg-face {
+  position: absolute;
+  inset: 0;
+  display: block;
+  box-sizing: border-box;
+  border: 1px solid var(--lg-face-border);
+  border-radius: inherit;
+  background: var(--lg-face-tint);
+  box-shadow: var(--lg-face-inner), var(--lg-face-outline);
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+}
+
+.lg-top {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: var(--lg-top-light);
+  opacity: 0.6;
+}
+
+.lg-glow {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: radial-gradient(
+    150px circle at var(--mx, 50%) var(--my, 50%),
+    var(--lg-glow),
+    transparent 62%
+  );
+  mix-blend-mode: var(--lg-glow-blend);
+}
+
+/* ── 内容 ───────────────────────────────────────────────────────────────── */
+
+.lg-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 14px;
+}
+
+.lg-glyph {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid var(--lg-icon-border);
+  background: var(--lg-icon-bg);
+  color: var(--lg-icon-ink);
+}
+
+.lg-unread {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lg-unread);
+  box-shadow: 0 0 0 2px var(--lg-unread-ring);
+}
+
+.lg-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.lg-title {
+  display: block;
+  overflow: hidden;
+  color: var(--lg-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: var(--lg-text-shadow);
+}
+
+.lg-subtitle {
+  display: block;
+  overflow: hidden;
+  color: var(--lg-ink-soft);
+  font-size: 10.5px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: var(--lg-text-shadow);
+}
+
+.lg-meta {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+  color: var(--lg-ink-meta);
+  font-family: var(--font-mono-stack);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: var(--lg-text-shadow);
+}
+
+/* 选中的对话：玻璃边缘换成航线色，不外加装饰条 */
+.lg-button[data-active='true'] .lg-face {
+  border-color: var(--lg-focus);
+  box-shadow: var(--lg-face-inner), 0 0 0 1px var(--lg-focus);
+}
+
+/* 窄栏里的聊天记录行：38px 图标块太占宽，改成 15px 图标 + 两行文字 */
+.lg-content--row {
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.lg-row-icon {
+  flex: none;
+  color: var(--lg-ink-meta);
+}
+
+.lg-row-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lg-row-line .lg-subtitle {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── 聊天记录行：长按删除的外壳换成玻璃 ────────────────────────────────── */
+
+.hold-to-delete.hold-to-delete--glass {
+  border-width: 0;
+  border-radius: var(--lg-radius);
+  padding: 0;
+  background: transparent;
+  justify-content: flex-start;
+  gap: 0;
+  transition: none;
+}
+
+.hold-to-delete.hold-to-delete--glass:focus-visible {
+  outline-color: var(--lg-focus);
+}
+
+/* ── 航图底纹：玻璃背后要有东西可以透出来 ─────────────────────────────── */
+
+.chart-paper {
+  position: relative;
+  isolation: isolate;
+}
+
+.chart-paper::before {
+  content: '';
+  position: absolute;
+  inset: -18px -12px -16px;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    repeating-radial-gradient(
+      ellipse 620px 320px at 22% 28%,
+      transparent 0 46px,
+      var(--lg-contour) 46px 47.5px,
+      transparent 47.5px 96px
+    ),
+    repeating-radial-gradient(
+      ellipse 520px 380px at 84% 76%,
+      transparent 0 62px,
+      var(--lg-contour) 62px 63.5px,
+      transparent 63.5px 128px
+    ),
+    repeating-linear-gradient(90deg, var(--lg-grid) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(0deg, var(--lg-grid) 0 1px, transparent 1px 34px);
+  -webkit-mask-image: radial-gradient(120% 120% at 50% 45%, #000 22%, transparent 88%);
+  mask-image: radial-gradient(120% 120% at 50% 45%, #000 22%, transparent 88%);
+}
+
+/* 聊天记录列表里的底纹更淡，别抢文字 */
+.conversation-list.chart-paper::before {
+  inset: -10px -8px;
+  opacity: 0.7;
+}
+
+/* 窄屏两块并排：先把图标块和箭头收一收，别把副标题挤没 */
+@container (max-width: 760px) {
+  .example-grid .lg-content {
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .example-grid .lg-glyph {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+
+  .example-grid .lg-title {
+    font-size: 13px;
+  }
+
+  .example-grid .lg-meta {
+    display: none;
+  }
+}

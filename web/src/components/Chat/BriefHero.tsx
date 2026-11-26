@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ArrowRight, CalendarRange, BookOpenCheck, TrainFront, ReceiptText, CloudSun, Coins, Heart, History, ChevronDown } from 'lucide-react'
+import { CalendarRange, BookOpenCheck, TrainFront, ReceiptText, CloudSun, Coins, Heart, History, ChevronDown } from 'lucide-react'
+import { LiquidGlassButton } from '../effects/LiquidGlassButton'
 
 export function BriefHeading() {
   return <div className="brief-heading">
@@ -22,16 +23,19 @@ const examples = [
 
 export function BriefExamples({ onChoose }: { onChoose: (value: string) => void }) {
   const [more, setMore] = useState(false)
-  return <section className="brief-examples" aria-labelledby="examples-title">
+  return <section className="brief-examples chart-paper" aria-labelledby="examples-title">
     <div className="example-heading">
       <h2 id="examples-title">从示例开始</h2><span>只填入，不发送</span>
       <button type="button" aria-expanded={more} onClick={() => setMore(!more)}>{more ? '收起' : '更多示例'} <ChevronDown size={14} aria-hidden="true" /></button>
     </div>
     <div className="example-grid">{examples.slice(0, more ? examples.length : 4).map(({ icon: Icon, label, prompt, detail }) =>
-      <button type="button" key={label} onClick={() => onChoose(prompt)} className="example-tile">
-        <Icon className="example-symbol" size={22} strokeWidth={1.65} aria-hidden="true" />
-        <span><strong>{label}</strong><small>{detail}</small></span>
-        <ArrowRight className="example-arrow" size={15} aria-hidden="true" />
-      </button>)}</div>
+      <LiquidGlassButton
+        key={label}
+        className="lg-fill"
+        title={label}
+        subtitle={detail}
+        icon={<Icon size={18} strokeWidth={1.7} />}
+        onClick={() => onChoose(prompt)}
+      />)}</div>
   </section>
 }

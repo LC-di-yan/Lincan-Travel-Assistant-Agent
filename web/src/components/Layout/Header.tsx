@@ -1,24 +1,26 @@
-import { lazy, useState } from 'react'
+import { lazy, useState, type RefObject } from 'react'
 import { History, PanelsRightBottom, SlidersHorizontal, Plus, CircleUserRound, Compass } from 'lucide-react'
 import type { MotionChoice } from '../../hooks/useMotionPolicy'
 import { RouteBeacon } from '../Illustrations/RouteBeacon'
 import { ThemeToggle } from './ThemeToggle'
+import type { ThemeTriggerEvent } from '../effects/themeRevealCore'
 import { SurfaceDialog } from './SurfaceDialog'
 import { DeferredRegion } from './DeferredRegion'
 
 const TTSSettings = lazy(() => import('./TTSSettings').then(m => ({ default: m.TTSSettings })))
 
 interface Props {
-  dark: boolean; toggle: () => void
+  dark: boolean; toggle: (event?: ThemeTriggerEvent) => void
   motion: MotionChoice; onMotion: (value: MotionChoice) => void
   sidebarOpen: boolean; onToggleSidebar: () => void
   personalAvailable: boolean; inPersonal: boolean; hasMessages: boolean
   historyOpen: boolean; onToggleHistory: () => void
   onNewConversation: () => void; switching: boolean
+  historyTrigger: RefObject<HTMLButtonElement | null>; archiveTrigger: RefObject<HTMLButtonElement | null>
 }
 
 export function Header({ dark, toggle, motion, onMotion, sidebarOpen, onToggleSidebar, personalAvailable,
-  inPersonal, hasMessages, historyOpen, onToggleHistory, onNewConversation, switching }: Props) {
+  inPersonal, hasMessages, historyOpen, onToggleHistory, onNewConversation, switching, historyTrigger, archiveTrigger }: Props) {
   const [settings, setSettings] = useState(false)
   return <>
     <header className="deck-header"><div className="masthead">
@@ -35,10 +37,10 @@ export function Header({ dark, toggle, motion, onMotion, sidebarOpen, onToggleSi
         {!inPersonal && <>
           {hasMessages && <button type="button" className="nav-tool nav-new" onClick={onNewConversation} disabled={switching}
             aria-label="新对话" title="新对话"><Plus size={17} /><span>新对话</span></button>}
-          <button type="button" className="nav-tool" onClick={onToggleHistory} aria-expanded={historyOpen}
+          <button ref={historyTrigger} type="button" className="nav-tool" onClick={onToggleHistory} aria-expanded={historyOpen}
             aria-controls={historyOpen ? 'conversation-history' : undefined} title="聊天记录"
             aria-label={historyOpen ? '收起聊天记录' : '展开聊天记录'}><History size={17} /><span>聊天记录</span></button>
-          <button type="button" className="nav-tool" onClick={onToggleSidebar} aria-expanded={sidebarOpen}
+          <button ref={archiveTrigger} type="button" className="nav-tool" onClick={onToggleSidebar} aria-expanded={sidebarOpen}
             aria-controls={sidebarOpen ? 'trip-archive' : undefined} title="行程档案"
             aria-label={sidebarOpen ? '收起行程档案' : '展开行程档案'}><PanelsRightBottom size={17} /><span>行程档案</span></button>
         </>}

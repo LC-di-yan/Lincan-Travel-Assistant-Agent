@@ -1,9 +1,10 @@
-import { lazy, Suspense, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAgentActivity } from '../../hooks/useAgentActivity'
 import { messageActivity } from '../../utils/agentActivity'
 import type { Message } from '../../api/types'
 import { RouteBeacon } from '../Illustrations/RouteBeacon'
 import { ActivityNodes } from './ActivityNodes'
+import { DeferredRegion } from '../Layout/DeferredRegion'
 
 const ActivityDetails = lazy(() => import('./ActivityDetails'))
 
@@ -41,7 +42,8 @@ export function RouteStrip({ message, current }: { message: Message; current: bo
     {message.historical && !view.nodes.length && <p className="mt-1 text-xs text-ink-3">未保存可展示的任务明细。</p>}
     {!!view.nodes.length && <p className="turn-meta mt-1 text-xs text-ink-3">列出 {view.nodes.length} 项 · 已返回 {view.returned} 项
       {view.live && waiting && <> · {name(waiting.to)}在等{name(waiting.from)}</>}</p>}
-    {open && !!view.nodes.length && <div id={id}><Suspense fallback={<ActivityNodes nodes={view.nodes} />}>
-      <ActivityDetails view={view} compact={compact} /></Suspense></div>}
+    {open && !!view.nodes.length && <div id={id}><DeferredRegion label="协作详情"
+      fallback={<ActivityNodes nodes={view.nodes} />} failure={<ActivityNodes nodes={view.nodes} />}>
+      <ActivityDetails view={view} compact={compact} /></DeferredRegion></div>}
   </section>
 }

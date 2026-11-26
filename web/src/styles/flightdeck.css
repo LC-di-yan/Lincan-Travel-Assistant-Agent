@@ -82,19 +82,14 @@
 .plan-notice {margin-bottom:6px;font-size:13px;color:var(--ink-2)}
 
 .brief-examples {grid-area:examples;min-width:0;border-top:1px solid var(--rule);margin-top:clamp(5px,2vh,24px)}
-.example-heading,.example-heading button,.example-tile {display:flex;align-items:center}
+.example-heading,.example-heading button {display:flex;align-items:center}
 .example-heading {min-height:54px;gap:12px}
 .example-heading h2 {font-size:14px;font-weight:700;color:var(--ink)}
-.example-heading>span,.example-heading button,.example-tile small {font-size:12px;color:var(--ink-3)}
+.example-heading>span,.example-heading button {font-size:12px;color:var(--ink-3)}
 .example-heading button {margin-left:auto;min-height:44px;gap:5px;color:var(--route)}
 .example-heading button[aria-expanded=true] svg {transform:rotate(180deg)}
-.example-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.example-tile {min-height:66px;min-width:0;position:relative;gap:12px;text-align:start;padding:9px 13px;border:1px solid var(--rule);border-radius:8px;background:var(--paper-raised)}
-.example-symbol {flex:none;color:var(--route)}
-.example-tile strong,.example-tile small {display:block}
-.example-tile strong {font-size:14px;font-weight:650;color:var(--ink)}
-.example-tile small {margin-top:2px}
-.example-arrow {margin-left:auto;flex:none;color:var(--ink-3)}
+/* 玻璃卡不投厚边，行距按普通卡片留 */
+.example-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));column-gap:10px;row-gap:12px;padding-bottom:0}
 
 .chat-mode,.message-pane {min-height:0;display:flex;flex-direction:column}
 .chat-mode {height:100%}
@@ -138,7 +133,6 @@
 @media(hover:hover) and (pointer:fine) {
   .nav-tool:not(:disabled):hover,.desk-link:hover,.mic-control:not(:disabled):hover {background:var(--paper-sunken);color:var(--ink)}
   .nav-tool[aria-expanded=true]:hover {color:var(--route);background:var(--route-tint)}
-  .example-tile:hover {border-color:var(--route);background:var(--route-tint)}
   .deck-action[data-intent=primary]:not(:disabled):hover {background:var(--accent-hover)}
 }
 @media(prefers-reduced-motion:no-preference) {
@@ -164,12 +158,9 @@
   .atlas-plate figcaption {height:28px;padding:0 11px;border-top:1px solid var(--rule)}
   .atlas-plate figcaption span:first-child {font-size:12px}
   .flight-composer {padding:12px}
-  .example-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .example-grid {grid-template-columns:repeat(2,minmax(0,1fr));column-gap:8px}
   .brief-examples {margin:0}
   .example-heading {min-height:45px;gap:9px}
-  .example-tile {min-height:57px;gap:9px;padding:8px 10px}
-  .example-tile small {font-size:11px}
-  .example-arrow {display:none}
 }
 @media(min-width:601px) {
   .desk-nav {display:grid;grid-auto-flow:column;grid-auto-columns:1fr;position:relative;--nav-columns:1}

@@ -48,7 +48,7 @@ async function render(msg, props = {}) {
   return (await new Response(stream).text()).replace(/<!--[\s\S]*?-->/g, '')
 }
 const count = (html, value) => html.split(value).length - 1
-const noRawBody = (html) => assert.doesNotMatch(html, /class="markdown max-w-\[680px\]"/)
+const noRawBody = (html) => assert.doesNotMatch(html, /class="markdown assistant-prose\b/)
 
 test('助手的路线反问只作提示，不是可以代发的用户消息', async () => {
   const question = '你的具体起点和终点是哪里，更在意省钱还是少换乘？'
@@ -150,11 +150,16 @@ test('铁路数据不可用时不展示实时余票、空车次或虚假票价',
   assert.doesNotMatch(html, /实时余票|0 趟|暂无余票/)
 })
 
-test('酒店地图价格标为参考，不能当作可订报价', async () => {
-  const hotel = { id: 'audit', name: '合成酒店', cost: '300', address: '测试地址' }
-  const html = await render(message([result('hotel_search', { results: { hotels: [hotel], count: 1 } })]))
-  assert.match(html, /地图价格仅供参考/)
-  assert.match(html, /参考 <span[^>]*>¥300<\/span>/)
+test('酒店右侧只显示高德实图，不显示有价或无价的价格区', async () => {
+  const hotels = [
+    { id: 'audit', name: '合成酒店', cost: '300', address: '测试地址', photo: 'http://store.is.autonavi.com/test.jpg' },
+    { id: 'without-photo', name: '无图酒店', photo: 'https://example.com/unrelated.jpg' },
+  ]
+  const html = await render(message([result('hotel_search', { results: { hotels, count: 2 } })]))
+  assert.match(html, /预订请以实际渠道为准/)
+  assert.match(html, /src="https:\/\/store\.is\.autonavi\.com\/test\.jpg"/)
+  assert.match(html, /alt="合成酒店的高德地图照片"/)
+  assert.doesNotMatch(html, /fdr-hotel-price|¥300|房价待核验|可用参考价|unrelated\.jpg/)
 })
 const info = () => result('information_query', {
   query_type: '天气查询', results: {
@@ -381,7 +386,7 @@ test('各类卡片未展示的独立 answer 或 message 不被误判为已接管
   for (const value of values) {
     const html = await render(message([value], note))
     assert.equal(count(html, note), 1, value.agent_name)
-    assert.match(html, /class="markdown max-w-\[680px\]"/, value.agent_name)
+    assert.match(html, /class="markdown assistant-prose\b/, value.agent_name)
   }
 })
 

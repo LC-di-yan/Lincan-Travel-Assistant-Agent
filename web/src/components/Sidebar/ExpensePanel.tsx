@@ -4,6 +4,7 @@ import { fetchExpenses } from '../../api/client'
 import { useChatStore } from '../../store/chatStore'
 import { ExpenseCategoryIcon } from '../Icons'
 import { originalAmount } from '../../utils/expenseEvidence'
+import { AnimatedNumber } from '../effects/AnimatedNumber'
 
 interface ExpenseItem {
   id?: string
@@ -77,7 +78,11 @@ export function ExpensePanel({ personalAvailable = false }: { personalAvailable?
           </>
         ) : updated ? (
           <>
-            {Object.entries(meta.totals).map(([currency, total]) => <div key={currency} className="break-words font-mono text-[20px] font-semibold tabular text-route">{originalAmount(total, currency)}</div>)}
+            {Object.entries(meta.totals).map(([currency, total]) => <div key={currency} className="break-words font-mono text-[20px] font-semibold tabular text-route">
+              {Number.isFinite(Number(total)) && currency
+                ? <>{currency} <AnimatedNumber value={Number(total)} precision={2} className="min-w-0" /></>
+                : originalAmount(total, currency)}
+            </div>)}
             {Object.keys(meta.totals).length === 0 && count > 0 && <p className="text-xs text-ink-3">未返回按币种汇总。</p>}
             {Object.keys(meta.totals).length > 1 && <p className="text-[10px] text-ink-3">按原币种分别汇总，未换算汇率</p>}
             <div className="mt-1 text-[10px] text-ink-3">{count} 笔支出</div>

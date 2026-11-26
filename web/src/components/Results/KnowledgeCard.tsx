@@ -10,9 +10,15 @@ export function KnowledgeCard({ data, agentName }: { data: Record<string, unknow
   const [showSources, setShowSources] = useState(false)
   const rawAnswer = (data.answer || data.content || data.result || data.message) as string | undefined
   const sources = Array.isArray(data.sources) ? data.sources.map(asRecord) : []
-  const entries = sources.map((row, i) => ({
-    title: evidenceText(row.document) || evidenceText(row.title) || `文档 ${i + 1}`, url: row.url, content: evidenceText(row.content),
-  }))
+  const entries = sources.map((row, i) => {
+    const lines = row.lines
+    return {
+      title: evidenceText(row.document) || evidenceText(row.title) || `文档 ${i + 1}`,
+      url: row.url, content: evidenceText(row.content), path: evidenceText(row.path),
+      lineReference: Array.isArray(lines) && lines.length === 2 && lines.every(n => Number.isInteger(n) && n > 0)
+        ? `第 ${lines[0]}–${lines[1]} 行` : '',
+    }
+  })
   const label = agentName ? getAgentLabel(agentName) : '知识库回答'
 
   let answer = rawAnswer
@@ -59,6 +65,7 @@ export function KnowledgeCard({ data, agentName }: { data: Record<string, unknow
                     <div className="flex items-baseline gap-2">
                       <span className="font-medium text-ink">{s.title}</span>
                     </div>
+                    {(s.path || s.lineReference) && <p className="mt-1 text-ink-3">{[s.path, s.lineReference].filter(Boolean).join(' · ')}</p>}
                     {s.content && <p className="mt-1 whitespace-pre-wrap leading-5 text-ink-3">{s.content}</p>}
                   </div>
                 ))}

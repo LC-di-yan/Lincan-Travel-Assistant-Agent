@@ -71,17 +71,8 @@ export function ExportButton({ itinerary }: { itinerary: Itinerary }) {
 
   useEffect(() => {
     if (!open) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        setOpen(false)
-        trigger.current?.focus()
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
     const first = menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')
     first?.focus()
-    return () => document.removeEventListener('keydown', onKeyDown)
   }, [open])
 
   const handleICS = () => {
@@ -122,7 +113,16 @@ export function ExportButton({ itinerary }: { itinerary: Itinerary }) {
   }
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <div ref={ref} className="relative shrink-0"
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
+      }}
+      onKeyDown={event => {
+        if (!open || event.key !== 'Escape') return
+        event.preventDefault()
+        setOpen(false)
+        trigger.current?.focus()
+      }}>
       <button
         ref={trigger}
         type="button"
@@ -141,11 +141,21 @@ export function ExportButton({ itinerary }: { itinerary: Itinerary }) {
           ref={menuRef}
           role="menu"
           aria-label="导出行程"
+          onKeyDown={event => {
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+            const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+            const current = items.findIndex(item => item === document.activeElement)
+            const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+              : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+            event.preventDefault()
+            items[index]?.focus()
+          }}
           className="absolute right-0 top-full z-50 mt-1 min-w-[150px] overflow-hidden rounded-input border border-rule border-t-2 border-t-route bg-paper-raised shadow-lg"
         >
           <button
             type="button"
             role="menuitem"
+            tabIndex={-1}
             onClick={handlePrint}
             className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12px] text-ink-2 hover:bg-paper-sunken hover:text-ink"
           >
@@ -154,6 +164,7 @@ export function ExportButton({ itinerary }: { itinerary: Itinerary }) {
           <button
             type="button"
             role="menuitem"
+            tabIndex={-1}
             onClick={handleICS}
             className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12px] text-ink-2 hover:bg-paper-sunken hover:text-ink"
           >
@@ -162,6 +173,7 @@ export function ExportButton({ itinerary }: { itinerary: Itinerary }) {
           <button
             type="button"
             role="menuitem"
+            tabIndex={-1}
             onClick={handleText}
             className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12px] text-ink-2 hover:bg-paper-sunken hover:text-ink"
           >

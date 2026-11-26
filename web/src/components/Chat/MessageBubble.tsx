@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy } from 'react'
 import { Volume2, Square, Loader2, TriangleAlert } from 'lucide-react'
 import { RouteStrip } from './RouteStrip'
 import { Markdown } from '../Markdown'
@@ -11,12 +11,13 @@ const FollowUpSuggestions = lazy(() =>
 )
 const SaveCandidate = lazy(() => import('../Personal/SaveCandidate'))
 import { useTTSPlayer } from '../../hooks/useTTSPlayer'
+import { DeferredRegion } from '../Layout/DeferredRegion'
 import { useNarrate } from '../../hooks/useNarrate'
 import { useChatStore } from '../../store/chatStore'
 import { extractTTSTexts } from '../../utils/ttsText'
 import { getVisibleMessageContent } from '../../utils/resultPresentation'
 import { asRecord, unwrapResultData } from '../../utils/resultData'
-import { isExpenseConfirmation } from '../../utils/expenseEvidence'
+import { expenseCancellation, isCompactExpense, isExpenseCancellation, isExpenseConfirmation } from '../../utils/expenseEvidence'
 import type { ProposalActions } from '../Results/TripPlanCard'
 import type { SuggestionContext } from '../../api/suggestionEngine'
 
@@ -88,7 +89,10 @@ export function MessageBubble({
   }) : ''
   const isError = !isUser && msg.isError === true
   const isConfirmationInput = isUser && isExpenseConfirmation(msg.content)
-  const visibleContent = isConfirmationInput ? '确认费用操作' : getVisibleMessageContent(msg)
+  const isCancellationInput = isUser && isExpenseCancellation(msg.content)
+  const visibleContent = isConfirmationInput ? '确认费用操作' : isCancellationInput ? '取消费用操作' : getVisibleMessageContent(msg)
+  const onlyCompactExpense = msg.agentResults?.length === 1 && ['expense_tracking', 'expense_tracker'].includes(msg.agentResults[0].agent_name)
+    && isCompactExpense(unwrapResultData(msg.agentResults[0].data))
   const speechText = msg.narrationText || msg.content || (msg.agentResults ? extractTTSTexts(msg.agentResults) : '')
 
   const handlePlay = async () => {
@@ -107,7 +111,7 @@ export function MessageBubble({
     if (!fallback) return
 
     const intentionType = msg.intention?.intents?.[0]?.type
-    if (msg.historical || msg.intention?.trip_request || FAST_PATH.has(intentionType || '')) {
+    if (!hasResults || msg.historical || msg.intention?.trip_request || FAST_PATH.has(intentionType || '')) {
       play(msg.id, fallback, { intention: intentionType })
       return
     }
@@ -140,7 +144,7 @@ export function MessageBubble({
     msg.orchestrationResult?.status === 'completed' && isExpenseConfirmation(userMessage)
   const successfulResults = msg.agentResults?.filter((result) => result.status === 'success') ?? []
   const suggestionCtx: SuggestionContext | null =
-    isLatest && !isUser && !isRunning && successfulResults.length > 0 && onSend && !confirmation
+    isLatest && !isUser && !isRunning && successfulResults.length > 0 && onSend && !confirmation && !onlyCompactExpense
       ? {
           userMessage,
           intention: msg.intention || null,
@@ -167,7 +171,7 @@ export function MessageBubble({
 
   if (isUser) {
     return (
-      <div className="px-4 py-2.5 md:px-6" data-message-role="user">
+      <div className="px-4 py-2.5 md:px-6" data-message-role="user" data-message-id={msg.id} tabIndex={-1}>
         <div className="mx-auto flex max-w-[760px] justify-end">
           <div className="max-w-[560px]">
             <div className="whitespace-pre-wrap rounded-[2px] border border-rule bg-paper-sunken px-3.5 py-2.5 text-sm leading-7 text-ink [overflow-wrap:anywhere]">
@@ -181,7 +185,7 @@ export function MessageBubble({
   }
 
   return (
-    <div className="px-4 py-2.5 md:px-6" data-message-role="assistant">
+    <div className="px-4 py-2.5 md:px-6" data-message-role="assistant" data-message-id={msg.id} tabIndex={-1}>
       <div className="mx-auto max-w-[760px]">
         <div className="message-meta mb-1.5 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-mono text-[10px] tracking-[0.14em] text-accent">ALIGO / 行程文件</span>
@@ -211,9 +215,9 @@ export function MessageBubble({
           )}
         </div>
 
-        {msg.activity && <div className="mb-2"><RouteStrip message={msg} current={isRunning || isLatest} /></div>}
+        {msg.activity && !onlyCompactExpense && <div className="mb-2"><RouteStrip message={msg} current={isRunning || isLatest} /></div>}
         {visibleContent && !isError && (
-          <div className="markdown max-w-[680px]">
+          <div className="markdown assistant-prose max-w-[680px]">
             <Markdown>{visibleContent}</Markdown>
           </div>
         )}
@@ -244,7 +248,9 @@ export function MessageBubble({
           <div className="mt-3" data-result-stack data-first-display={!msg.historical}>
             {msg.historical && <p className="mb-1 text-[11px] text-ink-3">历史结果 · 显示当时的信息</p>}
             <ResultDashboard results={msg.agentResults!} expense={{
-              confirmation: confirmation && onSend ? { command: confirmation, submit: () => onSend(confirmation) } : undefined,
+              confirmation: confirmation && onSend ? {
+                command: confirmation, submit: () => onSend(confirmation), cancel: () => onSend(expenseCancellation(confirmation)),
+              } : undefined,
               pending: pendingExpense,
               fresh: freshExpenseReceipt,
             }} proposal={{
@@ -263,9 +269,12 @@ export function MessageBubble({
         {msg.historyWarning && <p role="status" className="mt-2 border-l-2 border-warn px-3 text-xs text-ink-2">{msg.historyWarning}</p>}
 
         {candidate && (
-          <Suspense fallback={null}>
+          <DeferredRegion label="保存行程草稿" fallback={null}
+            failure={<p id={savePanelId} tabIndex={-1} role="alert" className="mt-3 text-sm text-ink-2">
+              保存草稿入口暂时无法加载。可继续阅读方案，或刷新页面后再试。
+            </p>}>
             <SaveCandidate id={savePanelId} result={candidate} confirmedOptionId={msg.confirmedOptionId} />
-          </Suspense>
+          </DeferredRegion>
         )}
 
         {ttsBusy && !isError && speechText && (
@@ -286,9 +295,9 @@ export function MessageBubble({
         )}
 
         {suggestionCtx && onSend && (
-          <Suspense fallback={null}>
+          <DeferredRegion label="追问建议" fallback={null} failure={null}>
             <FollowUpSuggestions context={suggestionCtx} onSend={onSend} />
-          </Suspense>
+          </DeferredRegion>
         )}
       </div>
     </div>

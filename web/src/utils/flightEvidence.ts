@@ -11,6 +11,16 @@ export function publicLink(value: unknown) {
   }
 }
 
+/** Only use a photo URL from the map provider; never load mixed content. */
+export function amapPhoto(value: unknown) {
+  const link = publicLink(value)
+  if (!link) return undefined
+  const url = new URL(link)
+  if (url.port || !/(?:^|\.)(?:amap|autonavi)\.com$/.test(url.hostname)) return undefined
+  url.protocol = 'https:'
+  return url.href
+}
+
 export function evidenceSources(...groups: unknown[]) {
   const links = new Map<string, { title: string; url?: string }>()
   for (const group of groups) {

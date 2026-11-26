@@ -1,8 +1,9 @@
-import { useState, Component, type ReactNode, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, Component, type ReactNode, useEffect, useLayoutEffect, useRef, lazy } from 'react'
 import { X } from 'lucide-react'
 import { useMotionPolicy } from './hooks/useMotionPolicy'
 import { SurfaceDialog } from './components/Layout/SurfaceDialog'
 import { DeferredRegion } from './components/Layout/DeferredRegion'
+import { SkeletonShimmer } from './components/effects/SkeletonShimmer'
 import { useTheme } from './hooks/useTheme'
 import { Header } from './components/Layout/Header'
 import { ChatPanel } from './components/Chat/ChatPanel'
@@ -47,7 +48,11 @@ export default function App({ previousSession }: { previousSession: string | nul
   const { dark, toggle } = useTheme()
   const motion = useMotionPolicy()
   const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1280px)').matches)
-  const [panel, setPanel] = useState<'auto' | 'history' | 'archive' | 'closed'>('auto')
+  const [panel, setPanel] = useState<'auto' | 'history-wide' | 'history' | 'archive' | 'closed'>('auto')
+  const [historySearch, setHistorySearch] = useState('')
+  const restoreHistorySearch = useRef(false)
+  const historyTrigger = useRef<HTMLButtonElement>(null)
+  const archiveTrigger = useRef<HTMLButtonElement>(null)
   const hasMessages = useChatStore(s => s.messages.length > 0)
   const sessionId = useChatStore((s) => s.sessionId)
   const setSessionId = useChatStore((s) => s.setSessionId)
@@ -58,7 +63,9 @@ export default function App({ previousSession }: { previousSession: string | nul
   const [personalChecked, setPersonalChecked] = useState(false)
   const [location, setLocation] = useState(() => window.location.hash.slice(1))
   const inPersonal = location === '/personal' || location.startsWith('/personal/')
-  const displayed = inPersonal ? null : panel === 'auto' ? (wide && hasMessages ? 'history' : null) : panel === 'closed' ? null : panel
+  const displayed = inPersonal || panel === 'closed' ? null
+    : panel === 'auto' || panel === 'history-wide' ? (wide && (hasMessages || panel === 'history-wide') ? 'history' : null)
+    : panel
   const previousPersonal = useRef(inPersonal)
   useEffect(() => {
     if (previousPersonal.current && !inPersonal) document.querySelector<HTMLElement>('.deck-brand')?.focus({ preventScroll: true })
@@ -70,7 +77,10 @@ export default function App({ previousSession }: { previousSession: string | nul
     const update = () => {
       const route = window.location.hash.slice(1)
       setLocation(route)
-      if (route.startsWith('/personal')) setPanel('auto')
+      if (route.startsWith('/personal')) {
+        setPanel('auto')
+        setHistorySearch('')
+      }
     }
     window.addEventListener('hashchange', update)
     return () => window.removeEventListener('hashchange', update)
@@ -104,23 +114,41 @@ export default function App({ previousSession }: { previousSession: string | nul
 
   useEffect(() => {
     const media = window.matchMedia('(min-width: 1280px)')
-    const resize = (event: MediaQueryListEvent) => { setWide(event.matches); setPanel('auto') }
+    const resize = (event: MediaQueryListEvent) => {
+      restoreHistorySearch.current = document.activeElement?.matches('#conversation-history input[type=search]') ?? false
+      setWide(event.matches)
+    }
     media.addEventListener('change', resize)
     return () => media.removeEventListener('change', resize)
   }, [])
 
-  const togglePanel = (next: 'history' | 'archive') => setPanel(displayed === next ? 'closed' : next)
-  const closePanel = () => setPanel('closed')
+  useLayoutEffect(() => {
+    if (!restoreHistorySearch.current) return
+    restoreHistorySearch.current = false
+    document.querySelector<HTMLInputElement>('#conversation-history input[type=search]')?.focus({ preventScroll: true })
+  }, [wide])
+
+  const togglePanel = (next: 'history' | 'archive') => {
+    if (displayed === 'history') setHistorySearch('')
+    setPanel(displayed === next ? 'closed' : next)
+  }
+  const closePanel = () => { setPanel('closed'); setHistorySearch('') }
   const openHistory = (id: string) => {
     if (!wide) closePanel()
     void openConversation(id)
   }
   const newChat = () => {
     if (!wide) closePanel()
-    else if (displayed === 'history') setPanel('history')
+    // Keep automatic desktop history beside an empty chat, not as an unsolicited narrow-screen drawer.
+    else if (displayed === 'history' && panel === 'auto') setPanel('history-wide')
     void startNew()
   }
-  const historyProps = { activeId: sessionId, navigating: switching, working, onSelect: openHistory }
+  const historyProps = { activeId: sessionId, navigating: switching, working, onSelect: openHistory,
+    search: historySearch, onSearch: (value: string) => {
+      setHistorySearch(value)
+      if (panel === 'auto' || panel === 'history-wide') setPanel('history')
+    },
+  }
   const archive = <section id="trip-archive" className="archive-panel" aria-label="行程档案">
     <div className="archive-heading"><h2>行程档案</h2>
       <button type="button" autoFocus={!wide} aria-label="关闭行程档案" onClick={closePanel} className="nav-tool nav-icon"><X size={18} /></button>
@@ -146,15 +174,22 @@ export default function App({ previousSession }: { previousSession: string | nul
           onToggleHistory={() => togglePanel('history')}
           onNewConversation={newChat}
           switching={switching}
+          historyTrigger={historyTrigger}
+          archiveTrigger={archiveTrigger}
         />
         {inPersonal && <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {working && <div role="status" className="border-b border-rule bg-paper-sunken px-4 py-2 text-sm text-ink-2">
             助手仍在生成回复 · <a className="font-semibold text-accent underline" href="#/">返回对话查看</a>
           </div>}
           {personalEnabled
-            ? <Suspense fallback={<p className="p-6 text-ink-2" role="status">正在加载个人中心…</p>}>
+            ? <DeferredRegion label="个人中心"
+                fallback={<div className="p-6"><SkeletonShimmer count={2} label="正在加载个人中心" /></div>}
+                failure={<div className="p-6 text-ink">
+                  <p role="alert">个人中心暂时无法加载。可返回对话，或刷新页面后再试。</p>
+                  <a href="#/" className="mt-2 inline-block text-accent underline">返回对话</a>
+                </div>}>
                 <PersonalCenter path={location} />
-              </Suspense>
+              </DeferredRegion>
             : <div className="p-6 text-ink">
                 <p role="status">{personalChecked ? '当前站点尚未开放个人中心。' : '正在检查个人中心是否可用…'}</p>
                 <a href="#/" className="mt-2 inline-block text-accent underline">返回对话</a>
@@ -167,7 +202,7 @@ export default function App({ previousSession }: { previousSession: string | nul
                   <ConversationSidebar {...historyProps} />
                 </DeferredRegion>
               </aside>
-            : <SurfaceDialog side="left" label="聊天记录" onClose={closePanel}>
+            : <SurfaceDialog side="left" label="聊天记录" onClose={closePanel} returnFocus={historyTrigger}>
                 <DeferredRegion label="聊天记录">
                   <ConversationSidebar {...historyProps} onNew={newChat} onClose={closePanel} />
                 </DeferredRegion>
@@ -193,7 +228,7 @@ export default function App({ previousSession }: { previousSession: string | nul
 
           {displayed === 'archive' && (wide
             ? <aside className="w-80 shrink-0 border-l border-rule">{archive}</aside>
-            : <SurfaceDialog side="right" label="行程档案" onClose={closePanel}>{archive}</SurfaceDialog>)}
+            : <SurfaceDialog side="right" label="行程档案" onClose={closePanel} returnFocus={archiveTrigger}>{archive}</SurfaceDialog>)}
         </div>
       </div>
     </ErrorBoundary>

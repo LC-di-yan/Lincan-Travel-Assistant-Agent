@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { MessageSquareText, Plus, Search, X } from 'lucide-react'
-import { CONVERSATIONS_CHANGED, ConversationError, listConversations, type ConversationPage } from '../../api/conversations'
+import {
+  CONVERSATIONS_CHANGED, ConversationError, deleteConversation, listConversations,
+  notifyConversationsChanged, type ConversationPage, type ConversationSummary,
+} from '../../api/conversations'
+import { HoldToDelete } from '../effects/HoldToDelete'
+import { LiquidGlassButton } from '../effects/LiquidGlassButton'
 
 interface Props {
   activeId: string | null
@@ -9,22 +14,35 @@ interface Props {
   onSelect: (id: string) => void
   onNew?: () => void
   onClose?: () => void
+  search: string
+  onSearch: (value: string) => void
 }
 
 const dateLabel = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' })
+/** 删除对话的按住时长：破坏性操作，两秒内可随时松手取消。 */
+const HOLD_MS = 2000
 
-export function ConversationSidebar({ activeId, navigating, working, onSelect, onNew, onClose }: Props) {
-  const [search, setSearch] = useState('')
+export function ConversationSidebar({ activeId, navigating, working, onSelect, onNew, onClose, search, onSearch }: Props) {
   const query = search.trim()
   const [version, setVersion] = useState(0)
   const [snapshot, setSnapshot] = useState<{ query: string; version: number; page?: ConversationPage; error?: string }>()
   const [paging, setPaging] = useState(false)
   const [pagingError, setPagingError] = useState('')
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState('')
   const moreRequest = useRef<AbortController | null>(null)
+  const refreshTimer = useRef<number | null>(null)
   const visible = snapshot?.query === query ? snapshot.page : undefined
   const settled = snapshot?.query === query && snapshot.version === version
   const error = settled ? snapshot.error : undefined
   const refresh = () => setVersion((previous) => previous + 1)
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current)
+      refreshTimer.current = null
+    }
+  }, [])
 
   useEffect(() => {
     const refreshAfterWrite = () => setVersion((previous) => previous + 1)
@@ -37,7 +55,11 @@ export function ConversationSidebar({ activeId, navigating, working, onSelect, o
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
       listConversations(query, null, controller.signal)
-        .then((page) => { if (active) setSnapshot({ query, version, page }) })
+        .then((page) => {
+          if (!active) return
+          setSnapshot({ query, version, page })
+          setDeleting((current) => (current && !page.items.some((row) => row.id === current) ? null : current))
+        })
         .catch((err: unknown) => {
           if (active) setSnapshot((previous) => ({
             query, version, page: previous?.query === query ? previous.page : undefined,
@@ -82,6 +104,25 @@ export function ConversationSidebar({ activeId, navigating, working, onSelect, o
     }
   }
 
+  const removeConversation = async (row: ConversationSummary) => {
+    setDeleting(row.id)
+    setDeleteError('')
+    try {
+      await deleteConversation(row.id)
+      if (row.id === activeId) onNew?.()
+      // 让"已删除"终帧停留片刻再刷新列表，删除结果才看得见。
+      if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current)
+      refreshTimer.current = window.setTimeout(() => {
+        refreshTimer.current = null
+        notifyConversationsChanged()
+        refresh()
+      }, 450)
+    } catch (err) {
+      setDeleting(null)
+      setDeleteError(err instanceof ConversationError ? err.message : '删除失败，请稍后重试。')
+    }
+  }
+
   return (
     <nav id="conversation-history" aria-label="聊天记录" className="flex h-full min-h-0 min-w-0 flex-col bg-paper-sunken">
       <div className="shrink-0 space-y-2.5 border-b border-rule px-3 pb-3 pt-2">
@@ -99,9 +140,13 @@ export function ConversationSidebar({ activeId, navigating, working, onSelect, o
         <label className="flex min-h-11 items-center gap-2 rounded-input border border-rule bg-paper px-2.5 focus-within:border-accent">
           <Search size={15} className="shrink-0 text-ink-3" aria-hidden="true" />
           <input type="search" aria-label="搜索聊天记录" placeholder="搜索聊天记录" value={search} maxLength={100}
-            onChange={(event) => { setSearch(event.target.value); setPagingError('') }}
+            onChange={(event) => { onSearch(event.target.value); setPagingError('') }}
+            onKeyDown={event => {
+              if (event.key === 'Escape' && onClose) { event.preventDefault(); onClose() }
+            }}
             className="w-full min-w-0 bg-transparent py-1 text-sm text-ink outline-none placeholder:text-ink-3" />
         </label>
+        {deleteError && <p role="alert" className="px-1 text-xs leading-5 text-[#e58a80]">{deleteError}</p>}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2">
         {error && <p className="px-2 py-2 text-xs leading-5 text-ink-2" role="status">
@@ -114,23 +159,43 @@ export function ConversationSidebar({ activeId, navigating, working, onSelect, o
           </p>
         )}
         {!!visible?.items.length && (
-          <ul className="space-y-0.5">
+          <ul className="chart-paper conversation-list space-y-2 pb-2">
             {visible.items.map((row) => {
               const active = row.id === activeId
               const updated = row.updated_at ? Date.parse(row.updated_at) : NaN
-              return <li key={row.id}>
-                <button type="button" onClick={() => onSelect(row.id)} disabled={navigating}
-                  aria-current={active ? 'true' : undefined}
-                  className={`flex min-h-11 w-full min-w-0 items-start gap-2 rounded-input border-l-2 px-2 py-2 text-left disabled:opacity-60 ${active ? 'border-accent bg-paper-raised' : 'border-transparent hover:bg-paper'}`}>
-                  <MessageSquareText size={14} aria-hidden="true" className={`mt-0.5 shrink-0 ${active ? 'text-accent' : 'text-ink-3'}`} />
-                  <span className="min-w-0 flex-1">
-                    <span className={`block truncate text-xs text-ink ${active ? 'font-bold' : 'font-medium'}`} title={row.title}>{row.title}</span>
-                    <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-ink-3">
-                      <span className="flex-1 truncate">{row.readonly ? '只读归档' : row.preview}</span>
-                      {Number.isFinite(updated) && <time dateTime={row.updated_at!} className="shrink-0">{dateLabel.format(updated)}</time>}
-                    </span>
+              const content = <span className="lg-content lg-content--row">
+                <MessageSquareText size={15} strokeWidth={1.8} aria-hidden="true" className="lg-row-icon" />
+                <span className="lg-text">
+                  <span className="lg-title" title={row.title}>{row.title}</span>
+                  <span className="lg-row-line">
+                    <span className="lg-subtitle">{row.readonly ? '只读归档' : row.preview}</span>
+                    {Number.isFinite(updated) && <time dateTime={row.updated_at!} className="lg-meta">{dateLabel.format(updated)}</time>}
                   </span>
-                </button>
+                </span>
+              </span>
+              return <li key={row.id}>
+                {row.readonly
+                  ? <LiquidGlassButton
+                    className="lg-fill"
+                    title={row.title}
+                    active={active}
+                    ariaLabel={'打开只读对话：' + row.title}
+                    onClick={() => { if (!navigating) onSelect(row.id) }}>
+                    {content}
+                  </LiquidGlassButton>
+                  : <HoldToDelete
+                    surface="glass"
+                    width="100%"
+                    height={64}
+                    holdMs={HOLD_MS}
+                    align="left"
+                    active={active}
+                    deleted={deleting === row.id}
+                    ariaLabel={'按住 ' + (HOLD_MS / 1000) + ' 秒删除对话：' + row.title}
+                    onActivate={() => { if (!navigating) onSelect(row.id) }}
+                    onConfirm={() => { void removeConversation(row) }}>
+                    {content}
+                  </HoldToDelete>}
               </li>
             })}
           </ul>
@@ -146,4 +211,3 @@ export function ConversationSidebar({ activeId, navigating, working, onSelect, o
     </nav>
   )
 }
-

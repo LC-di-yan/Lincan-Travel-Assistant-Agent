@@ -1,16 +1,20 @@
+import { useEffect } from 'react'
 import type { MotionChoice } from '../../hooks/useMotionPolicy'
 import { ThemeToggle } from './ThemeToggle'
+import type { ThemeTriggerEvent } from '../effects/themeRevealCore'
 import { X, Volume2, Play, Square, Loader2, Check } from 'lucide-react'
 import { PERSONA_ICONS, PERSONA_FALLBACK_ICON } from '../Icons'
 import { useTTSPrefs, useLoadPersonas } from '../../hooks/useTTSPrefs'
 import { useTTSPlayer } from '../../hooks/useTTSPlayer'
 
 export function TTSSettings({ onClose, dark, toggle, motion, onMotion }: {
-  onClose: () => void; dark: boolean; toggle: () => void; motion: MotionChoice; onMotion: (value: MotionChoice) => void
+  onClose: () => void; dark: boolean; toggle: (event?: ThemeTriggerEvent) => void
+  motion: MotionChoice; onMotion: (value: MotionChoice) => void
 }) {
   const { prefs, personas, setPersonaId, setAutoPlay } = useTTSPrefs()
-  const { status, activeMessageId, play } = useTTSPlayer()
+  const { status, activeMessageId, play, stopOwned } = useTTSPlayer()
   useLoadPersonas()
+  useEffect(() => stopOwned, [stopOwned])
 
   const previewId = (pid: string) => 'preview-' + pid
   const isPreviewing = (pid: string) => activeMessageId === previewId(pid) && status !== 'idle'

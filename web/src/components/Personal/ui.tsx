@@ -1,14 +1,34 @@
-import { type ReactNode } from 'react'
+import { useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react'
 import type { PlanMeta } from '../../api/personal'
 import { days, lifecycleLabel, pane, tripHref } from './style'
 
-export function Section({ title, children, action, className = '' }: { title: string; children: ReactNode; action?: ReactNode; className?: string }) {
+export function Section({ title, children, action, className = '', headingRef }: {
+  title: string; children: ReactNode; action?: ReactNode; className?: string; headingRef?: RefObject<HTMLHeadingElement | null>
+}) {
   return <section className={`${pane} ${className}`}>
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-      <h2 className="font-display text-xl font-semibold text-ink">{title}</h2>{action}
+      <h2 ref={headingRef} tabIndex={headingRef ? -1 : undefined} className="font-display text-xl font-semibold text-ink">{title}</h2>{action}
     </div>
     {children}
   </section>
+}
+
+export function StableResourceRegion({ holding, children, className = '' }: {
+  holding: boolean; children: ReactNode; className?: string
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const region = ref.current
+    if (!region || holding) return
+    // Keep the space, not the old interactive rows or totals for a different query.
+    const rememberSize = () => region.style.setProperty('--last-content-height', `${region.offsetHeight}px`)
+    rememberSize()
+    const observer = new ResizeObserver(rememberSize)
+    observer.observe(region)
+    return () => observer.disconnect()
+  }, [holding])
+  return <div ref={ref} data-holding={holding || undefined}
+    className={`data-[holding]:min-h-[var(--last-content-height,0px)] ${className}`}>{children}</div>
 }
 
 export function PlanList({ rows, empty, agenda = false }: { rows: PlanMeta[]; empty: string; agenda?: boolean }) {

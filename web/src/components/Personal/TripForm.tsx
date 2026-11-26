@@ -1,4 +1,4 @@
-import { type FormEvent, useRef, useState } from 'react'
+import { type FormEvent, useLayoutEffect, useRef, useState } from 'react'
 import type { DraftContent, PlanEvent } from '../../api/personal'
 import { button, days, input, label, pane, primary } from './style'
 import { originalAmount } from '../../utils/expenseEvidence'
@@ -30,6 +30,9 @@ export default function TripForm({ initial, onSave, cancel, preserveEvents = fal
   const [draft, setDraft] = useState<DraftContent>(() => initial || { title: '' })
   const [entries, setEntries] = useState<Entry[]>(() => (initial?.schedule_items || []).map((event, key) => ({ event, key })))
   const next = useRef(entries.length)
+  const addActivity = useRef<HTMLButtonElement>(null)
+  const removeControls = useRef(new Map<number, HTMLButtonElement>())
+  const activityFocus = useRef<{ key?: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const locked = useRef(false)
   const [error, setError] = useState('')
@@ -37,6 +40,14 @@ export default function TripForm({ initial, onSave, cancel, preserveEvents = fal
   const [currency, setCurrency] = useState(initial?.budget?.currency || 'CNY')
   const edit = (key: number, changes: Partial<PlanEvent>) => setEntries((old) => old.map((row) => row.key === key ? { ...row, event: { ...row.event, ...changes } } : row))
   const field = (name: keyof DraftContent, value: string) => setDraft((old) => ({ ...old, [name]: value }))
+
+  useLayoutEffect(() => {
+    const target = activityFocus.current
+    if (!target) return
+    activityFocus.current = null
+    const button = target.key === undefined ? addActivity.current : removeControls.current.get(target.key)
+    button?.focus()
+  }, [entries])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -91,7 +102,7 @@ export default function TripForm({ initial, onSave, cancel, preserveEvents = fal
     <div className="border-t border-rule pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-xl font-semibold">行程活动</h2>
-        <button type="button" className={button} disabled={entries.length >= 120} onClick={() => setEntries([...entries, { key: next.current++, event: newEvent() }])}>添加活动</button>
+        <button ref={addActivity} type="button" className={button} disabled={entries.length >= 120} onClick={() => setEntries([...entries, { key: next.current++, event: newEvent() }])}>添加活动</button>
       </div>
       <p className="mt-1 text-sm text-ink-3">时间按北京时间填写。不能确定具体时段时，可只填写日期。</p>
       {entries.map(({ key, event }, index) => <fieldset key={key} className="mt-3 grid gap-3 rounded-input border border-rule p-3 sm:grid-cols-2">
@@ -127,7 +138,12 @@ export default function TripForm({ initial, onSave, cancel, preserveEvents = fal
           <label className={label}>开始日期<input required type="date" className={input} value={event.local_date ?? ''} onChange={(e) => edit(key, { local_date: e.target.value })} /></label>
           <label className={label}>结束日期（可选）<input type="date" className={input} value={event.end_date ?? ''} min={event.local_date || undefined} onChange={(e) => edit(key, { end_date: e.target.value })} /></label>
         </>}
-        <button type="button" className={`${button} justify-self-start text-err`} onClick={() => setEntries(entries.filter((row) => row.key !== key))}>移除活动 {index + 1}</button>
+        <button type="button" className={`${button} justify-self-start text-err`}
+          ref={node => { if (node) removeControls.current.set(key, node); else removeControls.current.delete(key) }}
+          onClick={event => {
+            if (event.detail === 0) activityFocus.current = { key: (entries[index + 1] ?? entries[index - 1])?.key }
+            setEntries(entries.filter((row) => row.key !== key))
+          }}>移除活动 {index + 1}</button>
       </fieldset>)}
     </div>
     <fieldset className="grid gap-3 border-t border-rule pt-3 sm:grid-cols-2">

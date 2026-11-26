@@ -1,14 +1,21 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { type CurrencyTotals, type ExpenseAssignment, type ExpenseLine, type ExpenseReport, type PlanMeta, newOperationKey, personalApi } from '../../api/personal'
 import { formatMoney } from '../../utils/money'
 import { originalAmount } from '../../utils/expenseEvidence'
-import { Section } from './ui'
+import { Section, StableResourceRegion } from './ui'
 import { button, dayTime, input, label, pane, primary, tripHref } from './style'
 import { usePersonalResource } from './usePersonalResource'
+import { AnimatedNumber } from '../effects/AnimatedNumber'
 
 const localDay = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', dateStyle: 'short' }).format(new Date())
 const totals = (currencies: CurrencyTotals) => Object.entries(currencies)
-  .map(([code, value]) => originalAmount(value, code)).join(' · ')
+  .map(([code, value]) => {
+    const amount = Number(value)
+    return Number.isFinite(amount) && code
+      ? <Fragment key={code}>{code} <AnimatedNumber value={amount} precision={2} className="min-w-0" /></Fragment>
+      : <Fragment key={code}>{originalAmount(value, code)}</Fragment>
+  })
+  .reduce<ReactNode[]>((nodes, node, index) => (index === 0 ? [node] : [...nodes, ' · ', node]), [])
 
 export function MonthSpend({ today }: { today: string }) {
   const loader = useCallback((signal: AbortSignal) => personalApi.expenseReport(new URLSearchParams({
@@ -175,6 +182,9 @@ export default function Expenses({ trip }: { trip?: string }) {
   const [plansError, setPlansError] = useState(false)
   const [trend, setTrend] = useState<'month' | 'year'>('month')
   const [active, setActive] = useState<ExpenseLine | null>(null)
+  const pageHandoff = useRef<{ offset: number; pane: HTMLElement; top: number | null } | null>(null)
+  const updateStatus = useRef<HTMLDivElement>(null)
+  const detailsHeading = useRef<HTMLHeadingElement>(null)
   const related = trip && plans.find((plan) => plan.plan_id === trip)
 
   const loader = useCallback((signal: AbortSignal) => {
@@ -187,6 +197,26 @@ export default function Expenses({ trip }: { trip?: string }) {
   }, [scope, start, end, offset])
   const { data: report, error, loading, retry } = usePersonalResource(loader)
 
+  useLayoutEffect(() => {
+    const handoff = pageHandoff.current
+    if (handoff?.offset !== offset) return
+    const available = document.activeElement === document.body || document.activeElement === updateStatus.current
+    if (loading) {
+      if (available) updateStatus.current?.focus({ preventScroll: true })
+      // Removing the focused row can move the scroller even if the placeholder has the same height.
+      if (handoff.top !== null) {
+        handoff.pane.scrollTop = handoff.top
+        handoff.top = null
+      }
+    } else {
+      pageHandoff.current = null
+      if (available) {
+        if (error) updateStatus.current?.focus({ preventScroll: true })
+        else detailsHeading.current?.focus()
+      }
+    }
+  }, [error, loading, offset])
+
   useEffect(() => {
     const controller = new AbortController()
     personalApi.list(new URLSearchParams({ limit: '60' }), controller.signal)
@@ -196,10 +226,21 @@ export default function Expenses({ trip }: { trip?: string }) {
   }, [retry])
 
   function period(kind: 'all' | 'month' | 'year') {
+    pageHandoff.current = null
     const now = localDay()
     setStart(kind === 'all' ? '' : kind === 'month' ? now.slice(0, 7) + '-01' : now.slice(0, 4) + '-01-01')
     setEnd(kind === 'all' ? '' : now)
     setOffset(0)
+  }
+
+  function rememberPagePosition(next: number, trigger: HTMLButtonElement) {
+    const pane = trigger.closest<HTMLElement>('#personal-main')
+    pageHandoff.current = pane ? { offset: next, pane, top: pane.scrollTop } : null
+  }
+
+  function movePage(next: number, trigger: HTMLButtonElement) {
+    rememberPagePosition(next, trigger)
+    setOffset(next)
   }
 
   return <div className="space-y-4">
@@ -211,19 +252,23 @@ export default function Expenses({ trip }: { trip?: string }) {
         <button type="button" className={button} onClick={() => period('year')}>本年</button>
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        <label className={label}>关联范围<select className={input} value={scope} onChange={(e) => { setScope(e.target.value); setOffset(0) }}>
+        <label className={label}>关联范围<select className={input} value={scope} onChange={(e) => { pageHandoff.current = null; setScope(e.target.value); setOffset(0) }}>
           <option value="">所有费用</option><option value="unassigned">未归属费用</option>
           {plans.map((plan) => <option key={plan.plan_id} value={plan.plan_id}>{plan.title}</option>)}
           {trip && !related && <option value={trip}>链接所指行程</option>}
         </select></label>
-        <label className={label}>发生日期起<input type="date" className={input} value={start} onChange={(e) => { setStart(e.target.value); setOffset(0) }} /></label>
-        <label className={label}>发生日期止<input type="date" className={input} min={start || undefined} value={end} onChange={(e) => { setEnd(e.target.value); setOffset(0) }} /></label>
+        <label className={label}>发生日期起<input type="date" className={input} value={start} onChange={(e) => { pageHandoff.current = null; setStart(e.target.value); setOffset(0) }} /></label>
+        <label className={label}>发生日期止<input type="date" className={input} min={start || undefined} value={end} onChange={(e) => { pageHandoff.current = null; setEnd(e.target.value); setOffset(0) }} /></label>
       </div>
     </div>
-    {loading && <p role="status" className="p-4 text-sm text-ink-3">正在读取账本…</p>}
     {plansError && <p role="alert" className="text-sm text-warn">行程清单暂不可用，账本汇总不受影响。</p>}
-    {error && <div className={pane}><p role="alert" className="text-sm text-err">{error}</p>
-      <button type="button" className={`${button} mt-2`} onClick={retry}>重试</button></div>}
+    <StableResourceRegion holding={loading || !!error} className="space-y-4">
+    {(loading || error) && <div ref={updateStatus} tabIndex={-1} className={`${pane} sticky top-0 z-10 bg-paper-raised`}>
+      {loading ? <p role="status" className="text-sm text-ink-3">正在读取账本…</p> : <>
+        <p role="alert" className="text-sm text-err">{error}</p>
+        <button type="button" className={`${button} mt-2`} onClick={event => { rememberPagePosition(offset, event.currentTarget); retry() }}>重试</button>
+      </>}
+    </div>}
     {report && <>
       <Section className="trip-header" title="实际支出（原币种）">
         <p className="text-lg font-semibold tabular-nums">{report.count ? totals(report.totals_by_currency) : '暂无费用记录'}</p>
@@ -238,7 +283,7 @@ export default function Expenses({ trip }: { trip?: string }) {
             <option value="month">按月</option><option value="year">按年</option>
           </select></label>}><LedgerPlot data={trend === 'month' ? report.by_month : report.by_year} chronological /></Section>
       </div>
-      <Section title="费用明细" action={<a className={button} href="#/">返回对话记账</a>}>
+      <Section title="费用明细" headingRef={detailsHeading} action={<a className={button} href="#/">返回对话记账</a>}>
         {!report.items.length && <p className="py-2 text-sm text-ink-3">没有符合条件的记录。</p>}
         <ul className="divide-y divide-rule">{report.items.map((row) => {
           const linked = plans.find((plan) => row.trip_plan_id === plan.plan_id)
@@ -252,10 +297,11 @@ export default function Expenses({ trip }: { trip?: string }) {
             <button type="button" className={button} onClick={() => setActive(row)}>调整归属</button>
           </li>
         })}</ul>
-        {offset > 0 && <button type="button" className={button} onClick={() => setOffset(Math.max(0, offset - 20))}>上一页</button>}
-        {report.next_offset != null && <button type="button" className={button} onClick={() => setOffset(report.next_offset ?? 0)}>下一页</button>}
+        {offset > 0 && <button type="button" className={button} onClick={event => movePage(Math.max(0, offset - 20), event.currentTarget)}>上一页</button>}
+        {report.next_offset != null && <button type="button" className={button} onClick={event => movePage(report.next_offset ?? 0, event.currentTarget)}>下一页</button>}
       </Section>
     </>}
+    </StableResourceRegion>
     {active && <Assignment item={active} plans={plans.filter((plan) => ['draft','scheduled','completed'].includes(plan.lifecycle))}
       initial={trip} onClose={() => setActive(null)} onDone={() => { setActive(null); retry() }} />}
   </div>

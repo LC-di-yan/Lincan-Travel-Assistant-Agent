@@ -12,7 +12,7 @@
 .map-station[data-state=running] circle {fill:var(--route)}
 .map-station:is([data-state=success],[data-state=cached]) circle {fill:var(--ok);stroke:var(--ok)}
 .map-station[data-state=running] .station-ring {fill:none;stroke:var(--route)}
-.map-station:is([data-state=partial],[data-state=unavailable],[data-state=timeout],[data-state=failed],[data-state=stopped],[data-state=awaiting]) circle {fill:var(--paper-raised);stroke:var(--warn)}
+.map-station:is([data-state=partial],[data-state=unavailable],[data-state=no_match],[data-state=timeout],[data-state=failed],[data-state=stopped],[data-state=awaiting]) circle {fill:var(--paper-raised);stroke:var(--warn)}
 .dependency-list {display:grid;gap:5px;margin-top:8px;font-size:12px;color:var(--ink-2);overflow-wrap:anywhere}
 .dependency-list div {border-left:2px solid var(--rule-strong);padding-left:8px}
 .dependency-list dt {font-weight:650}

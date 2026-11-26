@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./flightdeck.css";
+@import "./liquid-glass.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -302,6 +303,15 @@ button:disabled,
 }
 .markdown li {
   margin: 0.2em 0;
+}
+.assistant-prose > p {
+  white-space: pre-line;
+}
+.assistant-prose > :is(ul, ol) > li + li {
+  margin-top: 0.4em;
+}
+.assistant-prose strong {
+  color: var(--ink);
 }
 .markdown a {
   color: var(--route);

@@ -62,6 +62,18 @@ export function listConversations(query: string, before: number | null, signal: 
   return request<ConversationPage>(`/api/conversations?${params}`, signal)
 }
 
+async function mutate<T>(path: string, method: string): Promise<T> {
+  await ensureIdentity()
+  const response = await fetch(path, { method, cache: 'no-store', credentials: 'same-origin' })
+  if (!response.ok) throw new ConversationError(response.status)
+  return response.json()
+}
+
+export function deleteConversation(id: string) {
+  const path = '/api/conversations/' + encodeURIComponent(id)
+  return mutate<{ id: string; deleted: boolean; messages: number }>(path, 'DELETE')
+}
+
 export function readConversation(id: string, before: number | null, signal: AbortSignal) {
   const path = `/api/conversations/${encodeURIComponent(id)}/messages`
   return request<TranscriptPage>(before === null ? path : `${path}?before=${before}`, signal)

@@ -23,19 +23,12 @@ export function useTTSPlayer() {
     options: { personaId?: string; intention?: string } = {},
   ) => {
     // 同一条消息再点一次 → 停止
-    if (status === 'playing' && activeMessageId === messageId) {
-      getPlayer().stop()
-      setStatus('idle')
-      setActiveMessageId(null)
-      currentMessageIdRef.current = null
+    if (currentMessageIdRef.current === messageId) {
+      playerInstance?.stop()
       return
     }
 
-    // 切换到新消息 → 先停旧的
-    if (status !== 'idle') {
-      getPlayer().stop()
-    }
-
+    // The singleton cancels the previous stream before starting the next one.
     currentMessageIdRef.current = messageId
     setActiveMessageId(messageId)
     const pid = options.personaId || personaId
@@ -53,7 +46,7 @@ export function useTTSPlayer() {
         }
       },
     })
-  }, [status, activeMessageId, personaId])
+  }, [personaId])
 
   const stop = useCallback(() => {
     getPlayer().stop()
@@ -62,5 +55,9 @@ export function useTTSPlayer() {
     currentMessageIdRef.current = null
   }, [])
 
-  return { status, activeMessageId, play, stop }
+  const stopOwned = useCallback(() => {
+    if (currentMessageIdRef.current !== null) playerInstance?.stop()
+  }, [])
+
+  return { status, activeMessageId, play, stop, stopOwned }
 }

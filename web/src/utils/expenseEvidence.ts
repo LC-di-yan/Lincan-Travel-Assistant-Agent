@@ -4,6 +4,20 @@ export function isExpenseConfirmation(value: unknown): value is string {
   return typeof value === 'string' && /^确认费用\s+[a-f0-9]{24}$/.test(value)
 }
 
+export function isExpenseCancellation(value: unknown): value is string {
+  return typeof value === 'string' && /^取消费用\s+[a-f0-9]{24}$/.test(value)
+}
+
+export function expenseCancellation(confirmation: string) {
+  return confirmation.replace(/^确认费用/, '取消费用')
+}
+
+export function isCompactExpense(data: Record<string, unknown>) {
+  return data.action === 'declined' || data.input_style === 'spoken' && (
+    data.action === 'record' || data.action === 'preview' && data.operation === 'record'
+  )
+}
+
 export function currencyCode(value: unknown) {
   return typeof value === 'string' && /^[A-Z]{3}$/i.test(value.trim()) ? value.trim().toUpperCase() : ''
 }

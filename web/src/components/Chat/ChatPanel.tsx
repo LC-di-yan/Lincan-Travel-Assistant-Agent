@@ -1,11 +1,11 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { useChatStore } from '../../store/chatStore'
 import { sendChatMessage, createSession, abortActiveRequest } from '../../api/client'
 import { LEGACY_CONVERSATION, notifyConversationsChanged } from '../../api/conversations'
 import { uid } from '../../store/chatStore'
 import { MessageBubble } from './MessageBubble'
 import { selectionSource } from '../../utils/selectionReceipt'
-import { isExpenseConfirmation } from '../../utils/expenseEvidence'
+import { isExpenseCancellation, isExpenseConfirmation } from '../../utils/expenseEvidence'
 import { mergeSchedule, mergeResults, publicTask, type TurnActivity } from '../../utils/agentActivity'
 import { ActivityAnnouncement } from './RouteStrip'
 import { InputBar } from './InputBar'
@@ -48,7 +48,7 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
   readOnly: boolean
   switching: boolean
   onStartNew: () => void
-  loadOlder?: () => Promise<void>
+  loadOlder?: (beforePrepend: () => void) => Promise<void>
   olderBusy: boolean
   olderError: string
 }) {
@@ -58,8 +58,11 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
   const isProcessing = useChatStore((s) => s.isProcessing)
   const brief = messages.length === 0 && !switching && !readOnly
   const scrollRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const loadOlderButton = useRef<HTMLButtonElement>(null)
   const anchoredResult = useRef<string | null>(null)
-  const olderAnchor = useRef<{ firstId: string; height: number; top: number } | null>(null)
+  const olderAnchor = useRef<{ row: HTMLElement; top: number; focus: HTMLElement | null } | null>(null)
+  const following = useRef(true)
   const [atBottom, setAtBottom] = useState(true)
   const showJump = !atBottom && messages.length > 0
   const [offline, setOffline] = useState(() => !navigator.onLine)
@@ -129,30 +132,52 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
     el.scrollTo({ top: el.scrollHeight, behavior: smooth && !reducedMotion ? 'smooth' : 'auto' })
   }, [reducedMotion])
 
-  const onScroll = () => {
+  const measureBottom = useCallback(() => {
     const el = scrollRef.current
-    if (!el) return
+    if (!el?.clientHeight) return null
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80
     setAtBottom(near)
-  }
+    return near
+  }, [])
 
   useEffect(() => {
-    if (messages.length === 0) return
+    const pane = scrollRef.current
+    const content = contentRef.current
+    if (!visible || !pane || !content) return
+    // Lazy results and composer resize can change the bottom gap without a scroll event.
+    const observer = new ResizeObserver(measureBottom)
+    observer.observe(pane)
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [measureBottom, visible])
+
+  const onScroll = () => {
+    const near = measureBottom()
+    if (near !== null) following.current = near
+  }
+
+  useLayoutEffect(() => {
+    if (!visible || messages.length === 0) return
     const anchor = olderAnchor.current
     const pane = scrollRef.current
-    if (anchor && pane && messages[0]?.id !== anchor.firstId) {
-      olderAnchor.current = null
-      pane.scrollTop = anchor.top + pane.scrollHeight - anchor.height
+    olderAnchor.current = null
+    if (anchor?.row.isConnected && pane) {
+      const top = anchor.row.getBoundingClientRect().top - pane.getBoundingClientRect().top
+      pane.scrollTop += top - anchor.top
+      if (anchor.focus && (document.activeElement === anchor.focus ||
+        (!anchor.focus.isConnected && document.activeElement === document.body))) {
+        anchor.row.focus({ preventScroll: true })
+      }
       return
     }
 
-    if (!atBottom || !pane) return
+    if (!following.current || !pane) return
     const last = messages.at(-1)
     // Follow the first readable result, not the growing bottom of a long reply.
     // Once the reader has landed here, later packets must not move the page.
     if (last?.role === 'assistant' && !last.historical && last.agentResults?.length) {
       if (anchoredResult.current !== last.id) {
-        const first = pane.lastElementChild?.querySelector('[data-result-stack]')
+        const first = contentRef.current?.lastElementChild?.querySelector('[data-result-stack]')
         if (first) {
           anchoredResult.current = last.id
           const top = first.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop
@@ -162,8 +187,7 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
       return
     }
     scrollToBottom(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, isProcessing])
+  }, [messages, isProcessing, scrollToBottom, visible])
 
   const handleSend = useCallback(async (text: string, retryId?: string, retryPlan?: PlanLink) => {
     const store = useChatStore.getState()
@@ -207,7 +231,7 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
 
     store.setProcessing(true)
     if (!retryId) store.setPendingPlan(null)
-    setAtBottom(true)
+    following.current = true
 
     // 重置进度播报状态
     taskStartRef.current = Date.now()
@@ -282,7 +306,7 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
             historyWarning: data.history_warning,
           })
           notifyConversationsChanged()
-          const fallbackText = extractTTSTexts(results)
+          const fallbackText = data.answer?.trim() || extractTTSTexts(results)
           if (fallbackText) {
             store.patchMessage(assistantMessageId, { content: fallbackText })
           }
@@ -308,7 +332,7 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
 
           // 简单意图走快路径（不调 LLM）；复杂意图调 narrate，失败回退 fallbackText
           let textToPlay = fallbackText
-          if (!data.trip_plan && data.status !== 'cancelled' && !data.selected_proposal && !FAST_PATH_INTENTS.has(intentionType || '')) {
+          if (results.length && !data.trip_plan && data.status !== 'cancelled' && !data.selected_proposal && !FAST_PATH_INTENTS.has(intentionType || '')) {
             const narrated = await narrate({
               intention: intentionType,
               resultData: results,
@@ -383,9 +407,19 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
   }
 
   const handleLoadOlder = () => {
-    const el = scrollRef.current
-    if (el && messages[0]) olderAnchor.current = { firstId: messages[0].id, height: el.scrollHeight, top: el.scrollTop }
-    void loadOlder?.()
+    if (olderBusy || switching) return
+    void loadOlder?.(() => {
+      const pane = scrollRef.current
+      if (!pane?.clientHeight) return
+      const top = pane.getBoundingClientRect().top
+      const row = Array.from(contentRef.current?.children ?? []).find(
+        (element): element is HTMLElement => element instanceof HTMLElement && element.getBoundingClientRect().bottom > top,
+      )
+      if (row) olderAnchor.current = {
+        row, top: row.getBoundingClientRect().top - top,
+        focus: document.activeElement === loadOlderButton.current ? loadOlderButton.current : null,
+      }
+    })
   }
 
   return (
@@ -402,17 +436,18 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
           /* 流式生成期间置 busy：读屏软件等生成结束再整段播报，
              避免逐 token 朗读造成噪音风暴 */
           aria-busy={isProcessing}
+          tabIndex={-1}
           className="flex-1 overflow-y-auto py-2"
         >
           {loadOlder && (
             <div className="px-4 py-1 text-center">
-              <button type="button" onClick={handleLoadOlder} disabled={olderBusy || switching}
-                className="min-h-11 rounded-[2px] px-3 text-xs font-medium text-accent underline hover:bg-paper-sunken disabled:opacity-50">
+              <button ref={loadOlderButton} type="button" onClick={handleLoadOlder} aria-disabled={olderBusy || switching}
+                className="min-h-11 rounded-[2px] px-3 text-xs font-medium text-accent underline hover:bg-paper-sunken aria-disabled:opacity-50">
                 {olderBusy ? '正在加载…' : olderError || '加载更早的消息'}
               </button>
             </div>
           )}
-          {messages.map((msg, i) => {
+          <div ref={contentRef}>{messages.map((msg, i) => {
             const isLastAssistant =
               msg.role === 'assistant' &&
               i === messages.length - 1 &&
@@ -429,7 +464,8 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
             const next = messages[i + 1]
             const reply = messages[i + 2]
             const pendingExpense = msg.role === 'assistant' && !msg.historical && isProcessing &&
-              next?.role === 'user' && reply?.role === 'assistant' && i + 2 === messages.length - 1 && isExpenseConfirmation(next.content)
+              next?.role === 'user' && reply?.role === 'assistant' && i + 2 === messages.length - 1 &&
+              (isExpenseConfirmation(next.content) || isExpenseCancellation(next.content))
               ? next.content : undefined
             const requested = next?.role === 'user' && !next.planLink
               ? selectionSource(msg, next.content, activeSession)
@@ -452,15 +488,18 @@ export function ChatPanel({ readOnly, switching, onStartNew, loadOlder, olderBus
                 onRetry={!msg.historical && !switching && userMessage ? () => handleSend(userMessage.content, userMessage.requestId, userMessage.planLink) : undefined}
               />
             )
-          })}
+          })}</div>
 
         </div>
 
         {showJump && (
           <button
             type="button"
-            onClick={() => scrollToBottom(true)}
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-[2px] border border-rule-strong bg-paper-raised px-3 py-1.5 text-[11px] text-ink shadow-sm hover:bg-paper-sunken"
+            onClick={event => {
+              if (event.detail === 0) scrollRef.current?.focus({ preventScroll: true })
+              scrollToBottom(true)
+            }}
+            className="absolute bottom-3 left-1/2 min-h-11 -translate-x-1/2 rounded-[2px] border border-rule-strong bg-paper-raised px-3 py-1.5 text-[11px] text-ink shadow-sm hover:bg-paper-sunken"
           >
             回到底部 ↓
           </button>

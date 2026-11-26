@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { type Favorite, type FavoriteKind, type PlanRef, personalApi } from '../../api/personal'
 import { useChatStore } from '../../store/chatStore'
-import { Section } from './ui'
+import { Section, StableResourceRegion } from './ui'
 import { button, dayTime, pane, tripHref } from './style'
 import { usePersonalResource } from './usePersonalResource'
 
@@ -38,6 +38,7 @@ export default function Favorites() {
 
   return <Section className="trip-header" title="已收藏资料">
     <p className="text-sm leading-6 text-ink-3">收藏留的是资料线索。日期、车次、余票和房价可能变化，重新使用前请查证。</p>
+    <StableResourceRegion holding={loading || !!error}>
     {(error || operationError) && <div className={`${pane} mt-3`}><p role="alert" className="text-sm text-err">{error || operationError}</p>
       <button type="button" className={`${button} mt-2`} onClick={() => { setError(''); retry() }}>重新读取</button></div>}
     {loading && <p role="status" className="mt-3 text-sm text-ink-3">正在读取收藏…</p>}
@@ -67,5 +68,6 @@ export default function Favorites() {
       {offset > 0 && <button type="button" className={button} onClick={() => setOffset(Math.max(0, offset - 50))}>上一页</button>}
       {data?.next_offset != null && <button type="button" className={button} onClick={() => setOffset(data.next_offset ?? 0)}>下一页</button>}
     </div>
+    </StableResourceRegion>
   </Section>
 }

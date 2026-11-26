@@ -1,10 +1,14 @@
-import { lazy, Suspense } from 'react'
+import { lazy } from 'react'
+import { ChevronDown } from 'lucide-react'
 import type { AgentResult } from '../../api/types'
 import type { ProposalActions } from './TripPlanCard'
 import { getAgentLabel } from '../Icons'
 import { AlertCircle } from 'lucide-react'
 import { Markdown } from '../Markdown'
+import { DeferredRegion } from '../Layout/DeferredRegion'
+import { SkeletonShimmer } from '../effects/SkeletonShimmer'
 import { getResultPresentation, type ResultPresentation } from '../../utils/resultPresentation'
+import { expenseCancellation } from '../../utils/expenseEvidence'
 
 const TripPlanCard = lazy(() => import('./TripPlanCard'))
 const ItineraryCard = lazy(() => import('./ItineraryCard').then(m => ({ default: m.ItineraryCard })))
@@ -20,7 +24,7 @@ const KnowledgeCard = lazy(() => import('./KnowledgeCard').then(m => ({ default:
 const PreferenceCard = lazy(() => import('./PreferenceCard').then(m => ({ default: m.PreferenceCard })))
 
 interface ExpenseActions {
-  confirmation?: { command: string; submit: () => void }
+  confirmation?: { command: string; submit: () => void; cancel: () => void }
   pending?: string
   fresh?: boolean
 }
@@ -60,10 +64,14 @@ function PrimaryResultCard({ result, presentation, proposal, expense }: {
       return <KnowledgeCard data={inner} agentName={agent} />
     case 'preference':
       return <PreferenceCard data={inner} />
-    case 'expense':
-      return <ExpenseCard data={inner} fresh={expense?.fresh} submitting={!!expense?.pending && inner.confirmation_command === expense.pending}
-        onConfirm={expense?.confirmation && inner.confirmation_command === expense.confirmation.command
-          ? expense.confirmation.submit : undefined} />
+    case 'expense': {
+      const confirmation = expense?.confirmation
+      const actions = confirmation && inner.confirmation_command === confirmation.command ? confirmation : undefined
+      const cancelling = typeof inner.confirmation_command === 'string' && expense?.pending === expenseCancellation(inner.confirmation_command)
+      return <ExpenseCard data={inner} fresh={expense?.fresh}
+        submitting={!!expense?.pending && inner.confirmation_command === expense.pending}
+        cancelling={cancelling} onConfirm={actions?.submit} onDecline={actions?.cancel} />
+    }
     case 'currency':
       return <CurrencyCard data={inner} />
     case 'translation':
@@ -84,9 +92,9 @@ function ResultCard({ result, proposal, expense }: { result: AgentResult; propos
   const presentation = getResultPresentation(result)
   return (
     <div className="space-y-2">
-      <Suspense fallback={<p className="text-sm text-ink-3">正在加载结果…</p>}>
+      <DeferredRegion label="这条结果" fallback={<SkeletonShimmer label="正在加载这条结果" />}>
         <PrimaryResultCard result={result} presentation={presentation} proposal={proposal} expense={expense} />
-      </Suspense>
+      </DeferredRegion>
       {presentation.supplementalTexts?.map((note, index) => (
         <div key={index} className="markdown border-l-2 border-rule px-3 text-[12px] leading-6 text-ink-2">
           <Markdown>{note}</Markdown>
@@ -96,16 +104,66 @@ function ResultCard({ result, proposal, expense }: { result: AgentResult; propos
   )
 }
 
+const EVIDENCE_LABELS: Record<string, string> = {
+  information: '天气 / 信息',
+  hotel: '住宿',
+  restaurant: '餐饮',
+  scenic: '景点',
+  train: '车次',
+  itinerary: '行程',
+  knowledge: '资料',
+  event: '要素',
+  preference: '偏好',
+  expense: '账目',
+  currency: '汇率',
+  translation: '翻译',
+  error: '失败项',
+}
+
+function summarizeEvidence(results: AgentResult[]): string {
+  const counts = new Map<string, number>()
+  for (const result of results) {
+    const kind = getResultPresentation(result).kind
+    // 证据横条按卡片类型归并（住宿 / 天气 / 车次 ×2），比“查询去程交通”这类任务名更好扫读。
+    const label = EVIDENCE_LABELS[kind] || result.label || getAgentLabel(result.agent_name)
+    counts.set(label, (counts.get(label) ?? 0) + 1)
+  }
+  return [...counts.entries()].map(([label, count]) => count > 1 ? label + ' ×' + count : label).join(' · ')
+}
+
 export function ResultDashboard({ results, proposal, expense }: {
   results: AgentResult[]; proposal?: ProposalActions; expense?: ExpenseActions
 }) {
   if (!results || results.length === 0) return null
 
-  return (
-    <div className="space-y-3">
-      {results.map((r, i) => (
-        <ResultCard key={r.node_id ? 'node:'+r.node_id : 'legacy:'+i} result={r} proposal={proposal} expense={expense} />
-      ))}
-    </div>
-  )
+  // 方案卡本身已经包含去程、住宿与费用；把支撑它的证据收进一条可展开的横条，
+  // 避免一次规划把天气、住宿、往返车次全部铺满整屏。
+  const planIndex = results.findIndex((result) => getResultPresentation(result).kind === 'trip-plan')
+  const plan = planIndex >= 0 ? results[planIndex] : undefined
+  const evidence = plan ? results.filter((_, index) => index !== planIndex) : results
+  const summary = summarizeEvidence(evidence)
+  const keyOf = (result: AgentResult, index: number) => result.node_id ? 'node:' + result.node_id : 'legacy:' + index
+
+  const stack = <>
+    {plan && <ResultCard key={keyOf(plan, planIndex)} result={plan} proposal={proposal} expense={expense} />}
+    {plan && evidence.length > 1 ? (
+      <details className="group rounded-[2px] border border-rule bg-paper-raised">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs text-ink-2 [&::-webkit-details-marker]:hidden">
+          <ChevronDown size={14} aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-180" />
+          <span className="shrink-0 font-semibold text-ink">本轮核验的证据</span>
+          <span className="min-w-0 truncate text-ink-3">{summary}</span>
+          <span className="ml-auto shrink-0 font-mono tabular text-ink-3">{evidence.length} 项</span>
+        </summary>
+        <div className="space-y-3 border-t border-rule p-2 sm:p-3">
+          {evidence.map((result, index) => (
+            <ResultCard key={keyOf(result, index)} result={result} proposal={proposal} expense={expense} />
+          ))}
+        </div>
+      </details>
+    ) : evidence.map((result, index) => (
+      <ResultCard key={keyOf(result, index)} result={result} proposal={proposal} expense={expense} />
+    ))}
+  </>
+
+  return <div className="space-y-3">{stack}</div>
 }

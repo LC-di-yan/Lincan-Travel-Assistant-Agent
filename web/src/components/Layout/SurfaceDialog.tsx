@@ -1,19 +1,20 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react'
 
 /** Keep the native modal/focus lifecycle independent of the entrance animation. */
-export function SurfaceDialog({ label, side = 'center', onClose, children }: {
+export function SurfaceDialog({ label, side = 'center', onClose, children, returnFocus }: {
   label: string; side?: 'left' | 'right' | 'center'; onClose: () => void; children: ReactNode
+  returnFocus?: RefObject<HTMLButtonElement | null>
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   useLayoutEffect(() => {
     const el = ref.current
-    const trigger = document.activeElement
+    const trigger = returnFocus?.current ?? document.activeElement
     el?.showModal()
     return () => {
       el?.close()
       if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true })
     }
-  }, [])
+  }, [returnFocus])
   return <dialog ref={ref} aria-label={label} className="deck-dialog" data-side={side}
     onCancel={e => { e.preventDefault(); onClose() }}
     onClick={e => {

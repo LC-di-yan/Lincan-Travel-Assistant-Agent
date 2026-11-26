@@ -8,12 +8,14 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e": "node e2e/run-e2e.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.17.0",
+    "motion": "^14.14.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",

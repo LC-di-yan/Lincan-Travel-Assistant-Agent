@@ -179,6 +179,7 @@ export function getResultPresentation(result: AgentResult): ResultPresentation {
         const answer = answerText(rawAnswer)
         return card('expense', { ...data, action: 'error', answer }, answer, rawAnswer)
       }
+      if (data.action === 'declined' || data.action === 'clarify') return card('expense', prepared, prepared.answer)
       // The receipt shows the verified facts removed by expenseNote and its remaining prose.
       const owned = firstText(data.answer, data.message) || readTTS(result)
       return ['preview', 'delete', 'update'].includes(String(data.action)) ||

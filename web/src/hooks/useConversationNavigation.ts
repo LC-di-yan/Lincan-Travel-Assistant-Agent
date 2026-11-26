@@ -99,7 +99,7 @@ export function useConversationNavigation(restoring = false) {
     }
   }, [activate, begin, finish])
 
-  const loadOlder = useCallback(async () => {
+  const loadOlder = useCallback(async (beforePrepend?: () => void) => {
     const id = useChatStore.getState().sessionId
     if (!id || view.nextBefore === null || pagination.current || navigation.current) return
     const controller = new AbortController()
@@ -110,6 +110,7 @@ export function useConversationNavigation(restoring = false) {
     try {
       const page = await readConversation(id, view.nextBefore, controller.signal)
       if (pagination.current !== controller || useChatStore.getState().sessionId !== id) return
+      beforePrepend?.()
       useChatStore.getState().prependHistory(id, restoredMessages(page))
       setView((previous) => ({ ...previous, nextBefore: page.next_before }))
     } catch {

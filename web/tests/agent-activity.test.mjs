@@ -57,3 +57,13 @@ test('未识别的详细状态不会被上层 success 涂成已完成，节点�
     { ...back, status: 'error', node_status: 'cancelled' },
   ] }), ['returned', 'stopped'])
 })
+
+test('知识库未找到条款或索引不可用时不显示已完成', () => {
+  const knowledge = { agent_name: 'rag_knowledge' }
+  for (const [status, knowledgeStatus, projected] of [['success', 'no_knowledge', 'no_match'], ['error', 'unavailable', 'unavailable']]) {
+    const result = view({ phase: 'finished', schedule: [knowledge],
+      results: [{ ...knowledge, status, data: { status: knowledgeStatus } }] })
+    assert.equal(result.nodes[0].status, projected)
+    assert.match(result.summary, /待核验/)
+  }
+})

@@ -1,10 +1,18 @@
 import { useId, useState } from 'react'
 import { MapPin } from 'lucide-react'
 import { asRecord } from '../../utils/resultData'
-import { amapMarker, beijingQueryTime, evidenceSources, evidenceText, mapReference } from '../../utils/flightEvidence'
+import { amapMarker, amapPhoto, beijingQueryTime, evidenceSources, evidenceText } from '../../utils/flightEvidence'
 import { EvidenceBand, FlightResult, ResultDisclosure } from './FlightResult'
 
 const SHOW = 5
+
+function HotelPhoto({ url, name }: { url: string; name: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return null
+  return <img className="fdr-hotel-photo" src={url} alt={name + '的高德地图照片'}
+    width={128} height={88} loading="lazy" decoding="async" referrerPolicy="no-referrer"
+    onError={() => setFailed(true)} />
+}
 
 export function HotelCard({ data }: { data: Record<string, unknown> }) {
   const results = asRecord(data.results ?? data)
@@ -15,6 +23,13 @@ export function HotelCard({ data }: { data: Record<string, unknown> }) {
   const summary = evidenceText(results.summary)
   const error = evidenceText(data.error)
   const budgetStatus = evidenceText(results.budget_status)
+  const budget = asRecord(results.budget)
+  const budgetBasis = evidenceText(budget.basis)
+  const budgetNote = budgetBasis === 'stay_total' && typeof budget.nights === 'number' && budget.ceiling
+    ? `住宿总额 ${budget.ceiling} 元 / ${budget.nights} 晚，按每晚参考价折算比较`
+    : budgetBasis === 'nightly' && budget.ceiling
+      ? `每晚参考价上限 ${budget.ceiling} 元`
+      : budgetBasis === 'unverified' ? evidenceText(budget.reason) || '住宿预算口径无法核验' : ''
   const timestamp = evidenceText(results.queried_at)
   const beijing = beijingQueryTime(timestamp)
   const total = typeof results.count === 'number' && results.count > 0 ? results.count : hotels.length
@@ -25,10 +40,10 @@ export function HotelCard({ data }: { data: Record<string, unknown> }) {
 
   return <FlightResult agent="hotel_search" kind="住宿候选" title={title}
     meta={total > 0 ? <span>{total >= 600 ? '共 600+ 家' : `共 ${total} 家`}</span> : undefined}>
-    <EvidenceBand label="待核验" status="指定日期的房价与房态未核验" sources={sources}>
-      <p>地图价格仅供参考，不是可订报价，也不代表含税实付。</p>
+    <EvidenceBand label="住宿地点" status="预订请以实际渠道为准" tone="neutral" sources={sources}>
       {(beijing || timestamp) && <p>{beijing ? `查询时间 ${beijing}（北京时间）` : `查询时间原文：${timestamp}`}</p>}
     </EvidenceBand>
+    {budgetNote && <p className="fdr-summary"><small>预算口径：{budgetNote}（地图参考价，不是实价）</small></p>}
     {summary && <p className="fdr-summary">{summary}</p>}
     {error && error !== summary && <p className="fdr-summary text-err">{error}</p>}
     {!hotels.length && !summary && !error && <p className="fdr-empty">{budgetStatus
@@ -44,8 +59,8 @@ export function HotelCard({ data }: { data: Record<string, unknown> }) {
       const link = amapMarker(hotel.location, name)
       const rating = Number(hotel.rating)
       const distance = Number(hotel.distance)
-      const price = mapReference(hotel.cost)
-      return <li key={index} className="fdr-hotel">
+      const photo = amapPhoto(hotel.photo)
+      return <li key={evidenceText(hotel.id) || index} className="fdr-hotel fdr-stay">
         <span className="fdr-day-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
         <div className="fdr-hotel-name">
           <h5>{name}</h5>
@@ -58,10 +73,7 @@ export function HotelCard({ data }: { data: Record<string, unknown> }) {
             <MapPin size={14} aria-hidden="true" />在高德打开
           </a>}
         </div>
-        <div className="fdr-hotel-price" data-unknown={price.kind !== 'reference' || undefined}>
-          <strong>{price.kind === 'reference' ? <>参考 <span className="fdr-price-number">{price.raw}</span></> : '房价待核验'}</strong>
-          <small>{price.kind === 'reference' ? '地图参考价' : price.kind === 'unclear' ? `来源原文：${price.raw}` : '未提供可用参考价'}</small>
-        </div>
+        {photo && <HotelPhoto key={photo} url={photo} name={name} />}
       </li>
     })}</ol>
   </FlightResult>
